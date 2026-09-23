@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import type { Place, PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/lib/domain/types";
+import { checkRateLimit, getClientIp } from "@/infrastructure/rate-limit";
 
 const PlaceSchema = z.object({
   label: z.string().min(1),
@@ -69,6 +70,10 @@ export async function reversePlaceFn(input: { data: { lat: number; lon: number }
 }
 
 export async function planTripFn(input: { data: PlanRequest & { plugshareToken?: string } }): Promise<PlanResponse> {
+  const ip = await getClientIp();
+  // 20 planificaciones/min por IP: protege las cuotas de OSRM/Overpass, que
+  // son gratis y compartidas con otros usuarios de esas APIs públicas.
+  await checkRateLimit("plan-trip", ip, 20, 60);
   const data = PlanSchema.parse(input.data);
     const { fetchRoutes } = await import("@/lib/providers/routing.osrm");
     const { applyElevationAll } = await import("@/lib/providers/elevation.openmeteo");

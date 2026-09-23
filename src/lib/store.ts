@@ -13,7 +13,7 @@ import {
 } from "@/lib/domain/types";
 import { DEFAULT_VEHICLE_ID, VEHICLE_CATALOG, catalogById, isCatalogId } from "@/lib/domain/vehicles";
 import { envMapboxToken, isMapboxPublicToken } from "@/lib/mapbox";
-import { envPlugshareToken, isPlugshareToken } from "@/lib/plugshare";
+import { isPlugshareToken } from "@/lib/plugshare";
 
 export const DEMO_TRIPS: { label: string; origin: Place; destination: Place }[] = [
   {
@@ -172,7 +172,9 @@ export const usePlanner = create<PlannerState>()(
       mapClickArmed: null,
       placeSearchOpen: false,
       mapboxToken: envMapboxToken(),
-      plugshareToken: envPlugshareToken(),
+      // Sin valor por defecto: cada quien pega su propia clave en Configuración
+      // > PlugShare si quiere (ver src/lib/plugshare.ts).
+      plugshareToken: "",
       mapBounds: null,
       setVehicleId: (id) =>
         set((s) => {
