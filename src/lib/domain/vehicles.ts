@@ -1,0 +1,333 @@
+import type { ChargeCurvePoint, Vehicle } from "./types";
+import { DEFAULT_CURVE } from "./charging";
+
+const TESLA_CURVE: ChargeCurvePoint[] = [
+  { soc: 0, powerFactor: 0.7 },
+  { soc: 10, powerFactor: 1 },
+  { soc: 25, powerFactor: 1 },
+  { soc: 50, powerFactor: 0.82 },
+  { soc: 70, powerFactor: 0.5 },
+  { soc: 80, powerFactor: 0.32 },
+  { soc: 90, powerFactor: 0.18 },
+  { soc: 100, powerFactor: 0.08 },
+];
+
+const BYD_CURVE: ChargeCurvePoint[] = [
+  { soc: 0, powerFactor: 0.5 },
+  { soc: 15, powerFactor: 1 },
+  { soc: 30, powerFactor: 1 },
+  { soc: 50, powerFactor: 0.7 },
+  { soc: 70, powerFactor: 0.45 },
+  { soc: 80, powerFactor: 0.28 },
+  { soc: 100, powerFactor: 0.1 },
+];
+
+function v(
+  partial: Omit<Vehicle, "chargeCurve" | "minSocRecommended" | "maxSocTravel" | "consumptionKwhPer100km"> &
+    Partial<Vehicle>,
+): Vehicle {
+  return {
+    chargeCurve: DEFAULT_CURVE,
+    minSocRecommended: 15,
+    maxSocTravel: 80,
+    ...partial,
+    consumptionKwhPer100km: null,
+    consumptionManual: false,
+  };
+}
+
+export const VEHICLE_CATALOG: Vehicle[] = [
+  v({
+    id: "mg-s5-ev-64",
+    brand: "MG",
+    model: "S5 EV",
+    year: 2025,
+    version: "Comfort 64 kWh",
+    batteryKwh: 64,
+    rangeKm: 425,
+    weightKg: 1720,
+    motorKw: 150,
+    acMaxKw: 11,
+    dcMaxKw: 150,
+    connectors: ["ccs2", "type2"],
+  }),
+  v({
+    id: "mg4-64",
+    brand: "MG",
+    model: "MG4",
+    year: 2024,
+    version: "Long Range",
+    batteryKwh: 64,
+    rangeKm: 450,
+    weightKg: 1685,
+    motorKw: 150,
+    acMaxKw: 11,
+    dcMaxKw: 135,
+    connectors: ["ccs2", "type2"],
+  }),
+  v({
+    id: "mg-zs-ev",
+    brand: "MG",
+    model: "ZS EV",
+    year: 2024,
+    version: "Trophy",
+    batteryKwh: 51.1,
+    rangeKm: 320,
+    weightKg: 1610,
+    motorKw: 130,
+    acMaxKw: 11,
+    dcMaxKw: 76,
+    connectors: ["ccs2", "type2"],
+  }),
+  v({
+    id: "tesla-m3-lr",
+    brand: "Tesla",
+    model: "Model 3",
+    year: 2024,
+    version: "Long Range RWD",
+    batteryKwh: 75,
+    rangeKm: 629,
+    weightKg: 1765,
+    motorKw: 208,
+    acMaxKw: 11,
+    dcMaxKw: 250,
+    connectors: ["nacs", "ccs2", "type2"],
+    chargeCurve: TESLA_CURVE,
+  }),
+  v({
+    id: "tesla-my-lr",
+    brand: "Tesla",
+    model: "Model Y",
+    year: 2025,
+    version: "Long Range",
+    batteryKwh: 75,
+    rangeKm: 533,
+    weightKg: 1979,
+    motorKw: 255,
+    acMaxKw: 11,
+    dcMaxKw: 250,
+    connectors: ["nacs", "ccs2", "type2"],
+    chargeCurve: TESLA_CURVE,
+  }),
+  v({
+    id: "byd-atto3",
+    brand: "BYD",
+    model: "Atto 3",
+    year: 2024,
+    version: "Design",
+    batteryKwh: 60.5,
+    rangeKm: 420,
+    weightKg: 1750,
+    motorKw: 150,
+    acMaxKw: 7,
+    dcMaxKw: 88,
+    connectors: ["ccs2", "type2"],
+    chargeCurve: BYD_CURVE,
+  }),
+  v({
+    id: "byd-seal",
+    brand: "BYD",
+    model: "Seal",
+    year: 2024,
+    version: "Excellence AWD",
+    batteryKwh: 82.5,
+    rangeKm: 520,
+    weightKg: 2055,
+    motorKw: 390,
+    acMaxKw: 11,
+    dcMaxKw: 150,
+    connectors: ["ccs2", "type2"],
+    chargeCurve: BYD_CURVE,
+  }),
+  v({
+    id: "byd-dolphin",
+    brand: "BYD",
+    model: "Dolphin",
+    year: 2024,
+    version: "GLX",
+    batteryKwh: 60.5,
+    rangeKm: 427,
+    weightKg: 1658,
+    motorKw: 150,
+    acMaxKw: 7,
+    dcMaxKw: 88,
+    connectors: ["ccs2", "type2"],
+    chargeCurve: BYD_CURVE,
+  }),
+  v({
+    id: "hyundai-ioniq5",
+    brand: "Hyundai",
+    model: "IONIQ 5",
+    year: 2024,
+    version: "Long Range",
+    batteryKwh: 77.4,
+    rangeKm: 507,
+    weightKg: 2095,
+    motorKw: 168,
+    acMaxKw: 11,
+    dcMaxKw: 233,
+    connectors: ["ccs2", "type2"],
+  }),
+  v({
+    id: "kia-ev6",
+    brand: "Kia",
+    model: "EV6",
+    year: 2024,
+    version: "GT-Line RWD",
+    batteryKwh: 77.4,
+    rangeKm: 528,
+    weightKg: 1985,
+    motorKw: 168,
+    acMaxKw: 11,
+    dcMaxKw: 233,
+    connectors: ["ccs2", "type2"],
+  }),
+  v({
+    id: "vw-id4",
+    brand: "Volkswagen",
+    model: "ID.4",
+    year: 2024,
+    version: "Pro",
+    batteryKwh: 77,
+    rangeKm: 520,
+    weightKg: 2121,
+    motorKw: 210,
+    acMaxKw: 11,
+    dcMaxKw: 175,
+    connectors: ["ccs2", "type2"],
+  }),
+  v({
+    id: "renault-megane",
+    brand: "Renault",
+    model: "Megane E-Tech",
+    year: 2024,
+    version: "EV60",
+    batteryKwh: 60,
+    rangeKm: 450,
+    weightKg: 1636,
+    motorKw: 160,
+    acMaxKw: 22,
+    dcMaxKw: 130,
+    connectors: ["ccs2", "type2"],
+  }),
+  v({
+    id: "volvo-ex30",
+    brand: "Volvo",
+    model: "EX30",
+    year: 2025,
+    version: "Single Motor Extended",
+    batteryKwh: 69,
+    rangeKm: 475,
+    weightKg: 1830,
+    motorKw: 200,
+    acMaxKw: 11,
+    dcMaxKw: 153,
+    connectors: ["ccs2", "type2"],
+  }),
+  v({
+    id: "bmw-ix1",
+    brand: "BMW",
+    model: "iX1",
+    year: 2024,
+    version: "xDrive30",
+    batteryKwh: 66.5,
+    rangeKm: 438,
+    weightKg: 2010,
+    motorKw: 230,
+    acMaxKw: 11,
+    dcMaxKw: 130,
+    connectors: ["ccs2", "type2"],
+  }),
+  v({
+    id: "chevy-bolt",
+    brand: "Chevrolet",
+    model: "Bolt EV",
+    year: 2023,
+    version: "LT",
+    batteryKwh: 65,
+    rangeKm: 417,
+    weightKg: 1625,
+    motorKw: 150,
+    acMaxKw: 11,
+    dcMaxKw: 55,
+    connectors: ["ccs1", "type2"],
+  }),
+  v({
+    id: "zeekr-x",
+    brand: "Zeekr",
+    model: "X",
+    year: 2025,
+    version: "RWD",
+    batteryKwh: 66,
+    rangeKm: 440,
+    weightKg: 1855,
+    motorKw: 200,
+    acMaxKw: 11,
+    dcMaxKw: 150,
+    connectors: ["ccs2", "type2"],
+  }),
+];
+
+export const DEFAULT_VEHICLE_ID = "mg-s5-ev-64";
+
+export function vehicleLabel(vehicle: Vehicle): string {
+  return `${vehicle.brand} ${vehicle.model}`;
+}
+
+export function vehicleSub(vehicle: Vehicle): string {
+  return `${vehicle.year} · ${vehicle.version}`;
+}
+
+export function catalogById(id: string): Vehicle | undefined {
+  return VEHICLE_CATALOG.find((v) => v.id === id);
+}
+
+export function isCatalogId(id: string): boolean {
+  return VEHICLE_CATALOG.some((v) => v.id === id);
+}
+
+export function isVehicleModified(vehicle: Vehicle): boolean {
+  const factory = catalogById(vehicle.id);
+  if (!factory) return false;
+  return (
+    vehicle.brand !== factory.brand ||
+    vehicle.model !== factory.model ||
+    vehicle.year !== factory.year ||
+    vehicle.version !== factory.version ||
+    vehicle.batteryKwh !== factory.batteryKwh ||
+    vehicle.rangeKm !== factory.rangeKm ||
+    vehicle.weightKg !== factory.weightKg ||
+    vehicle.motorKw !== factory.motorKw ||
+    vehicle.acMaxKw !== factory.acMaxKw ||
+    vehicle.dcMaxKw !== factory.dcMaxKw ||
+    vehicle.minSocRecommended !== factory.minSocRecommended ||
+    vehicle.maxSocTravel !== factory.maxSocTravel ||
+    vehicle.connectors.join() !== factory.connectors.join() ||
+    Boolean(vehicle.consumptionManual) !== Boolean(factory.consumptionManual) ||
+    (vehicle.consumptionKwhPer100km ?? null) !== (factory.consumptionKwhPer100km ?? null)
+  );
+}
+
+export function emptyCustomVehicle(): Vehicle {
+  return {
+    id: `custom-${Date.now()}`,
+    brand: "",
+    model: "",
+    year: new Date().getFullYear(),
+    version: "Personalizado",
+    batteryKwh: 64,
+    rangeKm: 400,
+    weightKg: 1750,
+    motorKw: 150,
+    acMaxKw: 11,
+    dcMaxKw: 120,
+    chargeCurve: DEFAULT_CURVE,
+    connectors: ["ccs2", "type2"],
+    minSocRecommended: 15,
+    maxSocTravel: 80,
+    isCustom: true,
+    consumptionKwhPer100km: null,
+    consumptionManual: false,
+  };
+}
+

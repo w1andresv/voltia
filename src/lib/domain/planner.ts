@@ -1,0 +1,534 @@
+import { bestSocket, chargeTimeMinutes, effectiveChargeKw, isDc } from "./charging";
+import { annotateEnergy, energyBetween, energyMode, segmentEnergyKwh } from "./energy";
+import { haversineKm } from "./geo";
+import type {
+  ChargeStop,
+  Charger,
+  ItineraryNode,
+  Place,
+  RawRoute,
+  RoutePlan,
+  RouteSample,
+  TripConditions,
+  Vehicle,
+  WeatherSnapshot,
+} from "./types";
+import { extraWeightKg, isVerifiedForPlanning, NO_VERIFIED_STOP_REASON, safetyPct } from "./types";
+
+const MAX_STOPS = 7;
+const PREFERRED_FROM_ROUTE_KM = 5;
+const MAX_FROM_ROUTE_KM = 12;
+const MIN_PROGRESS_KM = 4;
+const DETOUR_SPEED_KMH = 50;
+
+type EnergyCtx = { vehicle: Vehicle; conditions: TripConditions; weather: WeatherSnapshot | null };
+
+export function attachChargersToRoute(chargers: Charger[], samples: { lat: number; lon: number; km: number }[]): Charger[] {
+  return chargers
+    .filter((c) => isVerifiedForPlanning(c))
+    .map((c) => {
+      let nearestKm = 0;
+      let nearestSampleIndex = 0;
+      let min = Infinity;
+      for (let i = 0; i < samples.length; i++) {
+        const s = samples[i]!;
+        const d = haversineKm(c, s);
+        if (d < min) {
+          min = d;
+          nearestKm = s.km;
+          nearestSampleIndex = i;
+        }
+      }
+      return { ...c, detourKm: min * 2, fromRouteKm: min, nearestKm, nearestSampleIndex };
+    })
+    .filter((c) => (c.fromRouteKm ?? 99) <= MAX_FROM_ROUTE_KM)
+    .sort((a, b) => (a.nearestKm ?? 0) - (b.nearestKm ?? 0));
+}
+
+function socAfter(soc: number, energyKwh: number, capacity: number): number {
+  return soc - (energyKwh / capacity) * 100;
+}
+
+function fromRouteKmOf(c: Charger): number {
+  if (Number.isFinite(c.fromRouteKm)) return c.fromRouteKm as number;
+  if (Number.isFinite(c.detourKm)) return (c.detourKm as number) / 2;
+  return 99;
+}
+
+function isOffline(c: Charger): boolean {
+  return c.availability === "offline" || c.available === false;
+}
+
+function detourMinutesOf(km: number): number {
+  if (km <= 0.05) return 0;
+  return (km / DETOUR_SPEED_KMH) * 60;
+}
+
+function neededDepartSoc(args: {
+  samples: RouteSample[];
+  fromIdx: number;
+  destIdx: number;
+  arrivalTarget: number;
+  capacity: number;
+  detourKwh: number;
+}): number {
+  const e = energyBetween(args.samples, args.fromIdx, args.destIdx) + args.detourKwh;
+  return args.arrivalTarget + (e / args.capacity) * 100;
+}
+
+interface Candidate {
+  charger: Charger;
+  arriveSoc: number;
+  socket: NonNullable<ReturnType<typeof bestSocket>>;
+  socketKw: number;
+  sIdx: number;
+  fromRouteKm: number;
+  detourKwh: number;
+}
+
+function arriveAt(
+  charger: Charger,
+  fromIdx: number,
+  soc: number,
+  samples: RouteSample[],
+  cap: number,
+  ctx: EnergyCtx,
+): { arrive: number; detourKwh: number; sIdx: number } | null {
+  const sIdx = charger.nearestSampleIndex ?? 0;
+  if (sIdx <= fromIdx) return null;
+  const detourKwh = segmentEnergyKwh(charger.detourKm ?? 0, 0, DETOUR_SPEED_KMH, ctx, soc);
+  const e = energyBetween(samples, fromIdx, sIdx) + detourKwh;
+  return { arrive: socAfter(soc, e, cap), detourKwh, sIdx };
+}
+
+function scoreCharger(cand: Candidate, mode: TripConditions["planningMode"], safety: number): number {
+  const detour = cand.fromRouteKm;
+  const power = cand.socketKw;
+  const arrive = cand.arriveSoc;
+  const modeDetour = mode === "efficient" ? 10 : mode === "fastest" ? 3.2 : 5.5;
+  let s = detour * modeDetour;
+  s += Math.max(0, 250 - power) * 0.08;
+  s += Math.max(0, arrive - 36) * 2.1;
+  s += Math.max(0, safety + 6 - arrive) * 4;
+  if (power < 40) s += 48;
+  else if (power < 50) s += 22;
+  else if (power < 100) s += 8;
+  if (isOffline(cand.charger)) s += 90;
+  if (cand.charger.availability === "occupied") s += 14;
+  if (cand.charger.availability === "available") s -= 6;
+  const price = cand.charger.pricePerKwh?.amount;
+  if (price && price > 0) s += Math.min(18, price * 0.35);
+  if (cand.charger.source === "plugshare") s -= 4;
+  if (cand.charger.source === "osm") s -= 2;
+  return s;
+}
+
+function unreachable(): { stops: ChargeStop[]; feasible: boolean; reason: string } {
+  return { stops: [], feasible: false, reason: NO_VERIFIED_STOP_REASON };
+}
+
+function pickStops(args: {
+  samples: RouteSample[];
+  chargers: Charger[];
+  vehicle: Vehicle;
+  conditions: TripConditions;
+  weather: WeatherSnapshot | null;
+}): { stops: ChargeStop[]; feasible: boolean; reason?: string } {
+  const { samples, vehicle, conditions, weather } = args;
+  const safety = safetyPct(conditions);
+  const arrivalTarget = Math.max(conditions.arrivalSoc, safety);
+  const cap = Math.max(vehicle.batteryKwh, 1);
+  const destIdx = samples.length - 1;
+  const maxTravel = Math.min(100, vehicle.maxSocTravel);
+  const ctx: EnergyCtx = { vehicle, conditions, weather };
+  const floor = conditions.allowBelowSafety ? 2 : safety;
+  const destKm = samples[destIdx]?.km ?? 0;
+
+  let idx = 0;
+  let soc = conditions.initialSoc;
+  const stops: ChargeStop[] = [];
+
+  const energyToDest = energyBetween(samples, 0, destIdx);
+  if (socAfter(soc, energyToDest, cap) >= arrivalTarget) {
+    return { stops: [], feasible: true };
+  }
+
+  const usable = args.chargers.filter((c) => {
+    if (!isVerifiedForPlanning(c)) return false;
+    if (!bestSocket(c, vehicle)) return false;
+    const sIdx = c.nearestSampleIndex ?? 0;
+    return sIdx > 0 && sIdx < destIdx;
+  });
+
+  if (!usable.length) {
+    return conditions.allowBelowSafety ? { stops: [], feasible: true, reason: NO_VERIFIED_STOP_REASON } : unreachable();
+  }
+
+  const canReachDestFrom = (fromIdx: number, fromSoc: number, extraKwh = 0) =>
+    socAfter(fromSoc, energyBetween(samples, fromIdx, destIdx) + extraKwh, cap) >= arrivalTarget;
+
+  const continuationOk = (fromIdx: number, fromSoc: number, skipId: string) => {
+    if (canReachDestFrom(fromIdx, fromSoc)) return true;
+    for (const ch of usable) {
+      if (ch.id === skipId) continue;
+      if (stops.some((s) => s.charger.id === ch.id)) continue;
+      const hit = arriveAt(ch, fromIdx, fromSoc, samples, cap, ctx);
+      if (hit && hit.arrive >= floor) return true;
+    }
+    return false;
+  };
+
+  const collect = (fromIdx: number, fromSoc: number, currentKm: number): Candidate[] => {
+    const out: Candidate[] = [];
+    for (const ch of usable) {
+      if (stops.some((s) => s.charger.id === ch.id)) continue;
+      if ((ch.nearestKm ?? 0) < currentKm + MIN_PROGRESS_KM) continue;
+      const sock = bestSocket(ch, vehicle);
+      if (!sock) continue;
+      const hit = arriveAt(ch, fromIdx, fromSoc, samples, cap, ctx);
+      if (!hit || hit.arrive < floor) continue;
+      out.push({
+        charger: ch,
+        arriveSoc: hit.arrive,
+        socket: sock,
+        socketKw: effectiveChargeKw(sock, vehicle),
+        sIdx: hit.sIdx,
+        fromRouteKm: fromRouteKmOf(ch),
+        detourKwh: hit.detourKwh,
+      });
+    }
+    return out;
+  };
+
+  const narrow = (list: Candidate[]): Candidate[] => {
+    if (!list.length) return list;
+    let pool = list;
+    const live = pool.filter((c) => !isOffline(c.charger));
+    if (live.length) pool = live;
+    const close = pool.filter((c) => c.fromRouteKm <= PREFERRED_FROM_ROUTE_KM);
+    const closeCont = close.filter((c) => continuationOk(c.sIdx, maxTravel, c.charger.id));
+    if (closeCont.length) pool = closeCont;
+    else {
+      const cont = pool.filter((c) => continuationOk(c.sIdx, maxTravel, c.charger.id));
+      if (cont.length) pool = cont;
+      else if (close.length) pool = close;
+    }
+    if (conditions.planningMode !== "fewer_stops") {
+      const windowed = pool.filter((c) => c.arriveSoc <= 40);
+      if (windowed.length) pool = windowed;
+    }
+    return pool;
+  };
+
+  const chooseDepart = (pick: Candidate): number => {
+    const destNeed = neededDepartSoc({
+      samples,
+      fromIdx: pick.sIdx,
+      destIdx,
+      arrivalTarget,
+      capacity: cap,
+      detourKwh: pick.detourKwh,
+    });
+    const minBump = pick.arriveSoc + 8;
+    const taperCap = Math.min(maxTravel, 90);
+    const hardCap = maxTravel;
+
+    if (destNeed <= taperCap) {
+      let extra = 4;
+      if (conditions.planningMode === "safer") extra = 8;
+      if (conditions.planningMode === "fastest") extra = 2;
+      if (conditions.planningMode === "fewer_stops") {
+        return Math.min(hardCap, Math.max(destNeed, 80, minBump));
+      }
+      return Math.min(taperCap, Math.max(destNeed + extra, minBump));
+    }
+
+    if (conditions.planningMode === "fewer_stops" || conditions.planningMode === "safer") {
+      return Math.min(hardCap, Math.max(minBump, destNeed, conditions.planningMode === "safer" ? 70 : 80));
+    }
+
+    let nextNeed = destNeed;
+    let bestNext: Candidate | null = null;
+    let bestScore = Infinity;
+    for (const ch of usable) {
+      if (ch.id === pick.charger.id) continue;
+      if (stops.some((s) => s.charger.id === ch.id)) continue;
+      const hit = arriveAt(ch, pick.sIdx, maxTravel, samples, cap, ctx);
+      if (!hit || hit.arrive < floor) continue;
+      const sock = bestSocket(ch, vehicle);
+      if (!sock) continue;
+      const cand: Candidate = {
+        charger: ch,
+        arriveSoc: hit.arrive,
+        socket: sock,
+        socketKw: effectiveChargeKw(sock, vehicle),
+        sIdx: hit.sIdx,
+        fromRouteKm: fromRouteKmOf(ch),
+        detourKwh: hit.detourKwh,
+      };
+      const sc = scoreCharger(cand, conditions.planningMode, safety) - (hit.sIdx - pick.sIdx) * 0.02;
+      if (sc < bestScore) {
+        bestScore = sc;
+        bestNext = cand;
+      }
+    }
+    if (bestNext) {
+      nextNeed = neededDepartSoc({
+        samples,
+        fromIdx: pick.sIdx,
+        destIdx: bestNext.sIdx,
+        arrivalTarget: safety,
+        capacity: cap,
+        detourKwh: pick.detourKwh + bestNext.detourKwh,
+      });
+    }
+    const extra = conditions.planningMode === "fastest" ? 2 : 4;
+    const floorCharge =
+      conditions.planningMode === "fastest" ? Math.max(minBump, pick.arriveSoc + 12) : minBump;
+    return Math.min(hardCap, Math.max(nextNeed + extra, floorCharge));
+  };
+
+  while (stops.length < MAX_STOPS) {
+    if (canReachDestFrom(idx, soc)) break;
+
+    const currentKm = samples[idx]?.km ?? 0;
+    const raw = collect(idx, soc, currentKm);
+    if (!raw.length) {
+      if (conditions.allowBelowSafety) {
+        return { stops, feasible: true, reason: NO_VERIFIED_STOP_REASON };
+      }
+      return { stops, feasible: false, reason: NO_VERIFIED_STOP_REASON };
+    }
+
+    const pool = narrow(raw);
+    pool.sort((a, b) => {
+      if (conditions.planningMode === "fewer_stops") {
+        return b.sIdx - a.sIdx || scoreCharger(a, conditions.planningMode, safety) - scoreCharger(b, conditions.planningMode, safety);
+      }
+      return scoreCharger(a, conditions.planningMode, safety) - scoreCharger(b, conditions.planningMode, safety);
+    });
+
+    const pick = pool[0]!;
+    let chargeTo = chooseDepart(pick);
+    chargeTo = Math.min(100, Math.max(chargeTo, pick.arriveSoc + 8));
+    if (chargeTo > maxTravel && neededDepartSoc({
+      samples,
+      fromIdx: pick.sIdx,
+      destIdx,
+      arrivalTarget,
+      capacity: cap,
+      detourKwh: pick.detourKwh,
+    }) <= maxTravel + 1) {
+      chargeTo = maxTravel;
+    }
+    if (!continuationOk(pick.sIdx, chargeTo, pick.charger.id) && continuationOk(pick.sIdx, maxTravel, pick.charger.id)) {
+      chargeTo = maxTravel;
+    }
+
+    const peak = isDc(pick.socket.connector) ? vehicle.dcMaxKw : vehicle.acMaxKw;
+    const minutes = chargeTimeMinutes(cap, pick.arriveSoc, chargeTo, peak, pick.socket.powerKw, vehicle.chargeCurve);
+    const detourKm = pick.charger.detourKm ?? pick.fromRouteKm * 2;
+
+    stops.push({
+      charger: pick.charger,
+      arriveSoc: pick.arriveSoc,
+      departSoc: chargeTo,
+      chargeMinutes: minutes,
+      energyAddedKwh: ((chargeTo - pick.arriveSoc) / 100) * cap,
+      bestSocket: pick.socket,
+      kmAlongRoute: pick.charger.nearestKm ?? samples[pick.sIdx]!.km,
+      fromRouteKm: pick.fromRouteKm,
+      detourKm,
+      detourMinutes: detourMinutesOf(detourKm),
+      chargeKw: pick.socketKw,
+      kmToNext: 0,
+      nextLabel: "",
+    });
+
+    idx = pick.sIdx;
+    soc = chargeTo;
+  }
+
+  const finalSoc = socAfter(soc, energyBetween(samples, idx, destIdx), cap);
+  if (finalSoc < arrivalTarget && !conditions.allowBelowSafety) {
+    return {
+      stops,
+      feasible: false,
+      reason: NO_VERIFIED_STOP_REASON,
+    };
+  }
+
+  const labeled = stops.map((st, i) => {
+    const next = stops[i + 1];
+    return {
+      ...st,
+      kmToNext: (next ? next.kmAlongRoute : destKm) - st.kmAlongRoute,
+      nextLabel: next ? next.charger.name : "",
+    };
+  });
+  return { stops: labeled, feasible: true };
+}
+
+function applyStopsToSamples(
+  base: RouteSample[],
+  stops: ChargeStop[],
+  vehicle: Vehicle,
+  initialSoc: number,
+): RouteSample[] {
+  const cap = vehicle.batteryKwh;
+  const ordered = [...stops].sort((a, b) => a.kmAlongRoute - b.kmAlongRoute);
+  return base.map((s) => {
+    let added = 0;
+    for (const st of ordered) {
+      if (s.km + 0.05 >= st.kmAlongRoute) added += st.energyAddedKwh;
+    }
+    const soc = initialSoc - ((s.cumulativeKwh - added) / cap) * 100;
+    return { ...s, soc };
+  });
+}
+
+function driveMinutesFor(raw: RawRoute, conditions: TripConditions): number {
+  if (conditions.avgSpeedKmh && conditions.avgSpeedKmh > 10) {
+    return (raw.distanceKm / conditions.avgSpeedKmh) * 60;
+  }
+  return raw.driveMinutes;
+}
+
+export function buildPlan(args: {
+  raw: RawRoute;
+  vehicle: Vehicle;
+  conditions: TripConditions;
+  chargers: Charger[];
+  weather: WeatherSnapshot | null;
+  origin: Place;
+  destination: Place;
+}): RoutePlan {
+  const { raw, vehicle, conditions, weather, origin, destination } = args;
+  const safety = safetyPct(conditions);
+  const ctx = { vehicle, conditions, weather };
+
+  const speedAdj = conditions.avgSpeedKmh;
+  const samplesPre = raw.samples.map((s) => ({
+    ...s,
+    speedKmh: speedAdj && speedAdj > 10 ? speedAdj : s.speedKmh,
+  }));
+
+  const energySamples = annotateEnergy(samplesPre, ctx, conditions.initialSoc);
+  const attached = attachChargersToRoute(args.chargers, energySamples);
+  const picked = pickStops({
+    samples: energySamples,
+    chargers: attached,
+    vehicle,
+    conditions,
+    weather,
+  });
+  const stops = picked.stops.map((st) => ({
+    ...st,
+    nextLabel: st.nextLabel || destination.label,
+  }));
+  const feasible = picked.feasible;
+  const reason = picked.reason;
+
+  const samples = applyStopsToSamples(energySamples, stops, vehicle, conditions.initialSoc);
+  const last = samples[samples.length - 1]!;
+  const energyGrossKwh = samples.reduce((a, s) => a + s.energyGrossKwh, 0);
+  const energyRegenKwh = samples.reduce((a, s) => a + s.energyRegenKwh, 0);
+  const driveMin = driveMinutesFor(raw, conditions);
+  const chargeMin = stops.reduce((a, s) => a + s.chargeMinutes, 0);
+  const detourKm = stops.reduce((a, s) => a + (s.detourKm ?? 0), 0);
+  const detourMin = stops.reduce((a, s) => a + (s.detourMinutes ?? 0), 0);
+  const arrivalSoc = last.soc;
+  const minSoc = samples.reduce((m, s) => Math.min(m, s.soc), 100);
+  const remainingKwh = Math.max(0, (arrivalSoc / 100) * vehicle.batteryKwh);
+  const canArriveWithoutCharge = stops.length === 0 && arrivalSoc >= Math.max(conditions.arrivalSoc, safety);
+
+  const itinerary: ItineraryNode[] = [
+    {
+      kind: "origin",
+      label: origin.label,
+      km: 0,
+      soc: conditions.initialSoc,
+      durationFromStartMin: 0,
+      place: origin,
+    },
+  ];
+
+  let accDrive = 0;
+  let prevKm = 0;
+  for (const stop of stops) {
+    const dKm = stop.kmAlongRoute - prevKm;
+    accDrive += (dKm / raw.distanceKm) * driveMin;
+    itinerary.push({
+      kind: "charger",
+      label: stop.charger.name,
+      km: stop.kmAlongRoute,
+      soc: stop.arriveSoc,
+      durationFromStartMin: accDrive,
+      charge: stop,
+    });
+    accDrive += stop.chargeMinutes + stop.detourMinutes;
+    prevKm = stop.kmAlongRoute;
+  }
+  itinerary.push({
+    kind: "destination",
+    label: destination.label,
+    km: raw.distanceKm,
+    soc: arrivalSoc,
+    durationFromStartMin: driveMin + chargeMin + detourMin,
+    place: destination,
+  });
+
+  return {
+    id: raw.id,
+    label: raw.label,
+    geometry: raw.geometry,
+    samples,
+    distanceKm: raw.distanceKm + detourKm,
+    driveMinutes: driveMin + detourMin,
+    chargeMinutes: chargeMin,
+    totalMinutes: driveMin + chargeMin + detourMin,
+    energyKwh: last.cumulativeKwh,
+    energyGrossKwh,
+    energyRegenKwh,
+    avgKwhPer100km: raw.distanceKm > 0 ? (last.cumulativeKwh / raw.distanceKm) * 100 : 0,
+    energyMode: energyMode(vehicle),
+    arrivalSoc,
+    initialSoc: conditions.initialSoc,
+    remainingKwh,
+    minSoc,
+    safetyPct: safety,
+    safetyMarginPct: arrivalSoc - safety,
+    canArriveWithoutCharge,
+    feasible,
+    infeasibleReason: reason,
+    stops,
+    itinerary,
+    elevation: raw.elevation,
+    weather,
+  };
+}
+
+export function rankPlans(plans: RoutePlan[], mode: TripConditions["planningMode"]): RoutePlan[] {
+  const copy = [...plans];
+  copy.sort((a, b) => {
+    if (a.feasible !== b.feasible) return a.feasible ? -1 : 1;
+    switch (mode) {
+      case "efficient":
+        return a.energyKwh - b.energyKwh;
+      case "fewer_stops":
+        return a.stops.length - b.stops.length || a.totalMinutes - b.totalMinutes;
+      case "safer":
+        return b.minSoc - a.minSoc || b.arrivalSoc - a.arrivalSoc;
+      case "fastest":
+      case "custom":
+      default:
+        return a.totalMinutes - b.totalMinutes;
+    }
+  });
+  return copy;
+}
+
+export function extraMassLabel(c: TripConditions): string {
+  const kg = extraWeightKg(c);
+  return `+${kg} kg`;
+}

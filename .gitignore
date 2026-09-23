@@ -1,0 +1,9 @@
+node_modules
+.vercel
+.output
+.nitro
+dist
+.tanstack
+*.log
+.DS_Store
+.grok/app-env.json
