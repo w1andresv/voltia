@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { buildPlan, rankPlans } from "@/lib/domain/planner";
-import { uniqueByProximity } from "@/lib/domain/geo";
+import { buildPlan, rankPlans } from "@/domain/planner";
+import { uniqueByProximity } from "@/domain/geo";
 import {
   DEFAULT_CONDITIONS,
   type Charger,
@@ -10,8 +10,8 @@ import {
   type RoutePlan,
   type TripConditions,
   type Vehicle,
-} from "@/lib/domain/types";
-import { DEFAULT_VEHICLE_ID, VEHICLE_CATALOG, catalogById, isCatalogId } from "@/lib/domain/vehicles";
+} from "@/domain/types";
+import { DEFAULT_VEHICLE_ID, VEHICLE_CATALOG, catalogById, isCatalogId } from "@/domain/vehicles";
 import { envMapboxToken, isMapboxPublicToken } from "@/lib/mapbox";
 import { isPlugshareToken } from "@/lib/plugshare";
 

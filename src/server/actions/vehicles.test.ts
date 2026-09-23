@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Actor } from "@/domain/auth/port";
-import { DEFAULT_CURVE } from "@/lib/domain/charging";
-import type { Vehicle } from "@/lib/domain/types";
+import { DEFAULT_CURVE } from "@/domain/charging";
+import type { Vehicle } from "@/domain/types";
 
 const { requireMember } = vi.hoisted(() => ({ requireMember: vi.fn<() => Promise<Actor>>() }));
 vi.mock("@/infrastructure/auth/server-actor", () => ({

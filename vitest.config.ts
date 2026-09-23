@@ -12,11 +12,15 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     coverage: {
       provider: "v8",
-      include: ["src/lib/domain/**/*.ts"],
+      include: ["src/domain/**/*.ts"],
       exclude: [
-        "src/lib/domain/**/*.test.ts",
+        "src/domain/**/*.test.ts",
         // Catálogo de datos estático (presets de vehículos), no lógica de dominio.
-        "src/lib/domain/vehicles.ts",
+        "src/domain/vehicles.ts",
+        // Esquemas Zod y tipos de puertos, no lógica que probar por sí misma
+        // (types.ts ya los ejercita al importar VehicleSchema/PlaceSchema/etc.).
+        "src/domain/schemas.ts",
+        "src/domain/auth/**",
       ],
       thresholds: {
         lines: 80,

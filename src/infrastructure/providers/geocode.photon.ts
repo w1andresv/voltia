@@ -1,4 +1,4 @@
-import type { Place } from "@/lib/domain/types";
+import type { Place } from "@/domain/types";
 import { fetchJson } from "./http";
 
 interface PhotonFeature {

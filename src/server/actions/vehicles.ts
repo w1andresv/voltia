@@ -3,7 +3,7 @@
 import { VehicleSchema } from "@/domain/schemas";
 import { requireMember } from "@/infrastructure/auth/server-actor";
 import { createServerSupabase } from "@/infrastructure/supabase/server";
-import type { Vehicle } from "@/lib/domain/types";
+import type { Vehicle } from "@/domain/types";
 
 /**
  * Fila de voltia.vehicles para el guardado por usuario (fase 4.1). El id de

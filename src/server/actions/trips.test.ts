@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Actor } from "@/domain/auth/port";
-import { DEFAULT_CURVE } from "@/lib/domain/charging";
+import { DEFAULT_CURVE } from "@/domain/charging";
 import type { PlanRequestShape, TripSummaryShape } from "@/domain/schemas";
 
 const { requireMember } = vi.hoisted(() => ({ requireMember: vi.fn<() => Promise<Actor>>() }));

@@ -1,6 +1,5 @@
 import { authClientConfigured, getEnv } from "@/infrastructure/config/env";
-import { ensureCatalogSeed } from "@/infrastructure/db/seed-catalog";
-import { getSql } from "@/lib/db";
+import { getSql } from "@/infrastructure/db";
 
 export const dynamic = "force-dynamic";
 
@@ -34,13 +33,18 @@ export async function GET() {
     }
   }
 
+  // Solo lectura: sembrar el catálogo aquí lo repetiría en cada healthcheck.
+  // Eso ahora pasa una sola vez por instancia en src/instrumentation.ts.
   let database = false;
   let catalog = 0;
   if (env.DATABASE_URL) {
     try {
       const sql = await getSql();
       await sql.query("select 1 as ok");
-      catalog = await ensureCatalogSeed();
+      const rows = await sql.query<{ count: number }>(
+        "select count(*)::int as count from voltia.vehicles where owner_id is null",
+      );
+      catalog = rows[0]?.count ?? 0;
       database = true;
     } catch (error) {
       console.error("[health] database unavailable", error instanceof Error ? error.name : "error");

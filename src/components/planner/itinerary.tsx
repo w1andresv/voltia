@@ -1,6 +1,6 @@
 import { Flag, MapPin, Navigation } from "lucide-react";
-import type { ItineraryNode, RoutePlan } from "@/lib/domain/types";
-import { CHARGER_SOURCE_LABEL, CONNECTOR_LABEL } from "@/lib/domain/types";
+import type { ItineraryNode, RoutePlan } from "@/domain/types";
+import { CHARGER_SOURCE_LABEL, CONNECTOR_LABEL } from "@/domain/types";
 import { formatKm, formatKwh, formatKw, formatMinutes, formatPct, formatUpdatedAt } from "@/lib/format";
 
 export function Itinerary({ plan }: { plan: RoutePlan }) {

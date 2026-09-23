@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Link2, Route as RouteIcon, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteTripFn, shareTripFn, type SavedTrip } from "@/lib/api/trips";
+import { deleteTripFn, shareTripFn, type SavedTrip } from "@/server/actions/trips";
 import { formatKm, formatMinutes, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";

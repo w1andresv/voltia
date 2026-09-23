@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Route as RouteIcon } from "lucide-react";
 import type { PlanRequestShape } from "@/domain/schemas";
-import type { RoutePlan } from "@/lib/domain/types";
+import type { RoutePlan } from "@/domain/types";
 import { formatKm, formatMinutes } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";

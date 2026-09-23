@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Mountain, Timer, Zap } from "lucide-react";
-import type { RoutePlan } from "@/lib/domain/types";
+import type { RoutePlan } from "@/domain/types";
 import { formatElevation, formatKm, formatKwh, formatKwhPer100, formatMinutes, formatPct } from "@/lib/format";
 
 export function PlanStats({ plan }: { plan: RoutePlan }) {

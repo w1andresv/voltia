@@ -1,4 +1,4 @@
-import type { LatLon, WeatherSnapshot } from "@/lib/domain/types";
+import type { LatLon, WeatherSnapshot } from "@/domain/types";
 import { fetchJson } from "./http";
 
 interface WeatherResponse {

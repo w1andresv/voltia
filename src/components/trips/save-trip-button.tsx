@@ -4,9 +4,9 @@ import { useMutation } from "@tanstack/react-query";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { saveTripFn } from "@/lib/api/trips";
+import { saveTripFn } from "@/server/actions/trips";
 import { useActor } from "@/infrastructure/auth/use-actor";
-import type { RoutePlan } from "@/lib/domain/types";
+import type { RoutePlan } from "@/domain/types";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 

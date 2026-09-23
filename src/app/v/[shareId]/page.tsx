@@ -1,8 +1,8 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { planTripFn } from "@/lib/api/plan";
-import { getSharedTripFn } from "@/lib/api/trips";
+import { planTripFn } from "@/server/actions/plan";
+import { getSharedTripFn } from "@/server/actions/trips";
 import { formatKm, formatMinutes } from "@/lib/format";
 import { SharedTripView } from "@/components/trips/shared-trip-view";
 

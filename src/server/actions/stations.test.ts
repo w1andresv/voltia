@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Actor } from "@/domain/auth/port";
-import type { Charger } from "@/lib/domain/types";
+import type { Charger } from "@/domain/types";
 
 const { requireMember, requireAdmin } = vi.hoisted(() => ({
   requireMember: vi.fn<() => Promise<Actor>>(),

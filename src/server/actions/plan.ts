@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import type { Place, PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/lib/domain/types";
+import type { Place, PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/domain/types";
 import { PlanRequestSchema } from "@/domain/schemas";
 import { checkRateLimit, getClientIp } from "@/infrastructure/rate-limit";
 
@@ -11,12 +11,12 @@ const PlanSchema = PlanRequestSchema.extend({
 
 export async function searchPlacesFn(input: { data: { q: string; lat?: number; lon?: number } }): Promise<Place[]> {
   const data = input.data;
-  const { searchPlaces } = await import("@/lib/providers/geocode.photon");
+  const { searchPlaces } = await import("@/infrastructure/providers/geocode.photon");
   return searchPlaces(data.q, data.lat != null && data.lon != null ? { lat: data.lat, lon: data.lon } : undefined);
 }
 
 export async function reversePlaceFn(input: { data: { lat: number; lon: number } }): Promise<Place> {
-  const { reversePlace } = await import("@/lib/providers/geocode.photon");
+  const { reversePlace } = await import("@/infrastructure/providers/geocode.photon");
   return reversePlace(input.data.lat, input.data.lon);
 }
 
@@ -29,13 +29,13 @@ export async function planTripFn(input: { data: PlanRequest & { plugshareToken?:
   const startedAt = Date.now();
 
   try {
-    const { fetchRoutes } = await import("@/lib/providers/routing.osrm");
-    const { applyElevationAll } = await import("@/lib/providers/elevation.openmeteo");
-    const { fetchWeather } = await import("@/lib/providers/weather.openmeteo");
-    const { findChargersAlong } = await import("@/lib/providers/chargers.overpass");
-    const { loadCommunityChargers } = await import("@/lib/api/stations-db");
-    const { buildPlan, rankPlans } = await import("@/lib/domain/planner");
-    const { isVerifiedForPlanning } = await import("@/lib/domain/types");
+    const { fetchRoutes } = await import("@/infrastructure/providers/routing.osrm");
+    const { applyElevationAll } = await import("@/infrastructure/providers/elevation.openmeteo");
+    const { fetchWeather } = await import("@/infrastructure/providers/weather.openmeteo");
+    const { findChargersAlong } = await import("@/infrastructure/providers/chargers.overpass");
+    const { loadCommunityChargers } = await import("@/server/actions/stations-db");
+    const { buildPlan, rankPlans } = await import("@/domain/planner");
+    const { isVerifiedForPlanning } = await import("@/domain/types");
 
     const waypoints = [data.origin, ...data.waypoints, data.destination];
     const warnings: string[] = [];

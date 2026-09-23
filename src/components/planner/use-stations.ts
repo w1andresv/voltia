@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { listStationsFn } from "@/lib/api/stations";
+import { listStationsFn } from "@/server/actions/stations";
 import { useActor } from "@/infrastructure/auth/use-actor";
 
 /**

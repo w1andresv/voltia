@@ -1,5 +1,5 @@
-import type { RawRoute } from "@/lib/domain/types";
-import { downsample, lerp } from "@/lib/domain/geo";
+import type { RawRoute } from "@/domain/types";
+import { downsample, lerp } from "@/domain/geo";
 import { fetchJson } from "./http";
 
 interface MeteoElev {

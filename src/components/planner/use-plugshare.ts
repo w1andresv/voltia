@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { queryPlugshareRegionFn } from "@/lib/api/chargers";
-import type { Charger } from "@/lib/domain/types";
+import { queryPlugshareRegionFn } from "@/server/actions/chargers";
+import type { Charger } from "@/domain/types";
 import { isPlugshareToken } from "@/lib/plugshare";
 import { usePlanner } from "@/lib/store";
 

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getBrowserSupabase } from "@/infrastructure/supabase/browser";
-import { getActorFn } from "@/lib/api/auth";
+import { getActorFn } from "@/server/actions/auth";
 import type { Actor } from "@/domain/auth/port";
 
 const guest: Actor = { role: "guest", id: null, email: null };

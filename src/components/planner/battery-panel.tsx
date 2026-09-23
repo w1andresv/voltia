@@ -1,7 +1,7 @@
-import { chargeCurveSeries, chargeTimeMinutes } from "@/lib/domain/charging";
-import { batteryBudget } from "@/lib/domain/energy";
-import { safetyPct } from "@/lib/domain/types";
-import { vehicleLabel } from "@/lib/domain/vehicles";
+import { chargeCurveSeries, chargeTimeMinutes } from "@/domain/charging";
+import { batteryBudget } from "@/domain/energy";
+import { safetyPct } from "@/domain/types";
+import { vehicleLabel } from "@/domain/vehicles";
 import { formatKm, formatKw, formatKwh, formatKwhPer100, formatMinutes, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
