@@ -7,6 +7,7 @@ import {
   isVerifiedForPlanning,
 } from "@/lib/domain/types";
 import { formatKw, formatPrice, formatUpdatedAt } from "@/lib/format";
+import { stationPhotoUrl } from "@/lib/storage/station-photos";
 import { Badge } from "@/components/ui/badge";
 
 export function ChargerFacts({ charger, compact = false }: { charger: Charger; compact?: boolean }) {
@@ -72,7 +73,7 @@ export function ChargerFacts({ charger, compact = false }: { charger: Charger; c
           {charger.photos.map((src, i) => (
             <img
               key={i}
-              src={src}
+              src={stationPhotoUrl(src)}
               alt=""
               className="h-16 w-24 rounded-md object-cover"
               crossOrigin="anonymous"

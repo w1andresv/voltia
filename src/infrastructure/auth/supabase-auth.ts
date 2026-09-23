@@ -15,6 +15,15 @@ export function createSupabaseAuth(): AuthPort {
       if (!user) return guest;
       return { role: "member", id: user.id, email: user.email ?? null };
     },
+    async signInWithEmail(email, redirectTo) {
+      const supabase = getBrowserSupabase();
+      if (!supabase) throw new Error("Supabase no está configurado");
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo },
+      });
+      if (error) throw error;
+    },
     async signInWithGoogle(redirectTo) {
       const supabase = getBrowserSupabase();
       if (!supabase) throw new Error("Supabase no está configurado");

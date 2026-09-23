@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MapPinPlus, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { reviewStationFn } from "@/lib/api/stations";
+import { useActor } from "@/infrastructure/auth/use-actor";
 import type { Charger, StationStatus } from "@/lib/domain/types";
 import { CATALOG_CHARGERS } from "@/lib/providers/chargers.catalog";
 import { isPlugshareToken } from "@/lib/plugshare";
@@ -24,6 +25,8 @@ export function StationHub() {
   const router = useRouter();
   const { data: community = [], isLoading } = useCommunityStations();
   const plugshareOn = usePlanner((s) => isPlugshareToken(s.plugshareToken));
+  const actor = useActor();
+  const isAdmin = actor.role === "admin";
   const pending = community.filter((c) => c.status === "pending");
   const approved = community.filter((c) => c.status === "approved");
   const rejected = community.filter((c) => c.status === "rejected");
@@ -52,31 +55,35 @@ export function StationHub() {
               Ubicar en el mapa
             </Button>
           </div>
-          <Tabs defaultValue="pending">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="pending">Pendientes {pending.length ? `(${pending.length})` : ""}</TabsTrigger>
+          <Tabs defaultValue={isAdmin ? "pending" : "network"}>
+            <TabsList className={isAdmin ? "grid w-full grid-cols-3" : "grid w-full grid-cols-1"}>
+              {isAdmin ? (
+                <TabsTrigger value="pending">Pendientes {pending.length ? `(${pending.length})` : ""}</TabsTrigger>
+              ) : null}
               <TabsTrigger value="network">Red</TabsTrigger>
-              <TabsTrigger value="rejected">Rechazadas</TabsTrigger>
+              {isAdmin ? <TabsTrigger value="rejected">Rechazadas</TabsTrigger> : null}
             </TabsList>
-            <TabsContent value="pending">
-              {isLoading ? (
-                <p className="text-sm text-muted">Cargando aportes…</p>
-              ) : pending.length ? (
-                <ul className="space-y-3">
-                  {pending.map((c) => (
-                    <StationReviewRow
-                      key={c.id}
-                      charger={c}
-                      onEdit={() => {
-                        setSeed({ lat: c.lat, lon: c.lon, address: c.address, editId: c.id });
-                      }}
-                    />
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted">No hay estaciones esperando validación.</p>
-              )}
-            </TabsContent>
+            {isAdmin ? (
+              <TabsContent value="pending">
+                {isLoading ? (
+                  <p className="text-sm text-muted">Cargando aportes…</p>
+                ) : pending.length ? (
+                  <ul className="space-y-3">
+                    {pending.map((c) => (
+                      <StationReviewRow
+                        key={c.id}
+                        charger={c}
+                        onEdit={() => {
+                          setSeed({ lat: c.lat, lon: c.lon, address: c.address, editId: c.id });
+                        }}
+                      />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted">No hay estaciones esperando validación.</p>
+                )}
+              </TabsContent>
+            ) : null}
             <TabsContent value="network">
               <p className="mb-3 text-xs text-muted">
                 {approved.length} confirmadas por la comunidad · {CATALOG_CHARGERS.length} en catálogo verificado del operador
@@ -98,20 +105,22 @@ export function StationHub() {
                 ))}
               </ul>
             </TabsContent>
-            <TabsContent value="rejected">
-              {rejected.length ? (
-                <ul className="space-y-3">
-                  {rejected.map((c) => (
-                    <li key={c.id} className="rounded-lg bg-bg-elevated p-3">
-                      <ChargerFacts charger={c} />
-                      {c.reviewNote ? <p className="mt-1 text-xs text-danger">{c.reviewNote}</p> : null}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted">Ninguna estación rechazada.</p>
-              )}
-            </TabsContent>
+            {isAdmin ? (
+              <TabsContent value="rejected">
+                {rejected.length ? (
+                  <ul className="space-y-3">
+                    {rejected.map((c) => (
+                      <li key={c.id} className="rounded-lg bg-bg-elevated p-3">
+                        <ChargerFacts charger={c} />
+                        {c.reviewNote ? <p className="mt-1 text-xs text-danger">{c.reviewNote}</p> : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted">Ninguna estación rechazada.</p>
+                )}
+              </TabsContent>
+            ) : null}
           </Tabs>
         </DialogContent>
       </Dialog>
