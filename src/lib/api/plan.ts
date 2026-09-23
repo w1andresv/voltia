@@ -2,59 +2,15 @@
 
 import { z } from "zod";
 import type { Place, PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/lib/domain/types";
+import { PlaceSchema, TripConditionsSchema, VehicleSchema } from "@/domain/schemas";
 import { checkRateLimit, getClientIp } from "@/infrastructure/rate-limit";
-
-const PlaceSchema = z.object({
-  label: z.string().min(1),
-  lat: z.number().min(-90).max(90),
-  lon: z.number().min(-180).max(180),
-  context: z.string().optional(),
-});
-
-const VehicleSchema = z.object({
-  id: z.string(),
-  brand: z.string(),
-  model: z.string(),
-  year: z.number(),
-  version: z.string(),
-  batteryKwh: z.number().positive(),
-  rangeKm: z.number().positive(),
-  consumptionKwhPer100km: z.number().positive().nullable(),
-  consumptionManual: z.boolean().optional(),
-  weightKg: z.number().positive(),
-  motorKw: z.number().positive(),
-  acMaxKw: z.number().positive(),
-  dcMaxKw: z.number().positive(),
-  chargeCurve: z.array(z.object({ soc: z.number(), powerFactor: z.number() })),
-  connectors: z.array(z.enum(["ccs2", "ccs1", "type2", "chademo", "nacs", "gb_t"])),
-  minSocRecommended: z.number(),
-  maxSocTravel: z.number(),
-  regenPct: z.number().min(5).max(80).optional(),
-  isCustom: z.boolean().optional(),
-});
-
-const ConditionsSchema = z.object({
-  passengers: z.number().min(0).max(8),
-  luggageKg: z.number().min(0).max(400),
-  initialSoc: z.number().min(1).max(100),
-  arrivalSoc: z.number().min(0).max(80),
-  avgSpeedKmh: z.number().nullable(),
-  ac: z.enum(["off", "eco", "normal", "max"]),
-  temperatureC: z.number().nullable(),
-  drivingStyle: z.enum(["efficient", "normal", "sport"]),
-  safetyMode: z.enum(["conservative", "normal", "low", "custom"]),
-  customSafetyPct: z.number().min(5).max(40),
-  planningMode: z.enum(["fastest", "efficient", "fewer_stops", "safer", "custom"]),
-  allowBelowSafety: z.boolean(),
-  regenPct: z.number().min(5).max(80).optional().default(20),
-});
 
 const PlanSchema = z.object({
   origin: PlaceSchema,
   destination: PlaceSchema,
   waypoints: z.array(PlaceSchema).max(5),
   vehicle: VehicleSchema,
-  conditions: ConditionsSchema,
+  conditions: TripConditionsSchema,
   plugshareToken: z.string().max(4000).optional(),
 });
 
@@ -75,6 +31,9 @@ export async function planTripFn(input: { data: PlanRequest & { plugshareToken?:
   // son gratis y compartidas con otros usuarios de esas APIs públicas.
   await checkRateLimit("plan-trip", ip, 20, 60);
   const data = PlanSchema.parse(input.data);
+  const startedAt = Date.now();
+
+  try {
     const { fetchRoutes } = await import("@/lib/providers/routing.osrm");
     const { applyElevationAll } = await import("@/lib/providers/elevation.openmeteo");
     const { fetchWeather } = await import("@/lib/providers/weather.openmeteo");
@@ -112,9 +71,34 @@ export async function planTripFn(input: { data: PlanRequest & { plugshareToken?:
       }),
     );
     const ranked = rankPlans(built, data.conditions.planningMode);
+
+    // Log estructurado, sin coordenadas exactas del usuario (solo la
+    // distancia total y el conteo de tramos alternativos que devolvió OSRM).
+    console.log(
+      "[plan-trip]",
+      JSON.stringify({
+        ms: Date.now() - startedAt,
+        routes: routes.length,
+        distanceKm: Math.round(routes[0]?.distanceKm ?? 0),
+        chargers: chargers.length,
+        warnings: warnings.length,
+        weather: weather != null,
+      }),
+    );
+
     return {
       geo: { routes, chargers, weather, warnings },
       plans: ranked,
       selectedId: ranked[0]?.id ?? "",
     };
+  } catch (error) {
+    console.error(
+      "[plan-trip] failed",
+      JSON.stringify({
+        ms: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+    throw error;
+  }
 }

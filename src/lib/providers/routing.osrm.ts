@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { LatLon, RawRoute } from "@/lib/domain/types";
 import { downsample, interpolatePoint, polylineLengthKm } from "@/lib/domain/geo";
 import { fetchJson } from "./http";
@@ -7,16 +8,24 @@ const OSRM_ENDPOINTS = [
   "https://routing.openstreetmap.de/routed-car",
 ];
 
-interface OsrmRoute {
-  distance: number;
-  duration: number;
-  geometry: { coordinates: [number, number][] };
-}
+/**
+ * Se valida la respuesta de OSRM con Zod (no solo se le hace `as OsrmResponse`)
+ * para que un cambio de forma en su API se note como un error claro acá, en
+ * vez de romper el planificador en silencio con `undefined`s más adelante.
+ */
+const OsrmRouteSchema = z.object({
+  distance: z.number(),
+  duration: z.number(),
+  geometry: z.object({ coordinates: z.array(z.tuple([z.number(), z.number()])) }),
+});
 
-interface OsrmResponse {
-  code: string;
-  routes?: OsrmRoute[];
-}
+const OsrmResponseSchema = z.object({
+  code: z.string(),
+  routes: z.array(OsrmRouteSchema).optional(),
+});
+
+type OsrmRoute = z.infer<typeof OsrmRouteSchema>;
+type OsrmResponse = z.infer<typeof OsrmResponseSchema>;
 
 function buildSamples(coords: [number, number][], distanceKm: number, durationMin: number): RawRoute["samples"] {
   const points: LatLon[] = coords.map(([lon, lat]) => ({ lat, lon }));
@@ -98,23 +107,32 @@ export async function fetchRoutes(waypoints: LatLon[]): Promise<RawRoute[]> {
   if (waypoints.length < 2) throw new Error("Se necesitan origen y destino.");
   const path = waypoints.map((w) => `${w.lon},${w.lat}`).join(";");
   const qs = "overview=full&geometries=geojson&alternatives=true&steps=false";
-  let lastErr: unknown;
+  // Si algún endpoint SÍ respondió pero sin ruta (código != "Ok"), ese es el
+  // mensaje más útil para el usuario; un timeout/red caída da un mensaje
+  // técnico en inglés que nunca debe llegarle así, así que solo se usa
+  // cuando ningún endpoint llegó a responder.
+  let noRouteFound = false;
   for (const base of OSRM_ENDPOINTS) {
     const url = `${base}/route/v1/driving/${path}?${qs}`;
     try {
-      const data = await fetchJson<OsrmResponse>(url, {
+      const raw = await fetchJson<unknown>(url, {
         timeoutMs: 18000,
         cacheTtlMs: 90_000,
         headers: { "user-agent": "Voltia/1.0 (EV trip planner)" },
       });
+      const data: OsrmResponse = OsrmResponseSchema.parse(raw);
       if (data.code !== "Ok" || !data.routes?.length) {
-        lastErr = new Error("El motor de rutas no encontró un camino.");
+        noRouteFound = true;
         continue;
       }
       return data.routes.slice(0, 3).map((r, i) => toRaw(r, i, data.routes!.length));
-    } catch (err) {
-      lastErr = err;
+    } catch {
+      // red o timeout — se intenta el siguiente endpoint
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error("No se pudo calcular la ruta.");
+  throw new Error(
+    noRouteFound
+      ? "El motor de rutas no encontró un camino entre esos puntos."
+      : "No se pudo calcular la ruta. Intenta de nuevo en unos segundos.",
+  );
 }

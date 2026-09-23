@@ -48,8 +48,10 @@ function toSql(run: Run): Sql {
     ...values: unknown[]
   ): Promise<T[]> => {
     // Rebuild with $1, $2, … placeholders so values stay parameterized.
-    let text = strings[0];
-    for (let i = 0; i < values.length; i += 1) text += `$${i + 1}${strings[i + 1]}`;
+    // strings.length is always values.length + 1 (TemplateStringsArray's own
+    // guarantee), so every index below is in range.
+    let text = strings[0]!;
+    for (let i = 0; i < values.length; i += 1) text += `$${i + 1}${strings[i + 1]!}`;
     return run<T>(text, values);
   }) as unknown as Sql;
   sql.query = <T = Record<string, unknown>>(text: string, params: unknown[] = []) => run<T>(text, params);
