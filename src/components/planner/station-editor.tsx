@@ -3,9 +3,12 @@ import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { createStationFn, updateStationFn } from "@/lib/api/stations";
+import { useActor } from "@/infrastructure/auth/use-actor";
+import { createSupabaseAuth } from "@/infrastructure/auth/supabase-auth";
 import type { Charger, ChargerSocket, ConnectorType, StationAvailability } from "@/lib/domain/types";
 import { CONNECTOR_LABEL } from "@/lib/domain/types";
 import { compressPhoto } from "@/lib/photos";
+import { stationPhotoUrl, uploadStationPhoto } from "@/lib/storage/station-photos";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -27,6 +30,7 @@ export function StationEditor({ stations }: { stations: Charger[] }) {
   const existing = seed?.editId ? (stations.find((c) => c.id === seed.editId) ?? null) : null;
   const open = Boolean(seed);
   const qc = useQueryClient();
+  const actor = useActor();
 
   const source = existing;
   const lat = seed?.lat ?? source?.lat ?? 0;
@@ -55,6 +59,33 @@ export function StationEditor({ stations }: { stations: Charger[] }) {
 
   if (!open) return null;
 
+  if (actor.role === "guest") {
+    return (
+      <Dialog open onOpenChange={(v) => !v && setSeed(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Inicia sesión para aportar</DialogTitle>
+            <DialogDescription>
+              Añadir o editar una electrolinera necesita una cuenta, para poder darle seguimiento al aporte.
+            </DialogDescription>
+          </DialogHeader>
+          <Button
+            type="button"
+            className="h-11 w-full"
+            onClick={() => {
+              const next = window.location.pathname;
+              void createSupabaseAuth().signInWithGoogle(
+                `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+              );
+            }}
+          >
+            Continuar con Google
+          </Button>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open onOpenChange={(v) => !v && setSeed(null)}>
       <DialogContent>
@@ -73,6 +104,7 @@ export function StationEditor({ stations }: { stations: Charger[] }) {
           lon={lon}
           address={seed?.address ?? source?.address ?? ""}
           busy={create.isPending || update.isPending}
+          ownerId={actor.id ?? ""}
           onSubmit={(payload) => {
             if (source) update.mutate({ data: { ...payload, id: source.id } });
             else create.mutate({ data: payload });
@@ -89,6 +121,7 @@ function StationForm({
   lon,
   address,
   busy,
+  ownerId,
   onSubmit,
 }: {
   initial?: Charger | null;
@@ -96,6 +129,7 @@ function StationForm({
   lon: number;
   address: string;
   busy: boolean;
+  ownerId: string;
   onSubmit: (d: {
     name: string;
     lat: number;
@@ -126,18 +160,23 @@ function StationForm({
   const [latV, setLatV] = useState(String(lat));
   const [lonV, setLonV] = useState(String(lon));
 
+  const [uploading, setUploading] = useState(false);
+
   async function onFiles(files: FileList | null) {
-    if (!files?.length) return;
+    if (!files?.length || !ownerId) return;
+    setUploading(true);
     const next = [...photos];
     for (const file of Array.from(files)) {
       if (next.length >= 2) break;
       try {
-        next.push(await compressPhoto(file));
+        const blob = await compressPhoto(file);
+        next.push(await uploadStationPhoto(blob, ownerId));
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Foto no válida");
       }
     }
     setPhotos(next);
+    setUploading(false);
   }
 
   return (
@@ -294,7 +333,14 @@ function StationForm({
 
       <div className="space-y-2">
         <Label>Fotos (hasta 2)</Label>
-        <Input type="file" accept="image/*" multiple onChange={(e) => void onFiles(e.target.files)} />
+        <Input
+          type="file"
+          accept="image/*"
+          multiple
+          disabled={uploading}
+          onChange={(e) => void onFiles(e.target.files)}
+        />
+        {uploading ? <p className="text-xs text-muted">Subiendo foto…</p> : null}
         {photos.length ? (
           <div className="flex gap-2">
             {photos.map((src, i) => (
@@ -305,14 +351,14 @@ function StationForm({
                 onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
                 aria-label="Quitar foto"
               >
-                <img src={src} alt="" className="h-16 w-24 rounded-md object-cover" />
+                <img src={stationPhotoUrl(src)} alt="" className="h-16 w-24 rounded-md object-cover" />
               </button>
             ))}
           </div>
         ) : null}
       </div>
 
-      <Button type="submit" className="w-full" disabled={busy}>
+      <Button type="submit" className="w-full" disabled={busy || uploading}>
         {initial ? "Guardar cambios" : "Publicar en el mapa"}
       </Button>
     </form>

@@ -1,7 +1,9 @@
 const MAX_EDGE = 720;
-const MAX_CHARS = 160_000;
+// El bucket de Supabase Storage limita a 1 MB por archivo (fase 1 del plan);
+// dejamos margen para el overhead de la subida.
+const MAX_BYTES = 900_000;
 
-export async function compressPhoto(file: File): Promise<string> {
+export async function compressPhoto(file: File): Promise<Blob> {
   if (!file.type.startsWith("image/")) throw new Error("El archivo no es una imagen");
   const url = URL.createObjectURL(file);
   try {
@@ -13,17 +15,28 @@ export async function compressPhoto(file: File): Promise<string> {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("No se pudo comprimir la foto");
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
     let quality = 0.72;
-    let data = canvas.toDataURL("image/jpeg", quality);
-    while (data.length > MAX_CHARS && quality > 0.4) {
+    let blob = await toJpegBlob(canvas, quality);
+    while (blob.size > MAX_BYTES && quality > 0.4) {
       quality -= 0.12;
-      data = canvas.toDataURL("image/jpeg", quality);
+      blob = await toJpegBlob(canvas, quality);
     }
-    if (data.length > MAX_CHARS) throw new Error("La foto sigue siendo demasiado pesada");
-    return data;
+    if (blob.size > MAX_BYTES) throw new Error("La foto sigue siendo demasiado pesada");
+    return blob;
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+function toJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("No se pudo comprimir la foto"))),
+      "image/jpeg",
+      quality,
+    );
+  });
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
