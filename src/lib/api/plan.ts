@@ -2,15 +2,10 @@
 
 import { z } from "zod";
 import type { Place, PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/lib/domain/types";
-import { PlaceSchema, TripConditionsSchema, VehicleSchema } from "@/domain/schemas";
+import { PlanRequestSchema } from "@/domain/schemas";
 import { checkRateLimit, getClientIp } from "@/infrastructure/rate-limit";
 
-const PlanSchema = z.object({
-  origin: PlaceSchema,
-  destination: PlaceSchema,
-  waypoints: z.array(PlaceSchema).max(5),
-  vehicle: VehicleSchema,
-  conditions: TripConditionsSchema,
+const PlanSchema = PlanRequestSchema.extend({
   plugshareToken: z.string().max(4000).optional(),
 });
 

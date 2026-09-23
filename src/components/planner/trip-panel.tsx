@@ -14,6 +14,7 @@ import { PlaceSearch } from "./place-search";
 import { RouteCompare } from "./route-compare";
 import { SocChart } from "./soc-chart";
 import { PlanStats } from "./stats";
+import { SaveTripButton } from "@/components/trips/save-trip-button";
 import { TripParams } from "./trip-params";
 import { VehicleBar } from "./vehicle-bar";
 import type { RoutePlan } from "@/lib/domain/types";
@@ -210,7 +211,10 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
   return (
     <div className="space-y-8 px-4 pb-24 pt-2">
       <section className="space-y-3">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">Resumen de la ruta</h2>
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">Resumen de la ruta</h2>
+          <SaveTripButton plan={plan} />
+        </div>
         <PlanStats plan={plan} />
         <RouteCompare plans={plans} />
       </section>

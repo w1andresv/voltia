@@ -67,3 +67,32 @@ export const TripConditionsSchema = z.object({
 export type VehicleShape = z.infer<typeof VehicleSchema>;
 export type PlaceShape = z.infer<typeof PlaceSchema>;
 export type TripConditionsShape = z.infer<typeof TripConditionsSchema>;
+
+/**
+ * La misma petición de planificación que valida src/lib/api/plan.ts (sin
+ * plugshareToken, que es de sesión y no se persiste) — fuente compartida
+ * para guardar y para recalcular un viaje guardado o compartido (fase 4).
+ */
+export const PlanRequestSchema = z.object({
+  origin: PlaceSchema,
+  destination: PlaceSchema,
+  waypoints: z.array(PlaceSchema).max(5),
+  vehicle: VehicleSchema,
+  conditions: TripConditionsSchema,
+});
+export type PlanRequestShape = z.infer<typeof PlanRequestSchema>;
+
+/**
+ * Resumen liviano de un plan calculado, para mostrar en "Mis viajes" sin
+ * tener que recalcular la ruta completa solo para listar el historial.
+ */
+export const TripSummarySchema = z.object({
+  originLabel: z.string(),
+  destinationLabel: z.string(),
+  distanceKm: z.number(),
+  totalMinutes: z.number(),
+  stops: z.number().int().min(0),
+  arrivalSoc: z.number(),
+  energyKwh: z.number(),
+});
+export type TripSummaryShape = z.infer<typeof TripSummarySchema>;

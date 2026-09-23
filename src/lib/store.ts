@@ -54,6 +54,7 @@ interface PlannerState {
   settingsOpen: boolean;
   batteryOpen: boolean;
   stationsOpen: boolean;
+  myTripsOpen: boolean;
   stationSeed: { lat: number; lon: number; address?: string; editId?: string } | null;
   mapClickArmed: "origin" | "destination" | "waypoint" | "station" | null;
   placeSearchOpen: boolean;
@@ -71,6 +72,7 @@ interface PlannerState {
   addChargerToRoute: (c: Charger) => "origin" | "destination" | "waypoint" | "full";
   swapEnds: () => void;
   applyDemo: (trip: (typeof DEMO_TRIPS)[number]) => void;
+  applySavedRequest: (req: { origin: Place; destination: Place; waypoints: Place[]; vehicle: Vehicle; conditions: TripConditions }) => void;
   setResult: (geo: GeoBundle, plans: RoutePlan[], selectedId: string) => void;
   selectPlan: (id: string) => void;
   setHoverKm: (km: number | null) => void;
@@ -79,6 +81,7 @@ interface PlannerState {
   setSettingsOpen: (v: boolean) => void;
   setBatteryOpen: (v: boolean) => void;
   setStationsOpen: (v: boolean) => void;
+  setMyTripsOpen: (v: boolean) => void;
   setStationSeed: (v: PlannerState["stationSeed"]) => void;
   injectCharger: (c: Charger) => void;
   setMapClickArmed: (v: PlannerState["mapClickArmed"]) => void;
@@ -168,6 +171,7 @@ export const usePlanner = create<PlannerState>()(
       settingsOpen: false,
       batteryOpen: false,
       stationsOpen: false,
+      myTripsOpen: false,
       stationSeed: null,
       mapClickArmed: null,
       placeSearchOpen: false,
@@ -255,6 +259,23 @@ export const usePlanner = create<PlannerState>()(
           geo: null,
           selectedPlanId: null,
         }),
+      applySavedRequest: (req) =>
+        set((s) => {
+          const i = s.vehicles.findIndex((v) => v.id === req.vehicle.id);
+          const vehicles = i >= 0 ? s.vehicles.map((v, idx) => (idx === i ? req.vehicle : v)) : [...s.vehicles, req.vehicle];
+          return {
+            origin: req.origin,
+            destination: req.destination,
+            waypoints: req.waypoints,
+            vehicles,
+            selectedVehicleId: req.vehicle.id,
+            conditions: req.conditions,
+            plans: [],
+            geo: null,
+            selectedPlanId: null,
+            myTripsOpen: false,
+          };
+        }),
       setResult: (geo, plans, selectedId) => set({ geo, plans, selectedPlanId: selectedId, hoverKm: null }),
       selectPlan: (id) => set({ selectedPlanId: id, hoverKm: null }),
       setHoverKm: (km) => set({ hoverKm: km }),
@@ -263,6 +284,7 @@ export const usePlanner = create<PlannerState>()(
       setSettingsOpen: (v) => set({ settingsOpen: v }),
       setBatteryOpen: (v) => set({ batteryOpen: v }),
       setStationsOpen: (v) => set({ stationsOpen: v }),
+      setMyTripsOpen: (v) => set({ myTripsOpen: v }),
       setStationSeed: (v) => set({ stationSeed: v }),
       injectCharger: (c) =>
         set((s) => {
