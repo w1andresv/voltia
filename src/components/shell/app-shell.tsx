@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Car, MapPinned, Menu, PlugZap, Route as RouteIcon, Settings2, X, Zap } from "lucide-react";
+import { useActor } from "@/infrastructure/auth/use-actor";
+import { createSupabaseAuth } from "@/infrastructure/auth/supabase-auth";
 import { BatteryDialog } from "@/components/planner/battery-panel";
 import { ConditionsDialog } from "@/components/planner/conditions-form";
 import { PlugshareSettings } from "@/components/planner/plugshare-settings";
@@ -197,28 +199,55 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function AccountNote() {
-  const [text, setText] = useState("Cuenta…");
+  const actor = useActor();
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/health")
-      .then((response) => response.json())
-      .then((body: { auth?: boolean; google?: boolean; database?: boolean }) => {
-        if (cancelled) return;
-        if (!body.auth) setText("Cuenta: sin conexión a Supabase");
-        else if (!body.database) setText("Cuenta: Auth listo. Falta la base de datos.");
-        else if (!body.google) setText("Cuenta: base conectada. Falta activar Google.");
-        else setText("Cuenta: Google disponible");
-      })
-      .catch(() => {
-        if (!cancelled) setText("Cuenta: sin conexión a Supabase");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  async function signIn() {
+    setBusy(true);
+    try {
+      const auth = createSupabaseAuth();
+      const next = window.location.pathname;
+      await auth.signInWithGoogle(`${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`);
+    } catch {
+      setBusy(false);
+    }
+  }
 
-  return <p className="px-6 pb-6 text-xs leading-relaxed text-subtle">{text}</p>;
+  async function signOut() {
+    setBusy(true);
+    try {
+      await createSupabaseAuth().signOut();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (actor.role === "guest") {
+    return (
+      <div className="px-3 pb-6">
+        <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={signIn}>
+          Continuar con Google
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 px-6 pb-6">
+      <p className="min-w-0 truncate text-xs text-subtle">
+        {actor.email}
+        {actor.role === "admin" ? <span className="ml-1 text-accent">· admin</span> : null}
+      </p>
+      <button
+        type="button"
+        className="shrink-0 text-xs text-muted hover:text-fg disabled:opacity-50"
+        disabled={busy}
+        onClick={signOut}
+      >
+        Cerrar sesión
+      </button>
+    </div>
+  );
 }
 
 function Drawer({
