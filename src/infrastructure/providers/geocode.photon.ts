@@ -38,6 +38,12 @@ function labelOf(p: PhotonFeature["properties"]): { label: string; context?: str
   return { label: name, context: bits.join(", ") || undefined };
 }
 
+function errorText(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = (error as { cause?: unknown }).cause;
+  return cause instanceof Error ? `${error.message} (${cause.message})` : error.message;
+}
+
 function dedupe(places: Place[]): Place[] {
   const out: Place[] = [];
   for (const p of places) {
@@ -47,8 +53,22 @@ function dedupe(places: Place[]): Place[] {
   return out;
 }
 
+/**
+ * Photon solo traduce a los idiomas cargados en la instancia pública (default, en, de, fr);
+ * según la versión, `lang=es` devuelve HTTP 400. Se intenta "es" y, si falla con 4xx,
+ * se repite con "default" (nombre local de OSM: en Colombia ya viene en español).
+ */
 async function searchPhoton(q: string, bias?: { lat: number; lon: number }): Promise<Place[]> {
-  const params = new URLSearchParams({ q, lang: "es", limit: "6" });
+  try {
+    return await searchPhotonLang(q, "es", bias);
+  } catch (error) {
+    if (!(error instanceof Error) || !/HTTP 4\d\d/.test(error.message)) throw error;
+    return searchPhotonLang(q, "default", bias);
+  }
+}
+
+async function searchPhotonLang(q: string, lang: string, bias?: { lat: number; lon: number }): Promise<Place[]> {
+  const params = new URLSearchParams({ q, lang, limit: "6" });
   if (bias) {
     params.set("lat", String(bias.lat));
     params.set("lon", String(bias.lon));
@@ -86,16 +106,21 @@ export async function searchPlaces(query: string, bias?: { lat: number; lon: num
   const q = query.trim();
   if (q.length < 2) return [];
   let places: Place[] = [];
+  let photonError: unknown = null;
   try {
     places = await searchPhoton(q, bias);
-  } catch {
-    places = [];
+  } catch (error) {
+    photonError = error;
+    console.warn("[geocode] photon falló:", errorText(error));
   }
   if (places.length < 4) {
     try {
       places = dedupe([...places, ...(await searchOpenMeteo(q))]);
-    } catch {
-      /* keep photon */
+    } catch (error) {
+      console.warn("[geocode] open-meteo falló:", errorText(error));
+      // Ambos proveedores caídos: se propaga el error para que la UI diga
+      // "no se pudo buscar" en vez de un engañoso "Sin resultados".
+      if (photonError) throw new Error("No se pudo consultar ningún proveedor de búsqueda de lugares.");
     }
   }
   return places.slice(0, 8);

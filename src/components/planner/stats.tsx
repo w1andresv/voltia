@@ -8,7 +8,11 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
-        <Stat label="Distancia" value={formatKm(plan.distanceKm)} />
+        <Stat
+          label="Distancia"
+          value={formatKm(plan.distanceKm)}
+          hint={plan.detourKm >= 0.5 ? `+${formatKm(plan.detourKm, 1)} de desvío a cargadores` : undefined}
+        />
         <Stat label="Tiempo total" value={formatMinutes(plan.totalMinutes)} />
         <Stat
           label="Consumo neto"

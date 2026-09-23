@@ -117,6 +117,10 @@ export interface RawRoute {
   distanceKm: number;
   driveMinutes: number;
   elevation: ElevationStats;
+  /** Vías principales ("Ruta 45A, Ruta 66"), si el motor las informa. */
+  via?: string;
+  /** La ruta evita peajes (pedida con exclude=toll o idéntica a esa). */
+  noTolls?: boolean;
 }
 
 export interface ItineraryNode {
@@ -132,9 +136,14 @@ export interface ItineraryNode {
 export interface RoutePlan {
   id: string;
   label: string;
+  via?: string;
+  noTolls?: boolean;
   geometry: LatLon[];
   samples: RouteSample[];
+  /** Distancia de la ruta, sin desvíos a cargadores. */
   distanceKm: number;
+  /** Km extra (ida y vuelta) para llegar a los cargadores fuera de la vía. */
+  detourKm: number;
   driveMinutes: number;
   chargeMinutes: number;
   totalMinutes: number;

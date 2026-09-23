@@ -13,21 +13,26 @@ const OSRM_ENDPOINTS = [
  * para que un cambio de forma en su API se note como un error claro acá, en
  * vez de romper el planificador en silencio con `undefined`s más adelante.
  */
-const OsrmRouteSchema = z.object({
+export const OsrmRouteSchema = z.object({
   distance: z.number(),
   duration: z.number(),
   geometry: z.object({ coordinates: z.array(z.tuple([z.number(), z.number()])) }),
+  legs: z.array(z.object({ summary: z.string().optional() }).passthrough()).optional(),
 });
 
-const OsrmResponseSchema = z.object({
+export const OsrmResponseSchema = z.object({
   code: z.string(),
   routes: z.array(OsrmRouteSchema).optional(),
 });
 
-type OsrmRoute = z.infer<typeof OsrmRouteSchema>;
+export type OsrmRoute = z.infer<typeof OsrmRouteSchema>;
 type OsrmResponse = z.infer<typeof OsrmResponseSchema>;
 
-function buildSamples(coords: [number, number][], distanceKm: number, durationMin: number): RawRoute["samples"] {
+function buildSamples(
+  coords: [number, number][],
+  distanceKm: number,
+  durationMin: number,
+): RawRoute["samples"] {
   const points: LatLon[] = coords.map(([lon, lat]) => ({ lat, lon }));
   const geomLen = polylineLengthKm(points) || distanceKm;
   const everyKm = Math.max(0.8, distanceKm / 220);
@@ -82,31 +87,46 @@ function buildSamples(coords: [number, number][], distanceKm: number, durationMi
   return samples;
 }
 
-function toRaw(route: OsrmRoute, index: number, total: number): RawRoute {
+/** Vías principales según el resumen de cada tramo ("Ruta 45A, Ruta 66"). */
+function viaOf(route: OsrmRoute): string | undefined {
+  const names = (route.legs ?? [])
+    .flatMap((l) => (l.summary ?? "").split(","))
+    .map((n) => n.trim())
+    .filter(Boolean);
+  const unique = [...new Set(names)];
+  return unique.length ? unique.slice(0, 3).join(", ") : undefined;
+}
+
+/** Una ruta en formato OSRM (también lo usa Mapbox Directions) → RawRoute. */
+export function toRawRoute(
+  route: OsrmRoute,
+  meta: { id: string; label: string; noTolls?: boolean },
+): RawRoute {
   const coords = route.geometry.coordinates;
   const distanceKm = route.distance / 1000;
   const driveMinutes = route.duration / 60;
-  const samples = buildSamples(coords, distanceKm, driveMinutes);
-  const geometry = downsample(
-    coords.map(([lon, lat]) => ({ lat, lon })),
-    420,
-  );
-  const labels = ["Ruta A", "Ruta B", "Ruta C"];
   return {
-    id: `route-${index}`,
-    label: total > 1 ? (labels[index] ?? `Ruta ${index + 1}`) : "Ruta recomendada",
-    geometry,
-    samples,
+    id: meta.id,
+    label: meta.label,
+    via: viaOf(route),
+    noTolls: meta.noTolls || undefined,
+    geometry: downsample(
+      coords.map(([lon, lat]) => ({ lat, lon })),
+      420,
+    ),
+    samples: buildSamples(coords, distanceKm, driveMinutes),
     distanceKm,
     driveMinutes,
     elevation: { gainM: 0, lossM: 0, minM: 0, maxM: 0 },
   };
 }
 
-export async function fetchRoutes(waypoints: LatLon[]): Promise<RawRoute[]> {
+/** Servidores públicos de OSRM: sin llave, pero con datos y tiempos menos precisos que Mapbox. */
+export async function fetchOsrmCandidates(waypoints: LatLon[]): Promise<OsrmRoute[]> {
   if (waypoints.length < 2) throw new Error("Se necesitan origen y destino.");
   const path = waypoints.map((w) => `${w.lon},${w.lat}`).join(";");
-  const qs = "overview=full&geometries=geojson&alternatives=true&steps=false";
+  // alternatives=3: hasta 3 alternativas además de la principal (solo con 2 puntos).
+  const qs = `overview=full&geometries=geojson&alternatives=${waypoints.length === 2 ? 3 : "false"}&steps=false`;
   // Si algún endpoint SÍ respondió pero sin ruta (código != "Ok"), ese es el
   // mensaje más útil para el usuario; un timeout/red caída da un mensaje
   // técnico en inglés que nunca debe llegarle así, así que solo se usa
@@ -125,7 +145,7 @@ export async function fetchRoutes(waypoints: LatLon[]): Promise<RawRoute[]> {
         noRouteFound = true;
         continue;
       }
-      return data.routes.slice(0, 3).map((r, i) => toRaw(r, i, data.routes!.length));
+      return data.routes;
     } catch {
       // red o timeout — se intenta el siguiente endpoint
     }

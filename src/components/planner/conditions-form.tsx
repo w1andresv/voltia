@@ -28,7 +28,7 @@ export function ConditionsDialog() {
         <DialogHeader>
           <DialogTitle>Condiciones del viaje</DialogTitle>
           <DialogDescription>
-            Estrategia, margen de batería y estilo. Pasajeros, equipaje y A/C se definen en cada ruta.
+            Estrategia, margen de seguridad y estilo de conducción. La llegada mínima está en la gestión de batería; pasajeros, equipaje y A/C, en cada ruta.
           </DialogDescription>
         </DialogHeader>
 
@@ -51,9 +51,6 @@ export function ConditionsDialog() {
 
         <section className="mt-5 space-y-4">
           <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">Carga y margen</h3>
-          <Row label="Llegada deseada" value={`${c.arrivalSoc}%`}>
-            <Slider min={5} max={50} value={[c.arrivalSoc]} onValueChange={([v]) => patch({ arrivalSoc: v ?? 20 })} />
-          </Row>
           <div className="grid gap-2">
             <Label>Margen de seguridad · {floor}%</Label>
             <div className="flex flex-wrap gap-1.5">

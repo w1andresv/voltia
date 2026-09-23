@@ -1,4 +1,4 @@
-import { ChevronDown, Minus, Plus, RotateCcw, Users } from "lucide-react";
+import { ChevronDown, Minus, Plus, RotateCcw, Settings2, Users } from "lucide-react";
 import { extraWeightKg, tripMassKg, type ClimateControl } from "@/domain/types";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ export function TripParams() {
   const vehicle = usePlanner((s) => s.vehicles.find((v) => v.id === s.selectedVehicleId) ?? s.vehicles[0]!);
   const c = usePlanner((s) => s.conditions);
   const patch = usePlanner((s) => s.patchConditions);
+  const openSettings = usePlanner((s) => s.setSettingsOpen);
   const mass = tripMassKg(vehicle, c);
   const extra = extraWeightKg(c);
 
@@ -98,6 +99,18 @@ export function TripParams() {
           energía potencial de una bajada vuelve a la batería.
         </p>
       </div>
+
+      <button
+        type="button"
+        onClick={() => openSettings(true)}
+        className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-bg-elevated px-3 py-2 text-left hover:bg-surface-2"
+      >
+        <Settings2 className="size-4 shrink-0 text-accent" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-fg">Ajustes avanzados</span>
+          <span className="block text-xs text-muted">Estrategia, margen de seguridad y conducción</span>
+        </span>
+      </button>
     </div>
   );
 }

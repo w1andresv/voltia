@@ -131,3 +131,17 @@ export function uniqueByProximity<T extends LatLon>(items: T[], minKm: number): 
   }
   return kept;
 }
+
+/**
+ * Qué fracción del recorrido `b` va por encima de `a` (0–1), con una tolerancia
+ * de `toleranceKm`. Sirve para descartar rutas "alternativas" que en realidad
+ * son la misma con otro redondeo.
+ */
+export function routeOverlap(a: LatLon[], b: LatLon[], toleranceKm = 0.4): number {
+  if (a.length < 2 || b.length < 2) return 0;
+  const dense = resamplePolyline(a, 0.5);
+  const probes = downsample(resamplePolyline(b, 1), 250);
+  let near = 0;
+  for (const p of probes) if (distanceToPolylineKm(p, dense) <= toleranceKm) near++;
+  return near / probes.length;
+}

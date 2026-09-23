@@ -1,22 +1,32 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { queryPlugshareRegionFn } from "@/server/actions/chargers";
+import { getPlugshareStatusFn, queryPlugshareRegionFn } from "@/server/actions/chargers";
 import type { Charger } from "@/domain/types";
-import { isPlugshareToken } from "@/lib/plugshare";
 import { usePlanner } from "@/lib/store";
 
 const EMPTY: Charger[] = [];
 
+/** ¿El servidor tiene PLUGSHARE_TOKEN? El navegador no maneja credenciales de PlugShare. */
+export function usePlugshareEnabled(): boolean {
+  const { data } = useQuery({
+    queryKey: ["plugshare-status"],
+    queryFn: () => getPlugshareStatusFn(),
+    staleTime: Infinity,
+    retry: false,
+  });
+  return Boolean(data?.enabled);
+}
+
 export function usePlugshareLayer() {
-  const token = usePlanner((s) => s.plugshareToken);
+  const serverEnabled = usePlugshareEnabled();
   const bounds = usePlanner((s) => s.mapBounds);
   const [blocked, setBlocked] = useState(false);
   useEffect(() => {
     setBlocked(false);
-  }, [token]);
+  }, [serverEnabled]);
 
-  const enabled = isPlugshareToken(token) && Boolean(bounds) && !blocked;
+  const enabled = serverEnabled && Boolean(bounds) && !blocked;
 
   const lat = bounds ? (bounds.minLat + bounds.maxLat) / 2 : 0;
   const lon = bounds ? (bounds.minLon + bounds.maxLon) / 2 : 0;
@@ -27,14 +37,14 @@ export function usePlugshareLayer() {
     : "off";
 
   return useQuery({
-    queryKey: ["plugshare-region", key, token ? `${token.length}:${token.slice(0, 4)}` : "off"],
+    queryKey: ["plugshare-region", key],
     enabled,
     retry: false,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     queryFn: async () => {
       const res = await queryPlugshareRegionFn({
-        data: { latitude: lat, longitude: lon, spanLat, spanLng, token },
+        data: { latitude: lat, longitude: lon, spanLat, spanLng },
       });
       if (res.warning) {
         toast.message(res.warning, { id: "plugshare-warn" });

@@ -8,6 +8,7 @@
  * No DATABASE_URL -> skip. There is no embedded fallback (see src/lib/db.ts):
  * every environment needs a real Postgres and an explicit migrate step.
  */
+import "./load-env.mjs";
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";

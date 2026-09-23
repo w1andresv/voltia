@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  routeOverlap,
   boundsOf,
   cumulativeKm,
   distanceToPolylineKm,
@@ -119,5 +120,19 @@ describe("uniqueByProximity", () => {
     expect(out).toHaveLength(2);
     expect(out[0]).toEqual(BUCARAMANGA);
     expect(out[1]).toEqual(BOGOTA);
+  });
+});
+
+describe("routeOverlap", () => {
+  const line = (bend: number) => [
+    { lat: 6.99, lon: -73.05 },
+    { lat: 6.5, lon: -73.36 + bend },
+    { lat: 6.01, lon: -73.67 },
+  ];
+  it("una ruta consigo misma se solapa 100 %", () => {
+    expect(routeOverlap(line(0), line(0))).toBe(1);
+  });
+  it("rutas por vías distintas se solapan poco", () => {
+    expect(routeOverlap(line(0), line(0.4))).toBeLessThan(0.3);
   });
 });

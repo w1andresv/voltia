@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import type { Charger, StationStatus } from "@/domain/types";
-import { requireMember, requireAdmin } from "@/infrastructure/auth/server-actor";
+import { requireUser, requireAdmin } from "@/infrastructure/auth/server-actor";
 import { checkRateLimit } from "@/infrastructure/rate-limit";
 
 const ConnectorSchema = z.enum(["ccs2", "ccs1", "type2", "chademo", "nacs", "gb_t"]);
@@ -52,19 +52,19 @@ export async function listStationsFn(input?: { data?: { status?: StationStatus |
 }
 
 export async function createStationFn(input: { data: unknown }): Promise<Charger> {
-  const actor = await requireMember();
+  const actor = await requireUser();
   // 10 aportes/10 min por cuenta: ya requiere sesión, pero evita el spam de
   // una cuenta comprometida o un bot que sí logró autenticarse.
   await checkRateLimit("create-station", actor.id as string, 10, 600);
   const data = StationInput.parse(input.data);
   const { insertStation } = await import("./stations-db");
-  // actor.id is always set here: requireMember() only returns past "guest".
+  // actor.id is always set here: requireUser() only returns past "guest".
   return insertStation(data, actor.id as string);
 }
 
 /** Admin, or the original author while the station is still `pending`. */
 export async function updateStationFn(input: { data: unknown }): Promise<Charger> {
-  const actor = await requireMember();
+  const actor = await requireUser();
   const data = StationInput.extend({ id: z.string().min(1) }).parse(input.data);
   const { id, ...rest } = data;
   const { patchStation, getStationOwnership } = await import("./stations-db");

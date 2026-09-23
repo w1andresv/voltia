@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { usePlanner } from "@/lib/store";
 import { MapView } from "./map-view";
 import { useBindMapClick } from "@/components/planner/map-click";
@@ -9,7 +10,14 @@ function noopHover(_km: number | null) {}
 export function MapPane({ mode }: { mode: ChargerAction }) {
   const origin = usePlanner((s) => s.origin);
   const destination = usePlanner((s) => s.destination);
-  const plan = usePlanner((s) => s.plans.find((p) => p.id === s.selectedPlanId) ?? s.plans[0] ?? null);
+  const plans = usePlanner((s) => s.plans);
+  const selectedPlanId = usePlanner((s) => s.selectedPlanId);
+  const selectPlan = usePlanner((s) => s.selectPlan);
+  const plan = plans.find((p) => p.id === selectedPlanId) ?? plans[0] ?? null;
+  const alternatives = useMemo(
+    () => (plan ? plans.filter((p) => p.id !== plan.id) : []),
+    [plans, plan],
+  );
   const hoverKm = usePlanner((s) => s.hoverKm);
   const setHoverKm = usePlanner((s) => s.setHoverKm);
   const armed = usePlanner((s) => s.mapClickArmed);
@@ -27,6 +35,8 @@ export function MapPane({ mode }: { mode: ChargerAction }) {
       origin={isPlan ? origin : null}
       destination={isPlan ? destination : null}
       plan={isPlan ? plan : null}
+      alternatives={isPlan ? alternatives : []}
+      onSelectRoute={selectPlan}
       chargers={chargers}
       showAllChargers
       hoverKm={isPlan ? hoverKm : null}

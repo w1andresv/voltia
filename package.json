@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "db:migrate": "node scripts/migrate.mjs",
+    "db:seed": "node scripts/seed.mjs",
     "migrate:photos": "node scripts/migrate-photos.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run && npm run test:scripts",

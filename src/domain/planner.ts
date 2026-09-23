@@ -481,9 +481,14 @@ export function buildPlan(args: {
   return {
     id: raw.id,
     label: raw.label,
+    via: raw.via,
+    noTolls: raw.noTolls,
     geometry: raw.geometry,
     samples,
-    distanceKm: raw.distanceKm + detourKm,
+    // Distancia de la ruta (comparable con Google Maps); el desvío hasta los
+    // cargadores va aparte, y sí cuenta en tiempo y energía.
+    distanceKm: raw.distanceKm,
+    detourKm,
     driveMinutes: driveMin + detourMin,
     chargeMinutes: chargeMin,
     totalMinutes: driveMin + chargeMin + detourMin,

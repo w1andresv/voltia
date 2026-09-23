@@ -2,18 +2,11 @@
 
 import { z } from "zod";
 import { PlanRequestSchema, TripSummarySchema } from "@/domain/schemas";
-import type { PlanRequestShape, TripSummaryShape } from "@/domain/schemas";
-import { requireMember } from "@/infrastructure/auth/server-actor";
+import type { SavedTrip } from "@/domain/user/types";
+import { requireUser } from "@/infrastructure/auth/server-actor";
 import { createServerSupabase } from "@/infrastructure/supabase/server";
 
-export interface SavedTrip {
-  id: string;
-  request: PlanRequestShape;
-  summary: TripSummaryShape;
-  shared: boolean;
-  shareId: string | null;
-  createdAt: string;
-}
+export type { SavedTrip };
 
 const PayloadSchema = z.object({ request: PlanRequestSchema, summary: TripSummarySchema });
 
@@ -40,6 +33,8 @@ function toSavedTrip(row: TripRow): SavedTrip {
 const SaveTripInput = z.object({
   request: PlanRequestSchema,
   summary: TripSummarySchema,
+  /** Clave de idempotencia (uuid): un reintento con el mismo clientId no duplica. */
+  clientId: z.string().uuid().optional(),
 });
 
 /**
@@ -48,13 +43,21 @@ const SaveTripInput = z.object({
  * puede volver a calcular a partir de la petición (ver /v/[shareId]).
  */
 export async function saveTripFn(input: { data: unknown }): Promise<SavedTrip> {
-  const actor = await requireMember();
-  const data = SaveTripInput.parse(input.data);
+  const actor = await requireUser();
+  const { clientId, ...data } = SaveTripInput.parse(input.data);
   const supabase = await createServerSupabase();
+  if (clientId) {
+    const { data: existing } = await supabase
+      .from("voltia_trips")
+      .select("id, payload, shared, share_id, created_at")
+      .eq("owner_id", actor.id)
+      .eq("client_id", clientId)
+      .maybeSingle();
+    if (existing) return toSavedTrip(existing as TripRow);
+  }
   const { data: row, error } = await supabase
-    .schema("voltia")
-    .from("trips")
-    .insert({ owner_id: actor.id, payload: data })
+    .from("voltia_trips")
+    .insert({ owner_id: actor.id, client_id: clientId ?? null, payload: data })
     .select("id, payload, shared, share_id, created_at")
     .single();
   if (error || !row) throw new Error(`No se pudo guardar el viaje: ${error?.message ?? "sin fila"}`);
@@ -63,11 +66,10 @@ export async function saveTripFn(input: { data: unknown }): Promise<SavedTrip> {
 
 /** Historial del usuario con sesión, más reciente primero. */
 export async function listMyTripsFn(): Promise<SavedTrip[]> {
-  const actor = await requireMember();
+  const actor = await requireUser();
   const supabase = await createServerSupabase();
   const { data, error } = await supabase
-    .schema("voltia")
-    .from("trips")
+    .from("voltia_trips")
     .select("id, payload, shared, share_id, created_at")
     .eq("owner_id", actor.id)
     .order("updated_at", { ascending: false });
@@ -76,10 +78,10 @@ export async function listMyTripsFn(): Promise<SavedTrip[]> {
 }
 
 export async function deleteTripFn(input: { data: { id: string } }): Promise<void> {
-  const actor = await requireMember();
+  const actor = await requireUser();
   const id = z.string().min(1).parse(input.data.id);
   const supabase = await createServerSupabase();
-  const { error } = await supabase.schema("voltia").from("trips").delete().eq("id", id).eq("owner_id", actor.id);
+  const { error } = await supabase.from("voltia_trips").delete().eq("id", id).eq("owner_id", actor.id);
   if (error) throw new Error(`No se pudo borrar el viaje: ${error.message}`);
 }
 
@@ -91,13 +93,12 @@ function randomShareId(): string {
 
 /** Activa (o reutiliza) el link público de un viaje del usuario con sesión. */
 export async function shareTripFn(input: { data: { id: string } }): Promise<{ shareId: string }> {
-  const actor = await requireMember();
+  const actor = await requireUser();
   const id = z.string().min(1).parse(input.data.id);
   const supabase = await createServerSupabase();
 
   const { data: existing, error: readError } = await supabase
-    .schema("voltia")
-    .from("trips")
+    .from("voltia_trips")
     .select("share_id")
     .eq("id", id)
     .eq("owner_id", actor.id)
@@ -107,8 +108,7 @@ export async function shareTripFn(input: { data: { id: string } }): Promise<{ sh
 
   const shareId = randomShareId();
   const { error } = await supabase
-    .schema("voltia")
-    .from("trips")
+    .from("voltia_trips")
     .update({ shared: true, share_id: shareId })
     .eq("id", id)
     .eq("owner_id", actor.id);
@@ -117,7 +117,7 @@ export async function shareTripFn(input: { data: { id: string } }): Promise<{ sh
 }
 
 /**
- * Lectura pública de un viaje compartido — SIN requireMember(): un visitante
+ * Lectura pública de un viaje compartido — SIN requireUser(): un visitante
  * sin sesión debe poder abrir el link. El RLS de 0006_share_trips.sql es lo
  * que de verdad limita esto a filas con shared = true; este cliente usa la
  * cookie de sesión si existe, o la del rol anon si no hay ninguna.
@@ -126,8 +126,7 @@ export async function getSharedTripFn(input: { data: { shareId: string } }): Pro
   const shareId = z.string().min(1).parse(input.data.shareId);
   const supabase = await createServerSupabase();
   const { data, error } = await supabase
-    .schema("voltia")
-    .from("trips")
+    .from("voltia_trips")
     .select("id, payload, shared, share_id, created_at")
     .eq("share_id", shareId)
     .eq("shared", true)

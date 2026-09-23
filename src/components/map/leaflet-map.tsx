@@ -1,5 +1,5 @@
 import "leaflet/dist/leaflet.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleMarker,
   MapContainer,
@@ -7,6 +7,7 @@ import {
   Polyline,
   Popup,
   TileLayer,
+  Tooltip,
   ZoomControl,
   useMap,
   useMapEvents,
@@ -430,6 +431,8 @@ export function LeafletMap({
   origin,
   destination,
   plan,
+  alternatives = [],
+  onSelectRoute,
   chargers,
   showAllChargers,
   hoverKm,
@@ -442,12 +445,13 @@ export function LeafletMap({
 }: LeafletMapProps) {
   const mapboxToken = usePlanner((s) => s.mapboxToken);
   const fitPoints = useMemo(() => {
-    if (plan?.geometry.length) return plan.geometry;
+    // Encuadra todas las rutas encontradas, así elegir otra no mueve el mapa.
+    if (plan?.geometry.length) return [...plan.geometry, ...alternatives.flatMap((a) => a.geometry)];
     const pts: LatLon[] = [];
     if (origin) pts.push(origin);
     if (destination) pts.push(destination);
     return pts;
-  }, [plan, origin, destination]);
+  }, [plan, alternatives, origin, destination]);
 
   const segs = useMemo(() => (plan ? coloredSegments(plan.samples) : []), [plan]);
   const hover = plan && hoverKm != null ? sampleAt(plan.samples, hoverKm) : null;
@@ -476,6 +480,34 @@ export function LeafletMap({
       <ClickTrap enabled={mapClickEnabled && !mapLocked} onMapClick={onMapClick} />
       {plan ? <HoverTrap samples={plan.samples} onHoverKm={onHoverKm} /> : null}
       {fitPoints.length > 0 ? <Fit points={fitPoints} /> : null}
+
+      {alternatives.map((alt) => {
+        const positions = alt.geometry.map((p) => [p.lat, p.lon] as [number, number]);
+        const select = (e: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(e);
+          suppressMapClicks(600);
+          onSelectRoute?.(alt.id);
+        };
+        return (
+          <Fragment key={`alt-${alt.id}`}>
+            <Polyline
+              positions={positions}
+              pathOptions={{ color: MAP_COLORS.alternative, weight: 5, opacity: 0.55, lineCap: "round", lineJoin: "round" }}
+              interactive={false}
+            />
+            {/* Línea ancha e invisible: más fácil de tocar en el celular. */}
+            <Polyline
+              positions={positions}
+              pathOptions={{ color: MAP_COLORS.alternative, weight: 18, opacity: 0.01 }}
+              eventHandlers={{ click: select }}
+            >
+              <Tooltip sticky>
+                {alt.label} · {formatKm(alt.distanceKm)} · {formatMinutes(alt.totalMinutes)} — toca para elegirla
+              </Tooltip>
+            </Polyline>
+          </Fragment>
+        );
+      })}
 
       {segs.map((seg, i) => (
         <Polyline

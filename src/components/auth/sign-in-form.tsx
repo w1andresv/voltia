@@ -6,12 +6,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 /**
+ * Envía el enlace mágico. Vuelve a la página actual (`next`) tras confirmar el correo.
+ * Compartido por el formulario y por "Reenviar enlace" del diálogo de inicio de sesión.
+ */
+export async function sendMagicLink(email: string): Promise<void> {
+  const next = `${window.location.pathname}${window.location.search}`;
+  await createSupabaseAuth().signInWithEmail(
+    email,
+    `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+  );
+}
+
+/**
  * Enlace mágico por correo: único método de inicio de sesión del MVP
  * (Google queda para una versión posterior, ver domain/auth/port.ts).
- * Reutilizado en el menú (app-shell) y en el formulario de aportar estación.
+ * Con `onSent`, quien lo usa muestra su propio estado "revisa tu correo"
+ * (el diálogo global de inicio de sesión); sin él, lo muestra el formulario.
  */
-export function SignInForm({ className }: { className?: string }) {
-  const [email, setEmail] = useState("");
+export function SignInForm({
+  className,
+  onSent,
+  initialEmail = "",
+  autoFocus = false,
+}: {
+  className?: string;
+  onSent?: (email: string) => void;
+  initialEmail?: string;
+  autoFocus?: boolean;
+}) {
+  const [email, setEmail] = useState(initialEmail);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,12 +46,9 @@ export function SignInForm({ className }: { className?: string }) {
     setBusy(true);
     setError(null);
     try {
-      const next = window.location.pathname;
-      await createSupabaseAuth().signInWithEmail(
-        trimmed,
-        `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      );
-      setSent(true);
+      await sendMagicLink(trimmed);
+      if (onSent) onSent(trimmed);
+      else setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo enviar el enlace");
     } finally {
@@ -39,7 +59,8 @@ export function SignInForm({ className }: { className?: string }) {
   if (sent) {
     return (
       <p className={className ?? "text-sm text-muted"}>
-        Revisa <strong className="text-fg">{email.trim()}</strong>: te enviamos un enlace para entrar.
+        Revisa <strong className="text-fg">{email.trim()}</strong>: te enviamos un enlace para
+        entrar.
       </p>
     );
   }
@@ -50,6 +71,8 @@ export function SignInForm({ className }: { className?: string }) {
         type="email"
         required
         autoComplete="email"
+        autoFocus={autoFocus}
+        aria-label="Correo electrónico"
         placeholder="tu@correo.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}

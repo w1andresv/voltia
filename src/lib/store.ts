@@ -11,9 +11,11 @@ import {
   type TripConditions,
   type Vehicle,
 } from "@/domain/types";
-import { DEFAULT_VEHICLE_ID, VEHICLE_CATALOG, catalogById, isCatalogId } from "@/domain/vehicles";
+import { DEFAULT_VEHICLE_ID, VEHICLE_CATALOG } from "@/domain/vehicles";
+import { LEGACY_V2_CATALOG } from "@/domain/legacy-catalog";
+import { extractOwnVehicles } from "@/domain/user/catalog-rules";
+import { createGuestStorage, MAX_GUEST_VEHICLES } from "@/infrastructure/user-data/guest-storage";
 import { envMapboxToken, isMapboxPublicToken } from "@/lib/mapbox";
-import { isPlugshareToken } from "@/lib/plugshare";
 
 export const DEMO_TRIPS: { label: string; origin: Place; destination: Place }[] = [
   {
@@ -39,7 +41,14 @@ export const DEMO_TRIPS: { label: string; origin: Place; destination: Place }[] 
 ];
 
 interface PlannerState {
+  /**
+   * Lista en memoria (NO se persiste): catálogo + vehículos propios del usuario
+   * activo, la mantiene UserDataProvider. La fuente de verdad de los propios
+   * es el repositorio del contexto (navegador o servidor), no este store.
+   */
   vehicles: Vehicle[];
+  /** Vehículo de una ruta guardada/compartida que no está en la lista del usuario; no se persiste. */
+  tempVehicle: Vehicle | null;
   selectedVehicleId: string;
   conditions: TripConditions;
   origin: Place | null;
@@ -59,12 +68,10 @@ interface PlannerState {
   mapClickArmed: "origin" | "destination" | "waypoint" | "station" | null;
   placeSearchOpen: boolean;
   mapboxToken: string;
-  plugshareToken: string;
   mapBounds: { minLat: number; maxLat: number; minLon: number; maxLon: number; zoom: number } | null;
   setVehicleId: (id: string) => void;
-  upsertVehicle: (v: Vehicle) => void;
-  removeVehicle: (id: string) => void;
-  resetVehicle: (id: string) => void;
+  /** Reemplaza la lista de vehículos (catálogo + propios) y corrige la selección si ya no existe. */
+  setVehicles: (list: Vehicle[]) => void;
   patchConditions: (p: Partial<TripConditions>) => void;
   setOrigin: (p: Place | null) => void;
   setDestination: (p: Place | null) => void;
@@ -87,7 +94,6 @@ interface PlannerState {
   setMapClickArmed: (v: PlannerState["mapClickArmed"]) => void;
   setPlaceSearchOpen: (v: boolean) => void;
   setMapboxToken: (token: string) => void;
-  setPlugshareToken: (token: string) => void;
   setMapBounds: (b: PlannerState["mapBounds"]) => void;
   clearTrip: () => void;
   selectedVehicle: () => Vehicle;
@@ -98,38 +104,6 @@ interface PlannerState {
 function clampTripRegen(n: unknown): number {
   const v = typeof n === "number" && Number.isFinite(n) ? n : 20;
   return Math.min(80, Math.max(5, v));
-}
-
-function mergeVehicles(stored: Vehicle[] | undefined): Vehicle[] {
-  const storedList = stored ?? [];
-  const storedById = new Map(storedList.map((v) => [v.id, v]));
-  const result: Vehicle[] = [];
-  const seen = new Set<string>();
-
-  for (const factory of VEHICLE_CATALOG) {
-    const edited = storedById.get(factory.id);
-    result.push(
-      edited
-        ? {
-            ...factory,
-            ...edited,
-            id: factory.id,
-            consumptionKwhPer100km: edited.consumptionManual ? edited.consumptionKwhPer100km : factory.consumptionKwhPer100km,
-            consumptionManual: Boolean(edited.consumptionManual),
-          }
-        : factory,
-    );
-    seen.add(factory.id);
-  }
-  for (const v of storedList) {
-    if (seen.has(v.id)) continue;
-    result.push({
-      ...v,
-      consumptionKwhPer100km: v.consumptionManual ? v.consumptionKwhPer100km : null,
-      consumptionManual: Boolean(v.consumptionManual),
-    });
-  }
-  return result;
 }
 
 function withRecomputedPlans(s: PlannerState): Pick<PlannerState, "plans" | "selectedPlanId"> | Record<string, never> {
@@ -157,6 +131,7 @@ export const usePlanner = create<PlannerState>()(
   persist(
     (set, get) => ({
       vehicles: VEHICLE_CATALOG,
+      tempVehicle: null,
       selectedVehicleId: DEFAULT_VEHICLE_ID,
       conditions: DEFAULT_CONDITIONS,
       origin: null,
@@ -176,38 +151,22 @@ export const usePlanner = create<PlannerState>()(
       mapClickArmed: null,
       placeSearchOpen: false,
       mapboxToken: envMapboxToken(),
-      // Sin valor por defecto: cada quien pega su propia clave en Configuración
-      // > PlugShare si quiere (ver src/lib/plugshare.ts).
-      plugshareToken: "",
       mapBounds: null,
       setVehicleId: (id) =>
         set((s) => {
-          const next = { ...s, selectedVehicleId: id };
-          return { selectedVehicleId: id, ...withRecomputedPlans(next) };
+          const tempVehicle = s.tempVehicle?.id === id ? s.tempVehicle : null;
+          const next = { ...s, selectedVehicleId: id, tempVehicle };
+          return { selectedVehicleId: id, tempVehicle, ...withRecomputedPlans(next) };
         }),
-      upsertVehicle: (v) =>
+      setVehicles: (list) =>
         set((s) => {
-          const i = s.vehicles.findIndex((x) => x.id === v.id);
-          const vehicles = i >= 0 ? s.vehicles.map((x) => (x.id === v.id ? v : x)) : [...s.vehicles, v];
-          const next = { ...s, vehicles, selectedVehicleId: v.id };
-          return { vehicles, selectedVehicleId: v.id, ...withRecomputedPlans(next) };
-        }),
-      removeVehicle: (id) =>
-        set((s) => {
-          if (isCatalogId(id)) return {};
-          const vehicles = s.vehicles.filter((v) => v.id !== id);
-          const selectedVehicleId =
-            s.selectedVehicleId === id ? (vehicles[0]?.id ?? DEFAULT_VEHICLE_ID) : s.selectedVehicleId;
-          const next = { ...s, vehicles, selectedVehicleId };
-          return { vehicles, selectedVehicleId, ...withRecomputedPlans(next) };
-        }),
-      resetVehicle: (id) =>
-        set((s) => {
-          const factory = catalogById(id);
-          if (!factory) return {};
-          const vehicles = s.vehicles.map((v) => (v.id === id ? factory : v));
-          const next = { ...s, vehicles };
-          return { vehicles, ...withRecomputedPlans(next) };
+          const temp = s.tempVehicle && !list.some((v) => v.id === s.tempVehicle!.id) ? s.tempVehicle : null;
+          const vehicles = temp ? [...list, temp] : list;
+          const selectedVehicleId = vehicles.some((v) => v.id === s.selectedVehicleId)
+            ? s.selectedVehicleId
+            : (vehicles.find((v) => v.id === DEFAULT_VEHICLE_ID)?.id ?? vehicles[0]?.id ?? DEFAULT_VEHICLE_ID);
+          const next = { ...s, vehicles, selectedVehicleId, tempVehicle: temp };
+          return { vehicles, selectedVehicleId, tempVehicle: temp, ...withRecomputedPlans(next) };
         }),
       patchConditions: (p) =>
         set((s) => {
@@ -261,13 +220,17 @@ export const usePlanner = create<PlannerState>()(
         }),
       applySavedRequest: (req) =>
         set((s) => {
-          const i = s.vehicles.findIndex((v) => v.id === req.vehicle.id);
-          const vehicles = i >= 0 ? s.vehicles.map((v, idx) => (idx === i ? req.vehicle : v)) : [...s.vehicles, req.vehicle];
+          // Si el vehículo de la ruta no está en la lista del usuario ni en el
+          // catálogo, se usa como temporal (no se persiste ni entra a su lista).
+          const known = s.vehicles.some((v) => v.id === req.vehicle.id);
+          const tempVehicle = known ? null : req.vehicle;
+          const vehicles = known ? s.vehicles : [...s.vehicles.filter((v) => v.id !== s.tempVehicle?.id), req.vehicle];
           return {
             origin: req.origin,
             destination: req.destination,
             waypoints: req.waypoints,
             vehicles,
+            tempVehicle,
             selectedVehicleId: req.vehicle.id,
             conditions: req.conditions,
             plans: [],
@@ -306,7 +269,6 @@ export const usePlanner = create<PlannerState>()(
       setMapClickArmed: (v) => set({ mapClickArmed: v }),
       setPlaceSearchOpen: (v) => set({ placeSearchOpen: v }),
       setMapboxToken: (token) => set({ mapboxToken: token.trim() }),
-      setPlugshareToken: (token) => set({ plugshareToken: token.trim() }),
       setMapBounds: (b) =>
         set((s) => {
           if (!b) return { mapBounds: null };
@@ -345,30 +307,51 @@ export const usePlanner = create<PlannerState>()(
     }),
     {
       name: "voltia-planner",
+      // v3: la lista de vehículos y el token de PlugShare salen del navegador
+      // (los propios pasan a `voltia-guest`); aquí quedan solo las preferencias.
+      version: 3,
       partialize: (s) => ({
-        vehicles: s.vehicles,
         selectedVehicleId: s.selectedVehicleId,
         conditions: s.conditions,
         mapboxToken: s.mapboxToken,
-        plugshareToken: s.plugshareToken,
         tripRegenV: 2,
       }),
+      migrate: (persisted) => migratePlannerState(persisted),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<PlannerState> & { tripRegenV?: number };
         const storedToken = (p.mapboxToken ?? "").trim();
-        const storedPlugshare = (p.plugshareToken ?? "").trim();
         const storedConditions = p.conditions;
         const regenPct = p.tripRegenV === 2 ? clampTripRegen(storedConditions?.regenPct) : 20;
         return {
           ...current,
-          ...p,
-          vehicles: mergeVehicles(p.vehicles),
+          selectedVehicleId: typeof p.selectedVehicleId === "string" ? p.selectedVehicleId : current.selectedVehicleId,
           conditions: { ...DEFAULT_CONDITIONS, ...(storedConditions ?? {}), regenPct },
           mapboxToken: isMapboxPublicToken(storedToken) ? storedToken : current.mapboxToken,
-          plugshareToken: isPlugshareToken(storedPlugshare) ? storedPlugshare : current.plugshareToken,
           mapBounds: null,
         };
       },
     },
   ),
 );
+
+/**
+ * Migración v2 → v3 del estado guardado. Mueve los vehículos propios
+ * (personalizados o ediciones reales de catálogo) a `voltia-guest`, descarta el
+ * catálogo y el token de PlugShare (una credencial que no debe vivir en el
+ * navegador) y deja solo las preferencias. Exportada para probarla.
+ */
+export function migratePlannerState(persisted: unknown): Record<string, unknown> {
+  const p = (persisted ?? {}) as Record<string, unknown>;
+  const { vehicles, plugshareToken: _dropped, ...rest } = p;
+  void _dropped;
+  if (Array.isArray(vehicles)) {
+    try {
+      const own = extractOwnVehicles(vehicles as Vehicle[], LEGACY_V2_CATALOG).slice(0, MAX_GUEST_VEHICLES);
+      const guest = createGuestStorage();
+      for (const v of own) guest.addVehicle(v);
+    } catch (error) {
+      console.error("[store] no se pudieron mover los vehículos a voltia-guest", error);
+    }
+  }
+  return rest;
+}

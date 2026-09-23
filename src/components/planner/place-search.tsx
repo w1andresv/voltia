@@ -34,6 +34,7 @@ export function PlaceSearch({
 
   const search = useMutation({
     mutationFn: (query: string) => searchPlacesFn({ data: { q: query } }),
+    onError: (error) => console.error("[place-search]", error),
   });
 
   useEffect(() => {
@@ -154,6 +155,21 @@ export function PlaceSearch({
         >
           {search.isPending && results.length === 0 ? (
             <div className="px-3 py-3 text-xs text-muted">Buscando…</div>
+          ) : search.isError ? (
+            <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-warn">
+              <span>No se pudo buscar lugares. Revisa tu conexión.</span>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1.5 font-medium text-fg hover:bg-surface"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  search.mutate(q);
+                }}
+              >
+                Reintentar
+              </button>
+            </div>
           ) : results.length === 0 ? (
             <div className="px-3 py-3 text-xs text-muted">Sin resultados</div>
           ) : (

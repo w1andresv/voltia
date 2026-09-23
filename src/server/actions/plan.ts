@@ -1,13 +1,10 @@
 "use server";
 
-import { z } from "zod";
 import type { Place, PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/domain/types";
 import { PlanRequestSchema } from "@/domain/schemas";
 import { checkRateLimit, getClientIp } from "@/infrastructure/rate-limit";
 
-const PlanSchema = PlanRequestSchema.extend({
-  plugshareToken: z.string().max(4000).optional(),
-});
+const PlanSchema = PlanRequestSchema;
 
 export async function searchPlacesFn(input: { data: { q: string; lat?: number; lon?: number } }): Promise<Place[]> {
   const data = input.data;
@@ -20,7 +17,7 @@ export async function reversePlaceFn(input: { data: { lat: number; lon: number }
   return reversePlace(input.data.lat, input.data.lon);
 }
 
-export async function planTripFn(input: { data: PlanRequest & { plugshareToken?: string } }): Promise<PlanResponse> {
+export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResponse> {
   const ip = await getClientIp();
   // 20 planificaciones/min por IP: protege las cuotas de OSRM/Overpass, que
   // son gratis y compartidas con otros usuarios de esas APIs públicas.
@@ -29,7 +26,7 @@ export async function planTripFn(input: { data: PlanRequest & { plugshareToken?:
   const startedAt = Date.now();
 
   try {
-    const { fetchRoutes } = await import("@/infrastructure/providers/routing.osrm");
+    const { fetchRoutes } = await import("@/infrastructure/providers/routing");
     const { applyElevationAll } = await import("@/infrastructure/providers/elevation.openmeteo");
     const { fetchWeather } = await import("@/infrastructure/providers/weather.openmeteo");
     const { findChargersAlong } = await import("@/infrastructure/providers/chargers.overpass");
@@ -41,12 +38,14 @@ export async function planTripFn(input: { data: PlanRequest & { plugshareToken?:
     const warnings: string[] = [];
     const rawRoutes = await fetchRoutes(waypoints);
     const mid = rawRoutes[0]?.samples[Math.floor((rawRoutes[0].samples.length || 1) / 2)];
-    const chargerQuery = rawRoutes[0]?.samples ?? [];
+    // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
+    // alternativa puede planear sus paradas. Las sondas no se repiten donde se solapan.
+    const chargerQuery = rawRoutes.flatMap((r) => r.samples);
     const community = (await loadCommunityChargers("all")).filter(isVerifiedForPlanning);
     const [routes, weather, chargerRes] = await Promise.all([
       applyElevationAll(rawRoutes),
       mid ? fetchWeather(mid) : Promise.resolve(null),
-      findChargersAlong(chargerQuery, community, data.plugshareToken),
+      findChargersAlong(chargerQuery, community),
     ]);
     if (routes.some((r) => r.elevation.maxM === 0 && r.elevation.minM === 0 && r.distanceKm > 5)) {
       warnings.push("No se obtuvo el perfil de elevación. El consumo puede estar subestimado en montaña.");

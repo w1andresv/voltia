@@ -42,7 +42,7 @@ export async function GET() {
       const sql = await getSql();
       await sql.query("select 1 as ok");
       const rows = await sql.query<{ count: number }>(
-        "select count(*)::int as count from voltia.vehicles where owner_id is null",
+        "select count(*)::int as count from public.voltia_vehicles where owner_id is null",
       );
       catalog = rows[0]?.count ?? 0;
       database = true;

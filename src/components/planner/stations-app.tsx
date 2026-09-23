@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { Plus, X } from "lucide-react";
-import { isPlugshareToken } from "@/lib/plugshare";
+import { usePlugshareEnabled } from "./use-plugshare";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { StationHub, StationsButton } from "./station-hub";
@@ -12,7 +12,7 @@ export function StationsApp() {
   const setShowAll = usePlanner((s) => s.setShowAllChargers);
   const armed = usePlanner((s) => s.mapClickArmed);
   const seed = usePlanner((s) => s.stationSeed);
-  const plugshareOn = usePlanner((s) => isPlugshareToken(s.plugshareToken));
+  const plugshareOn = usePlugshareEnabled();
   const adding = armed === "station" && !seed;
 
   useEffect(() => {

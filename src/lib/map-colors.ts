@@ -4,6 +4,8 @@ export const MAP_COLORS = {
   socLow: "#d4776a",
   route: "#5ee6d4",
   mutedRoute: "#3a4654",
+  /** Rutas alternativas (no seleccionadas) en el mapa. */
+  alternative: "#8b98a8",
   origin: "#eef2f6",
   dest: "#3ddec8",
   charger: "#3ddec8",

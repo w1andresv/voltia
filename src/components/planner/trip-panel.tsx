@@ -48,7 +48,6 @@ export function TripSetup() {
           waypoints: s.waypoints.filter((w) => w.label && w.lat && w.lon),
           vehicle: v,
           conditions: s.conditions,
-          plugshareToken: s.plugshareToken || undefined,
         },
       });
     },
@@ -210,13 +209,21 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
 
   return (
     <div className="space-y-8 px-4 pb-24 pt-2">
+      {plans.length > 1 ? (
+        <section>
+          <RouteCompare plans={plans} />
+        </section>
+      ) : null}
+
       <section className="space-y-3">
         <div className="flex items-start justify-between gap-2">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">Resumen de la ruta</h2>
+          <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">
+            {plans.length > 1 ? `Resumen · ${plan.label}` : "Resumen de la ruta"}
+          </h2>
           <SaveTripButton plan={plan} />
         </div>
+        {plan.via ? <p className="-mt-1 text-xs text-muted">Por {plan.via}</p> : null}
         <PlanStats plan={plan} />
-        <RouteCompare plans={plans} />
       </section>
 
       <section className="space-y-3">
