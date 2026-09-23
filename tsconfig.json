@@ -12,13 +12,19 @@
     "strict": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    // `src/lib/db.ts` imports scripts/migration-plan.mjs; checkJs types the
-    // implementation itself instead of a hand-written declaration beside it.
     "allowJs": true,
     "checkJs": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "types": [
-      "vite/client",
       "node"
     ],
     "baseUrl": ".",
@@ -26,11 +32,16 @@
       "@/*": [
         "./src/*"
       ]
-    },
-    "allowImportingTsExtensions": true
+    }
   },
   "include": [
+    "next-env.d.ts",
     "src",
-    "server"
+    "server",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
   ]
 }

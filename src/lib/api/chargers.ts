@@ -1,4 +1,5 @@
-import { createServerFn } from "@tanstack/react-start";
+"use server";
+
 import { z } from "zod";
 import type { Charger } from "@/lib/domain/types";
 
@@ -10,9 +11,8 @@ const RegionSchema = z.object({
   token: z.string().max(4000).optional(),
 });
 
-export const queryPlugshareRegionFn = createServerFn({ method: "POST" })
-  .validator((d: unknown) => RegionSchema.parse(d))
-  .handler(async ({ data }): Promise<{ chargers: Charger[]; warning?: string }> => {
-    const { queryPlugshareRegion } = await import("@/lib/providers/chargers.plugshare");
-    return queryPlugshareRegion(data);
-  });
+export async function queryPlugshareRegionFn(input: { data: unknown }): Promise<{ chargers: Charger[]; warning?: string }> {
+  const data = RegionSchema.parse(input.data);
+  const { queryPlugshareRegion } = await import("@/lib/providers/chargers.plugshare");
+  return queryPlugshareRegion(data);
+}

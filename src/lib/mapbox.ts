@@ -1,4 +1,4 @@
-const ENV_TOKEN = String(import.meta.env.VITE_MAPBOX_TOKEN ?? "").trim();
+const ENV_TOKEN = String(process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "").trim();
 
 /** Public Mapbox tokens are JWTs that start with `pk.` */
 export function isMapboxPublicToken(value: string): boolean {

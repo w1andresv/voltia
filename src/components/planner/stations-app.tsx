@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect } from "react";
 import { Plus, X } from "lucide-react";
 import { isPlugshareToken } from "@/lib/plugshare";

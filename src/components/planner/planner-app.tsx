@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Battery, Map as MapIcon } from "lucide-react";
 import { usePlanner } from "@/lib/store";

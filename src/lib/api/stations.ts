@@ -1,4 +1,5 @@
-import { createServerFn } from "@tanstack/react-start";
+"use server";
+
 import { z } from "zod";
 import type { Charger, StationStatus } from "@/lib/domain/types";
 
@@ -31,31 +32,27 @@ const ReviewInput = z.object({
   reviewNote: z.string().trim().max(300).optional(),
 });
 
-export const listStationsFn = createServerFn({ method: "POST" })
-  .validator((d: { status?: StationStatus | "all" } | undefined) => d ?? {})
-  .handler(async ({ data }): Promise<Charger[]> => {
-    const { loadCommunityChargers } = await import("./stations-db");
-    return loadCommunityChargers(data.status ?? "all");
-  });
+export async function listStationsFn(input?: { data?: { status?: StationStatus | "all" } }): Promise<Charger[]> {
+  const data = input?.data ?? {};
+  const { loadCommunityChargers } = await import("./stations-db");
+  return loadCommunityChargers(data.status ?? "all");
+}
 
-export const createStationFn = createServerFn({ method: "POST" })
-  .validator((d: unknown) => StationInput.parse(d))
-  .handler(async ({ data }): Promise<Charger> => {
-    const { insertStation } = await import("./stations-db");
-    return insertStation(data);
-  });
+export async function createStationFn(input: { data: unknown }): Promise<Charger> {
+  const data = StationInput.parse(input.data);
+  const { insertStation } = await import("./stations-db");
+  return insertStation(data);
+}
 
-export const updateStationFn = createServerFn({ method: "POST" })
-  .validator((d: unknown) => StationInput.extend({ id: z.string().min(1) }).parse(d))
-  .handler(async ({ data }): Promise<Charger> => {
-    const { patchStation } = await import("./stations-db");
-    const { id, ...rest } = data;
-    return patchStation(id, rest);
-  });
+export async function updateStationFn(input: { data: unknown }): Promise<Charger> {
+  const data = StationInput.extend({ id: z.string().min(1) }).parse(input.data);
+  const { patchStation } = await import("./stations-db");
+  const { id, ...rest } = data;
+  return patchStation(id, rest);
+}
 
-export const reviewStationFn = createServerFn({ method: "POST" })
-  .validator((d: unknown) => ReviewInput.parse(d))
-  .handler(async ({ data }): Promise<Charger> => {
-    const { setStationStatus } = await import("./stations-db");
-    return setStationStatus(data.id, data.status, data.reviewNote);
-  });
+export async function reviewStationFn(input: { data: unknown }): Promise<Charger> {
+  const data = ReviewInput.parse(input.data);
+  const { setStationStatus } = await import("./stations-db");
+  return setStationStatus(data.id, data.status, data.reviewNote);
+}
