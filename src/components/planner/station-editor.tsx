@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { createStationFn, updateStationFn } from "@/lib/api/stations";
 import { useActor } from "@/infrastructure/auth/use-actor";
-import { createSupabaseAuth } from "@/infrastructure/auth/supabase-auth";
+import { SignInForm } from "@/components/auth/sign-in-form";
 import type { Charger, ChargerSocket, ConnectorType, StationAvailability } from "@/lib/domain/types";
 import { CONNECTOR_LABEL } from "@/lib/domain/types";
 import { compressPhoto } from "@/lib/photos";
@@ -69,18 +69,7 @@ export function StationEditor({ stations }: { stations: Charger[] }) {
               Añadir o editar una electrolinera necesita una cuenta, para poder darle seguimiento al aporte.
             </DialogDescription>
           </DialogHeader>
-          <Button
-            type="button"
-            className="h-11 w-full"
-            onClick={() => {
-              const next = window.location.pathname;
-              void createSupabaseAuth().signInWithGoogle(
-                `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-              );
-            }}
-          >
-            Continuar con Google
-          </Button>
+          <SignInForm />
         </DialogContent>
       </Dialog>
     );

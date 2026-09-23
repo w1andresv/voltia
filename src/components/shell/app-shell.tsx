@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Car, MapPinned, Menu, PlugZap, Route as RouteIcon, Settings2, X, Zap } from "lucide-react";
 import { useActor } from "@/infrastructure/auth/use-actor";
 import { createSupabaseAuth } from "@/infrastructure/auth/supabase-auth";
+import { SignInForm } from "@/components/auth/sign-in-form";
 import { BatteryDialog } from "@/components/planner/battery-panel";
 import { ConditionsDialog } from "@/components/planner/conditions-form";
 import { PlugshareSettings } from "@/components/planner/plugshare-settings";
@@ -202,17 +203,6 @@ function AccountNote() {
   const actor = useActor();
   const [busy, setBusy] = useState(false);
 
-  async function signIn() {
-    setBusy(true);
-    try {
-      const auth = createSupabaseAuth();
-      const next = window.location.pathname;
-      await auth.signInWithGoogle(`${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`);
-    } catch {
-      setBusy(false);
-    }
-  }
-
   async function signOut() {
     setBusy(true);
     try {
@@ -225,9 +215,7 @@ function AccountNote() {
   if (actor.role === "guest") {
     return (
       <div className="px-3 pb-6">
-        <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={signIn}>
-          Continuar con Google
-        </Button>
+        <SignInForm />
       </div>
     );
   }
