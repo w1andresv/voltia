@@ -10,7 +10,9 @@
     "db:migrate": "node scripts/migrate.mjs",
     "migrate:photos": "node scripts/migrate-photos.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test 'scripts/**/*.test.mjs'",
+    "test": "vitest run && npm run test:scripts",
+    "test:scripts": "node --test 'scripts/**/*.test.mjs'",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -68,6 +70,7 @@
     "@types/pg": "^8.11.10",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@vitest/coverage-v8": "^5.0.1",
     "eslint": "^9.20.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
@@ -76,6 +79,7 @@
     "lightningcss": "^1.28.0",
     "prettier": "^3.4.0",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^5.0.1"
   }
 }

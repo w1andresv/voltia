@@ -7,7 +7,7 @@ import tseslint from "typescript-eslint";
 /** Flat ESLint config for the Voltia Next.js app. */
 export default tseslint.config(
   {
-    ignores: ["node_modules/**", ".next/**", "next-env.d.ts"],
+    ignores: ["node_modules/**", ".next/**", "next-env.d.ts", "coverage/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

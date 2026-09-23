@@ -1,3 +1,5 @@
+import type { VehicleShape, PlaceShape, TripConditionsShape } from "@/domain/schemas";
+
 export type ConnectorType = "ccs2" | "ccs1" | "type2" | "chademo" | "nacs" | "gb_t";
 
 export type DrivingStyle = "efficient" | "normal" | "sport";
@@ -14,49 +16,13 @@ export interface ChargeCurvePoint {
   powerFactor: number;
 }
 
-export interface Vehicle {
-  id: string;
-  brand: string;
-  model: string;
-  year: number;
-  version: string;
-  batteryKwh: number;
-  rangeKm: number;
-  consumptionKwhPer100km: number | null;
-  consumptionManual?: boolean;
-  weightKg: number;
-  motorKw: number;
-  acMaxKw: number;
-  dcMaxKw: number;
-  chargeCurve: ChargeCurvePoint[];
-  connectors: ConnectorType[];
-  minSocRecommended: number;
-  maxSocTravel: number;
-  isCustom?: boolean;
-}
-
-export interface Place {
-  label: string;
-  lat: number;
-  lon: number;
-  context?: string;
-}
-
-export interface TripConditions {
-  passengers: number;
-  luggageKg: number;
-  initialSoc: number;
-  arrivalSoc: number;
-  avgSpeedKmh: number | null;
-  ac: ClimateControl;
-  temperatureC: number | null;
-  drivingStyle: DrivingStyle;
-  safetyMode: SafetyMode;
-  customSafetyPct: number;
-  planningMode: PlanningMode;
-  allowBelowSafety: boolean;
-  regenPct: number;
-}
+/**
+ * Vehicle/Place/TripConditions se derivan del esquema Zod en
+ * @/domain/schemas — esa es la fuente de verdad; no repetir sus campos aquí.
+ */
+export type Vehicle = VehicleShape;
+export type Place = PlaceShape;
+export type TripConditions = TripConditionsShape;
 
 export interface LatLon {
   lat: number;

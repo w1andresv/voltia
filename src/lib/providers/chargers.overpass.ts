@@ -1,21 +1,30 @@
+import { z } from "zod";
 import type { Charger, ChargerSocket, ConnectorType } from "@/lib/domain/types";
 import { isVerifiedForPlanning } from "@/lib/domain/types";
 import { uniqueByProximity } from "@/lib/domain/geo";
 import { fetchJson } from "./http";
 import { CATALOG_CHARGERS } from "./chargers.catalog";
 
-interface OverpassNode {
-  type: "node" | "way";
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
+/**
+ * Igual que con OSRM: se valida con Zod para que un cambio de forma en la
+ * respuesta de Overpass se note aquí, en vez de fallar en silencio más
+ * adelante en nodeToCharger.
+ */
+const OverpassNodeSchema = z.object({
+  type: z.enum(["node", "way"]),
+  id: z.number(),
+  lat: z.number().optional(),
+  lon: z.number().optional(),
+  center: z.object({ lat: z.number(), lon: z.number() }).optional(),
+  tags: z.record(z.string(), z.string()).optional(),
+});
 
-interface OverpassResponse {
-  elements?: OverpassNode[];
-}
+const OverpassResponseSchema = z.object({
+  elements: z.array(OverpassNodeSchema).optional(),
+});
+
+type OverpassNode = z.infer<typeof OverpassNodeSchema>;
+type OverpassResponse = z.infer<typeof OverpassResponseSchema>;
 
 function parseKw(raw?: string): number | null {
   if (!raw) return null;
@@ -105,7 +114,7 @@ async function queryOverpass(samples: { lat: number; lon: number }[]): Promise<C
   let lastErr: unknown;
   for (const url of endpoints) {
     try {
-      const data = await fetchJson<OverpassResponse>(url, {
+      const raw = await fetchJson<unknown>(url, {
         method: "POST",
         timeoutMs: 7000,
         cacheTtlMs: 10 * 60_000,
@@ -116,6 +125,7 @@ async function queryOverpass(samples: { lat: number; lon: number }[]): Promise<C
         },
         body: `data=${encodeURIComponent(body)}`,
       });
+      const data: OverpassResponse = OverpassResponseSchema.parse(raw);
       const list: Charger[] = [];
       for (const el of data.elements ?? []) {
         const c = nodeToCharger(el);
