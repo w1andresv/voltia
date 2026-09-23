@@ -1,22 +1,13 @@
 import js from "@eslint/js";
 import prettier from "eslint-config-prettier";
 import reactHooks from "eslint-plugin-react-hooks";
-import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
-/** Flat ESLint config for the TanStack Start app-builder template. */
+/** Flat ESLint config for the Voltia Next.js app. */
 export default tseslint.config(
   {
-    ignores: [
-      "dist/**",
-      ".output/**",
-      ".vercel/**",
-      ".nitro/**",
-      "node_modules/**",
-      ".next/**",
-      "src/routeTree.gen.ts",
-    ],
+    ignores: ["node_modules/**", ".next/**", "next-env.d.ts"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -28,14 +19,9 @@ export default tseslint.config(
     },
     plugins: {
       "react-hooks": reactHooks,
-      "react-refresh": reactRefresh,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
       "@typescript-eslint/no-unused-vars": [
         "warn",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },

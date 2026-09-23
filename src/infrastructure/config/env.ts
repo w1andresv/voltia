@@ -1,10 +1,8 @@
 import "server-only";
 import { z } from "zod";
 
-const SUPABASE_URL = "https://iabzaowkbnxczwguhceb.supabase.co";
-
 const EnvSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url().default(SUPABASE_URL),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().default(""),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().default(""),
   SUPABASE_SECRET_KEY: z.string().default(""),
   DATABASE_URL: z.string().default(""),
@@ -20,12 +18,12 @@ let cached: AppEnv | null = null;
 export function getEnv(): AppEnv {
   if (cached) return cached;
   cached = EnvSchema.parse({
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
     SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY?.trim() ?? "",
     DATABASE_URL: process.env.DATABASE_URL?.trim() ?? "",
-    PLUGSHARE_TOKEN: process.env.PLUGSHARE_TOKEN ?? process.env.VITE_PLUGSHARE_TOKEN ?? "",
+    PLUGSHARE_TOKEN: process.env.PLUGSHARE_TOKEN ?? "",
     ADMIN_EMAILS: process.env.ADMIN_EMAILS ?? "",
   });
   return cached;

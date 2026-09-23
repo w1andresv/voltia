@@ -17,7 +17,7 @@ const API = "https://api.plugshare.com/v3";
 function envServerToken(): string {
   const g = globalThis as { process?: { env?: Record<string, string | undefined> } };
   const env = g.process?.env ?? {};
-  return (env.PLUGSHARE_TOKEN ?? env.VITE_PLUGSHARE_TOKEN ?? "").trim();
+  return (env.PLUGSHARE_TOKEN ?? "").trim();
 }
 
 function resolveToken(client?: string): string {
