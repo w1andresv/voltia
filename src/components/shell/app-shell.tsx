@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Car, MapPinned, Menu, PlugZap, Route as RouteIcon, Settings2, X, Zap } from "lucide-react";
+import { Car, History, MapPinned, Menu, PlugZap, Route as RouteIcon, Settings2, X, Zap } from "lucide-react";
 import { useActor } from "@/infrastructure/auth/use-actor";
 import { createSupabaseAuth } from "@/infrastructure/auth/supabase-auth";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { BatteryDialog } from "@/components/planner/battery-panel";
 import { ConditionsDialog } from "@/components/planner/conditions-form";
 import { PlugshareSettings } from "@/components/planner/plugshare-settings";
+import { MyTripsDialog } from "@/components/trips/my-trips-dialog";
 import { VehicleEditor } from "@/components/planner/vehicle-editor";
 import { Button } from "@/components/ui/button";
 import { usePlanner } from "@/lib/store";
@@ -36,6 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [plugshareOpen, setPlugshareOpen] = useState(false);
   const setVehicle = usePlanner((s) => s.setVehicleModalOpen);
   const setSettings = usePlanner((s) => s.setSettingsOpen);
+  const setMyTripsOpen = usePlanner((s) => s.setMyTripsOpen);
   const setToken = usePlanner((s) => s.setMapboxToken);
   const hasMapbox = usePlanner((s) => Boolean(s.mapboxToken));
   const hasPlugshare = usePlanner((s) => Boolean(s.plugshareToken));
@@ -137,6 +139,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
 
+          <MyTripsLink onOpen={() => { setOpen(false); setMyTripsOpen(true); }} />
+
           <button
             type="button"
             className="flex min-h-14 items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-2"
@@ -195,7 +199,28 @@ export function AppShell({ children }: { children: ReactNode }) {
       <BatteryDialog />
       <ConditionsDialog />
       <PlugshareSettings open={plugshareOpen} onOpenChange={setPlugshareOpen} />
+      <MyTripsDialog />
     </>
+  );
+}
+
+function MyTripsLink({ onOpen }: { onOpen: () => void }) {
+  const actor = useActor();
+  if (actor.role === "guest") return null;
+  return (
+    <button
+      type="button"
+      className="flex min-h-14 items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-2"
+      onClick={onOpen}
+    >
+      <span className="grid size-11 place-items-center rounded-md bg-accent/15 text-accent">
+        <History className="size-5" />
+      </span>
+      <span>
+        <span className="block text-sm font-medium text-fg">Mis viajes</span>
+        <span className="block text-xs text-muted">Historial guardado y links para compartir</span>
+      </span>
+    </button>
   );
 }
 

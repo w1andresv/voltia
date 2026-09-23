@@ -3,8 +3,8 @@ import type {
   ChargerSocket,
   ConnectorType,
   StationAvailability,
-} from "@/lib/domain/types";
-import { uniqueByProximity } from "@/lib/domain/geo";
+} from "@/domain/types";
+import { uniqueByProximity } from "@/domain/geo";
 import { isPlugshareToken, plugshareAuthHeader, plugshareLocationUrl } from "@/lib/plugshare";
 import { fetchJson } from "./http";
 

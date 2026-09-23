@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { RoutePlan, RouteSample } from "@/lib/domain/types";
+import type { RoutePlan, RouteSample } from "@/domain/types";
 import { formatKm, formatKwhPer100 } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 

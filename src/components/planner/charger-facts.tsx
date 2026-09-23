@@ -1,13 +1,13 @@
-import type { Charger } from "@/lib/domain/types";
+import type { Charger } from "@/domain/types";
 import {
   CHARGER_SOURCE_LABEL,
   CONNECTOR_LABEL,
   STATION_AVAIL_LABEL,
   STATION_STATUS_LABEL,
   isVerifiedForPlanning,
-} from "@/lib/domain/types";
+} from "@/domain/types";
 import { formatKw, formatPrice, formatUpdatedAt } from "@/lib/format";
-import { stationPhotoUrl } from "@/lib/storage/station-photos";
+import { stationPhotoUrl } from "@/infrastructure/storage/station-photos";
 import { Badge } from "@/components/ui/badge";
 
 export function ChargerFacts({ charger, compact = false }: { charger: Charger; compact?: boolean }) {

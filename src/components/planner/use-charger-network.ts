@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import type { Charger } from "@/lib/domain/types";
-import { isVerifiedForPlanning } from "@/lib/domain/types";
-import { uniqueByProximity } from "@/lib/domain/geo";
-import { CATALOG_CHARGERS } from "@/lib/providers/chargers.catalog";
+import type { Charger } from "@/domain/types";
+import { isVerifiedForPlanning } from "@/domain/types";
+import { uniqueByProximity } from "@/domain/geo";
+import { CATALOG_CHARGERS } from "@/infrastructure/providers/chargers.catalog";
 import { usePlanner } from "@/lib/store";
 import { usePlugshareLayer } from "./use-plugshare";
 import { useCommunityStations } from "./use-stations";

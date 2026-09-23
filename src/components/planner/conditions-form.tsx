@@ -1,5 +1,5 @@
-import type { DrivingStyle, PlanningMode, SafetyMode } from "@/lib/domain/types";
-import { safetyPct } from "@/lib/domain/types";
+import type { DrivingStyle, PlanningMode, SafetyMode } from "@/domain/types";
+import { safetyPct } from "@/domain/types";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";

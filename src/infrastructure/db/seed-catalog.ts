@@ -1,6 +1,6 @@
 import "server-only";
-import { VEHICLE_CATALOG } from "@/lib/domain/vehicles";
-import { getSql } from "@/lib/db";
+import { VEHICLE_CATALOG } from "@/domain/vehicles";
+import { getSql } from "@/infrastructure/db";
 
 let seeded: Promise<number> | null = null;
 

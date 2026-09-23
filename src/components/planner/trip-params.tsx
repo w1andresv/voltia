@@ -1,5 +1,5 @@
 import { ChevronDown, Minus, Plus, RotateCcw, Users } from "lucide-react";
-import { extraWeightKg, tripMassKg, type ClimateControl } from "@/lib/domain/types";
+import { extraWeightKg, tripMassKg, type ClimateControl } from "@/domain/types";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";

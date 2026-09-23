@@ -1,6 +1,6 @@
 import { ChevronDown } from "lucide-react";
-import { safetyPct } from "@/lib/domain/types";
-import { vehicleLabel, vehicleSub } from "@/lib/domain/vehicles";
+import { safetyPct } from "@/domain/types";
+import { vehicleLabel, vehicleSub } from "@/domain/vehicles";
 import { formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { BatteryPack } from "./battery-panel";

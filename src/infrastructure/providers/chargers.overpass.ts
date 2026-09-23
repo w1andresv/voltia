@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { Charger, ChargerSocket, ConnectorType } from "@/lib/domain/types";
-import { isVerifiedForPlanning } from "@/lib/domain/types";
-import { uniqueByProximity } from "@/lib/domain/geo";
+import type { Charger, ChargerSocket, ConnectorType } from "@/domain/types";
+import { isVerifiedForPlanning } from "@/domain/types";
+import { uniqueByProximity } from "@/domain/geo";
 import { fetchJson } from "./http";
 import { CATALOG_CHARGERS } from "./chargers.catalog";
 

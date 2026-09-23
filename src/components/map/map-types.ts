@@ -1,4 +1,4 @@
-import type { Charger, Place, RoutePlan } from "@/lib/domain/types";
+import type { Charger, Place, RoutePlan } from "@/domain/types";
 
 export type ChargerAction = "browse" | "plan" | "stations";
 

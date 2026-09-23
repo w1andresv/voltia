@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import type { Charger } from "@/lib/domain/types";
+import type { Charger } from "@/domain/types";
 
 const RegionSchema = z.object({
   latitude: z.number().min(-90).max(90),
@@ -13,6 +13,6 @@ const RegionSchema = z.object({
 
 export async function queryPlugshareRegionFn(input: { data: unknown }): Promise<{ chargers: Charger[]; warning?: string }> {
   const data = RegionSchema.parse(input.data);
-  const { queryPlugshareRegion } = await import("@/lib/providers/chargers.plugshare");
+  const { queryPlugshareRegion } = await import("@/infrastructure/providers/chargers.plugshare");
   return queryPlugshareRegion(data);
 }

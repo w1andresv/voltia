@@ -15,7 +15,7 @@ import L from "leaflet";
 import { Flag, MapPin, Zap } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
-import type { Charger, LatLon, RouteSample } from "@/lib/domain/types";
+import type { Charger, LatLon, RouteSample } from "@/domain/types";
 import { MAP_COLORS, socColor } from "@/lib/map-colors";
 import { formatKm, formatKwh, formatKw, formatMinutes, formatPct } from "@/lib/format";
 import { ChargerFacts } from "@/components/planner/charger-facts";

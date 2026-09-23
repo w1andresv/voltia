@@ -1,11 +1,11 @@
-import { getSql } from "@/lib/db";
+import { getSql } from "@/infrastructure/db";
 import type {
   Charger,
   ChargerSocket,
   ConnectorType,
   StationAvailability,
   StationStatus,
-} from "@/lib/domain/types";
+} from "@/domain/types";
 
 export interface StationRow {
   id: string;

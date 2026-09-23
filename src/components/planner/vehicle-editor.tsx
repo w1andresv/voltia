@@ -1,14 +1,14 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Pencil, RotateCcw, Trash2 } from "lucide-react";
-import { CONNECTOR_LABEL, type ConnectorType, type Vehicle } from "@/lib/domain/types";
-import { mixedCycleKwhPer100, wltpKwhPer100 } from "@/lib/domain/energy";
+import { CONNECTOR_LABEL, type ConnectorType, type Vehicle } from "@/domain/types";
+import { mixedCycleKwhPer100, wltpKwhPer100 } from "@/domain/energy";
 import {
   catalogById,
   emptyCustomVehicle,
   isCatalogId,
   isVehicleModified,
   vehicleLabel,
-} from "@/lib/domain/vehicles";
+} from "@/domain/vehicles";
 import { formatKwhPer100 } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";

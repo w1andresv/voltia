@@ -7,6 +7,12 @@
  * Requires DATABASE_URL. There is no embedded fallback: every environment,
  * local dev included, points at a real Postgres (see .env.example). An
  * empty/whitespace value (an easy misconfig in deploy UIs) counts as unset.
+ *
+ * En producción serverless, DATABASE_URL debe apuntar al connection pooler
+ * de Supabase (puerto 6543, modo transaction) — no al puerto 5432 directo,
+ * que se queda sin conexiones bajo varias funciones concurrentes. `max: 1`
+ * abajo asume ese pooler: cada instancia de función abre como mucho una
+ * conexión, y es el pooler el que multiplexa hacia Postgres.
  */
 const databaseUrl = process.env.DATABASE_URL?.trim() || undefined;
 
@@ -73,7 +79,7 @@ const globalRef = globalThis as typeof globalThis & { __pgSqlPromise__?: Promise
 export function getSql(): Promise<Sql> {
   if (typeof window !== "undefined") {
     throw new Error(
-      "@/lib/db es solo de servidor — llama a getSql() desde una server action " +
+      "@/infrastructure/db es solo de servidor — llama a getSql() desde una server action " +
         "o un route handler, nunca desde código de cliente.",
     );
   }
@@ -91,7 +97,10 @@ export function getSql(): Promise<Sql> {
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({
       connectionString: databaseUrl,
-      max: 3,
+      // 1 por instancia: en serverless cada cold start es un proceso nuevo,
+      // así que un max mayor abre más conexiones de las que el pooler de
+      // Supabase espera de un solo cliente (ver nota arriba).
+      max: 1,
       ssl: databaseUrl.includes("supabase") ? { rejectUnauthorized: false } : undefined,
     });
     return toSql(async <T>(text: string, params: unknown[]) => {

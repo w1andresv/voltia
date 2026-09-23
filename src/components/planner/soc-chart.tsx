@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { RoutePlan } from "@/lib/domain/types";
+import type { RoutePlan } from "@/domain/types";
 import { formatKm, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 

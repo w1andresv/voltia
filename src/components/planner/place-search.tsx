@@ -1,8 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { MapPin, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from "react";
-import { searchPlacesFn } from "@/lib/api/plan";
-import type { Place } from "@/lib/domain/types";
+import { searchPlacesFn } from "@/server/actions/plan";
+import type { Place } from "@/domain/types";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";

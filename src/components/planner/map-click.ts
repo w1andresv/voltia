@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { reversePlaceFn } from "@/lib/api/plan";
-import type { Place } from "@/lib/domain/types";
+import { reversePlaceFn } from "@/server/actions/plan";
+import type { Place } from "@/domain/types";
 import { usePlanner } from "@/lib/store";
 
 let ignoreUntil = 0;

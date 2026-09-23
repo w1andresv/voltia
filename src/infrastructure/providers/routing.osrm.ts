@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { LatLon, RawRoute } from "@/lib/domain/types";
-import { downsample, interpolatePoint, polylineLengthKm } from "@/lib/domain/geo";
+import type { LatLon, RawRoute } from "@/domain/types";
+import { downsample, interpolatePoint, polylineLengthKm } from "@/domain/geo";
 import { fetchJson } from "./http";
 
 const OSRM_ENDPOINTS = [

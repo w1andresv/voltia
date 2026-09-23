@@ -1,6 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
-import { getSql } from "@/lib/db";
+import { getSql } from "@/infrastructure/db";
 
 /** Best-effort caller IP from the proxy headers Vercel (and most hosts) set. */
 export async function getClientIp(): Promise<string> {

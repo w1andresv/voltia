@@ -1,4 +1,4 @@
-import type { Charger, ChargerSocket } from "@/lib/domain/types";
+import type { Charger, ChargerSocket } from "@/domain/types";
 
 /**
  * Verified operator catalog — fallback when OSM/PlugShare are unavailable.
