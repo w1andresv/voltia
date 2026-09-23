@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { AppProviders } from "@/components/providers";
-import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { MapHost } from "@/components/map/map-host";
 import { MapboxTokenGate } from "@/components/map/mapbox-token-gate";
 import { AppShell } from "@/components/shell/app-shell";
@@ -26,7 +25,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="theme-color" content="#0b0e12" />
       </head>
       <body className="h-full bg-bg text-fg">
-        <PreviewHostBridge />
         <AppProviders>
           <MapHost />
           <MapboxTokenGate />
