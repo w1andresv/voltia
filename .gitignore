@@ -7,3 +7,15 @@ dist
 *.log
 .DS_Store
 .grok/app-env.json
+
+# secretos y entorno
+.env
+.env*.local
+
+# build de Next.js
+.next/
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# sandbox de Grok (no aplica fuera de ese entorno)
+.grok/

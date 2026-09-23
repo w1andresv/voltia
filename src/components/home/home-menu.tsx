@@ -1,5 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import Link from "next/link";
 import { MapPinned, Route as RouteIcon, Zap } from "lucide-react";
 import { useChargerNetwork } from "@/components/planner/use-charger-network";
 import { usePlanner } from "@/lib/store";
@@ -68,7 +70,7 @@ function MenuCard({
 }) {
   return (
     <Link
-      to={to}
+      href={to}
       className="group flex min-h-40 flex-col rounded-2xl bg-surface p-5 shadow-panel outline-none transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-accent"
     >
       <span className="grid size-11 place-items-center rounded-md bg-accent/15 text-accent">{icon}</span>

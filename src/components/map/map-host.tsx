@@ -1,9 +1,11 @@
-import { useRouterState } from "@tanstack/react-router";
+"use client";
+
+import { usePathname } from "next/navigation";
 import { MapPane } from "./map-pane";
 
 /** Holder + stations map. The planner map lives in the route slot so hydration stays aligned. */
 export function MapHost() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const pathname = usePathname();
   const stations = pathname.startsWith("/electrolineras");
 
   return (

@@ -1,5 +1,7 @@
+"use client";
+
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useRouter } from "next/navigation";
 import { MapPinPlus, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { reviewStationFn } from "@/lib/api/stations";
@@ -19,7 +21,7 @@ export function StationHub() {
   const setOpen = usePlanner((s) => s.setStationsOpen);
   const setArmed = usePlanner((s) => s.setMapClickArmed);
   const setSeed = usePlanner((s) => s.setStationSeed);
-  const navigate = useNavigate();
+  const router = useRouter();
   const { data: community = [], isLoading } = useCommunityStations();
   const plugshareOn = usePlanner((s) => isPlugshareToken(s.plugshareToken));
   const pending = community.filter((c) => c.status === "pending");
@@ -43,7 +45,7 @@ export function StationHub() {
               onClick={() => {
                 setOpen(false);
                 setArmed("station");
-                void navigate({ to: "/electrolineras" });
+                void router.push("/electrolineras");
               }}
             >
               <MapPinPlus className="size-4" />

@@ -1,3 +1,5 @@
+"use client";
+
 import { type FormEvent, useState } from "react";
 import { Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";

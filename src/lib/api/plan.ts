@@ -1,4 +1,5 @@
-import { createServerFn } from "@tanstack/react-start";
+"use server";
+
 import { z } from "zod";
 import type { Place, PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/lib/domain/types";
 
@@ -56,23 +57,19 @@ const PlanSchema = z.object({
   plugshareToken: z.string().max(4000).optional(),
 });
 
-export const searchPlacesFn = createServerFn({ method: "POST" })
-  .validator((d: { q: string; lat?: number; lon?: number }) => d)
-  .handler(async ({ data }): Promise<Place[]> => {
-    const { searchPlaces } = await import("@/lib/providers/geocode.photon");
-    return searchPlaces(data.q, data.lat != null && data.lon != null ? { lat: data.lat, lon: data.lon } : undefined);
-  });
+export async function searchPlacesFn(input: { data: { q: string; lat?: number; lon?: number } }): Promise<Place[]> {
+  const data = input.data;
+  const { searchPlaces } = await import("@/lib/providers/geocode.photon");
+  return searchPlaces(data.q, data.lat != null && data.lon != null ? { lat: data.lat, lon: data.lon } : undefined);
+}
 
-export const reversePlaceFn = createServerFn({ method: "POST" })
-  .validator((d: { lat: number; lon: number }) => d)
-  .handler(async ({ data }): Promise<Place> => {
-    const { reversePlace } = await import("@/lib/providers/geocode.photon");
-    return reversePlace(data.lat, data.lon);
-  });
+export async function reversePlaceFn(input: { data: { lat: number; lon: number } }): Promise<Place> {
+  const { reversePlace } = await import("@/lib/providers/geocode.photon");
+  return reversePlace(input.data.lat, input.data.lon);
+}
 
-export const planTripFn = createServerFn({ method: "POST" })
-  .validator((d: PlanRequest & { plugshareToken?: string }) => PlanSchema.parse(d))
-  .handler(async ({ data }): Promise<PlanResponse> => {
+export async function planTripFn(input: { data: PlanRequest & { plugshareToken?: string } }): Promise<PlanResponse> {
+  const data = PlanSchema.parse(input.data);
     const { fetchRoutes } = await import("@/lib/providers/routing.osrm");
     const { applyElevationAll } = await import("@/lib/providers/elevation.openmeteo");
     const { fetchWeather } = await import("@/lib/providers/weather.openmeteo");
@@ -115,4 +112,4 @@ export const planTripFn = createServerFn({ method: "POST" })
       plans: ranked,
       selectedId: ranked[0]?.id ?? "",
     };
-  });
+}

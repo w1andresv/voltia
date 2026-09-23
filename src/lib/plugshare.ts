@@ -2,7 +2,7 @@
 export const PLUGSHARE_LOCATION_URL = "https://www.plugshare.com/location";
 export const PLUGSHARE_ACCESS_URL = "https://developer.plugshare.com/access";
 
-const ENV_TOKEN = String(import.meta.env.VITE_PLUGSHARE_TOKEN ?? "").trim();
+const ENV_TOKEN = String(process.env.NEXT_PUBLIC_PLUGSHARE_TOKEN ?? "").trim();
 
 /** Accept Bearer/Basic/raw API keys. Never invent credentials. */
 export function normalizePlugshareToken(value: string): string {

@@ -1,5 +1,8 @@
+"use client";
+
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Car, MapPinned, Menu, PlugZap, Route as RouteIcon, Settings2, X, Zap } from "lucide-react";
 import { BatteryDialog } from "@/components/planner/battery-panel";
 import { ConditionsDialog } from "@/components/planner/conditions-form";
@@ -25,7 +28,7 @@ const LINKS: { to: "/planificar" | "/electrolineras"; label: string; hint: strin
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [plugshareOpen, setPlugshareOpen] = useState(false);
   const setVehicle = usePlanner((s) => s.setVehicleModalOpen);
@@ -116,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             return (
               <Link
                 key={item.to}
-                to={item.to}
+                href={item.to}
                 className={cn(
                   "flex min-h-14 items-center gap-3 rounded-xl px-3",
                   active ? "bg-accent/15 text-fg" : "text-fg hover:bg-surface-2",
@@ -170,7 +173,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {hasMapbox ? (
           <button
             type="button"
-            className="mt-auto min-h-11 px-6 pb-6 text-left text-sm text-subtle hover:text-muted"
+            className="mt-auto min-h-11 px-6 pb-2 text-left text-sm text-subtle hover:text-muted"
             onClick={() => {
               setOpen(false);
               setToken("");
@@ -179,8 +182,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             Cambiar token de Mapbox
           </button>
         ) : (
-          <div className="mt-auto px-6 pb-6" />
+          <div className="mt-auto" />
         )}
+        <AccountNote />
       </Drawer>
 
       {children}
@@ -190,6 +194,31 @@ export function AppShell({ children }: { children: ReactNode }) {
       <PlugshareSettings open={plugshareOpen} onOpenChange={setPlugshareOpen} />
     </>
   );
+}
+
+function AccountNote() {
+  const [text, setText] = useState("Cuenta…");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/health")
+      .then((response) => response.json())
+      .then((body: { auth?: boolean; google?: boolean; database?: boolean }) => {
+        if (cancelled) return;
+        if (!body.auth) setText("Cuenta: sin conexión a Supabase");
+        else if (!body.database) setText("Cuenta: Auth listo. Falta la base de datos.");
+        else if (!body.google) setText("Cuenta: base conectada. Falta activar Google.");
+        else setText("Cuenta: Google disponible");
+      })
+      .catch(() => {
+        if (!cancelled) setText("Cuenta: sin conexión a Supabase");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return <p className="px-6 pb-6 text-xs leading-relaxed text-subtle">{text}</p>;
 }
 
 function Drawer({
