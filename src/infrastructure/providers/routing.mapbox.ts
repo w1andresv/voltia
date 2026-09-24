@@ -3,10 +3,13 @@ import { fetchJson } from "./http";
 import { OsrmResponseSchema, type OsrmRoute } from "./routing.osrm";
 
 /**
- * Mapbox Directions (perfil `driving`): red vial y velocidades más completas que
- * los servidores públicos de OSRM, así que distancias y tiempos quedan mucho más
- * cerca de los de Google Maps. Responde en el mismo formato que OSRM.
- * Límites: hasta 25 puntos; las alternativas solo salen con 2 puntos.
+ * Mapbox Directions, perfil `driving` (velocidades típicas, sin tráfico en vivo).
+ * Se usa `driving` y no `driving-traffic` porque, con datos reales (Piedecuesta →
+ * Vélez), `driving-traffic` elegía un atajo de 199 km con ~16 km por vía terciaria,
+ * mientras `driving` da la ruta de 212 km casi toda por vías principales, que es
+ * la que muestra Mapbox en su web. Para un viaje de horas planeado con antelación,
+ * el tráfico de este momento no es un buen criterio de ruta.
+ * Responde en el mismo formato que OSRM. Hasta 25 puntos; alternativas solo con 2.
  */
 export class MapboxRoutingError extends Error {
   constructor(
@@ -16,6 +19,19 @@ export class MapboxRoutingError extends Error {
     super(message);
     this.name = "MapboxRoutingError";
   }
+}
+
+export type MapboxProfile = "driving-traffic" | "driving";
+
+export interface MapboxCandidates {
+  routes: OsrmRoute[];
+  /** Km entre cada punto pedido y la vía donde Mapbox lo ubicó (origen, paradas, destino). */
+  snapKm: number[];
+}
+
+/** Perfil para planificar: siempre `driving` (ver arriba). Se conserva el parámetro por compatibilidad. */
+export function mapboxProfileFor(_waypointCount: number): MapboxProfile {
+  return "driving";
 }
 
 /** Token para llamar a Mapbox desde el servidor (el público pk.* sirve). */
@@ -35,27 +51,43 @@ export function mapboxServerToken(): string {
 export async function fetchMapboxCandidates(
   waypoints: LatLon[],
   token: string,
-  opts: { excludeToll?: boolean } = {},
-): Promise<OsrmRoute[]> {
+  opts: { excludeToll?: boolean; profile?: MapboxProfile; excludePoints?: LatLon[] } = {},
+): Promise<MapboxCandidates> {
   if (waypoints.length < 2) throw new MapboxRoutingError("Se necesitan origen y destino.");
   if (waypoints.length > 25) throw new MapboxRoutingError("Mapbox admite hasta 25 puntos.");
+  const profile = opts.profile ?? mapboxProfileFor(waypoints.length);
   const path = waypoints.map((w) => `${w.lon.toFixed(6)},${w.lat.toFixed(6)}`).join(";");
   const params = new URLSearchParams({
     alternatives: waypoints.length === 2 ? "true" : "false",
     geometries: "geojson",
     overview: "full",
-    steps: "false",
-    language: "es",
+    // steps=true: cada paso trae sus intersecciones con la clase vial del
+    // proveedor (mapbox_streets_v8.class), base de la jerarquía de vías.
+    steps: "true",
+    // Sin `language`: Mapbox exige steps=true para usarlo y, si no, rechaza la
+    // petición entera (eso hacía caer todo a OSRM y dar 198 km en vez de 212).
   });
-  if (opts.excludeToll) params.set("exclude", "toll");
+  const exclude = [
+    ...(opts.excludeToll ? ["toll"] : []),
+    // Mapbox admite hasta 50 puntos; formato point(lon lat).
+    ...(opts.excludePoints ?? [])
+      .slice(0, 50)
+      .map((p) => `point(${p.lon.toFixed(5)} ${p.lat.toFixed(5)})`),
+  ];
+  if (exclude.length) params.set("exclude", exclude.join(","));
   // La clave de caché se arma ANTES de añadir el token, para no guardarlo en ella.
-  const cacheKey = `mapbox-directions:${path}:${params.toString()}`;
+  const cacheKey = `mapbox-directions:${profile}:${path}:${params.toString()}`;
   params.set("access_token", token);
-  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${path}?${params}`;
+  // "%20" en vez de "+" para el espacio de point(lon lat): no depender de cómo decodifique el servidor.
+  const query = params.toString().replace(/\+/g, "%20");
+  const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${path}?${query}`;
   const raw = await fetchJson<unknown>(url, { timeoutMs: 15000, cacheTtlMs: 90_000, cacheKey });
   const data = OsrmResponseSchema.parse(raw);
   if (data.code !== "Ok" || !data.routes?.length) {
     throw new MapboxRoutingError(`Mapbox sin ruta (${data.code})`, data.code === "NoRoute");
   }
-  return data.routes;
+  return {
+    routes: data.routes,
+    snapKm: (data.waypoints ?? []).map((w) => (w.distance ?? 0) / 1000),
+  };
 }

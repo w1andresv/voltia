@@ -1,5 +1,8 @@
+import { haversineKm } from "@/domain/geo";
 import type { Place } from "@/domain/types";
 import { fetchJson } from "./http";
+import { searchMapbox } from "./geocode.mapbox";
+import { mapboxServerToken } from "./routing.mapbox";
 
 interface PhotonFeature {
   geometry: { coordinates: [number, number] };
@@ -12,9 +15,34 @@ interface PhotonFeature {
     state?: string;
     country?: string;
     district?: string;
+    osm_key?: string;
     osm_value?: string;
+    osm_type?: string;
+    type?: string;
   };
 }
+
+/**
+ * Qué tan buen punto de ruta es un resultado de Photon:
+ *  0 = nodo de población (city/town/village…): el centro urbano, lo que el usuario quiere;
+ *  1 = otros lugares y direcciones;
+ *  2 = límite administrativo (municipio, provincia): su punto es el CENTRO GEOGRÁFICO
+ *      del polígono, que puede caer en zona rural a 10+ km del pueblo y alargar la ruta.
+ */
+function photonRank(p: PhotonFeature["properties"]): number {
+  if (
+    p.osm_key === "place" &&
+    ["city", "town", "village", "hamlet", "suburb", "neighbourhood", "quarter"].includes(
+      p.osm_value ?? "",
+    )
+  )
+    return 0;
+  if (p.osm_key === "boundary" || p.osm_type === "R") return 2;
+  return 1;
+}
+
+/** Colombia: sesgo por defecto de Photon (sin él, "Vélez" devuelve primero España). */
+const COLOMBIA_BIAS = { lat: 5.6, lon: -74.3 };
 
 interface PhotonResponse {
   features?: PhotonFeature[];
@@ -44,21 +72,12 @@ function errorText(error: unknown): string {
   return cause instanceof Error ? `${error.message} (${cause.message})` : error.message;
 }
 
-function dedupe(places: Place[]): Place[] {
-  const out: Place[] = [];
-  for (const p of places) {
-    if (out.some((x) => Math.abs(x.lat - p.lat) < 0.015 && Math.abs(x.lon - p.lon) < 0.015)) continue;
-    out.push(p);
-  }
-  return out;
-}
-
 /**
  * Photon solo traduce a los idiomas cargados en la instancia pública (default, en, de, fr);
  * según la versión, `lang=es` devuelve HTTP 400. Se intenta "es" y, si falla con 4xx,
  * se repite con "default" (nombre local de OSM: en Colombia ya viene en español).
  */
-async function searchPhoton(q: string, bias?: { lat: number; lon: number }): Promise<Place[]> {
+async function searchPhoton(q: string, bias?: { lat: number; lon: number }): Promise<Ranked[]> {
   try {
     return await searchPhotonLang(q, "es", bias);
   } catch (error) {
@@ -67,63 +86,125 @@ async function searchPhoton(q: string, bias?: { lat: number; lon: number }): Pro
   }
 }
 
-async function searchPhotonLang(q: string, lang: string, bias?: { lat: number; lon: number }): Promise<Place[]> {
-  const params = new URLSearchParams({ q, lang, limit: "6" });
-  if (bias) {
-    params.set("lat", String(bias.lat));
-    params.set("lon", String(bias.lon));
-  }
+async function searchPhotonLang(
+  q: string,
+  lang: string,
+  bias?: { lat: number; lon: number },
+): Promise<Ranked[]> {
+  const params = new URLSearchParams({ q, lang, limit: "8" });
+  const center = bias ?? COLOMBIA_BIAS;
+  params.set("lat", String(center.lat));
+  params.set("lon", String(center.lon));
+  if (!bias) params.set("zoom", "6");
   const url = `https://photon.komoot.io/api/?${params.toString()}`;
   const data = await fetchJson<PhotonResponse>(url, {
     timeoutMs: 5000,
     cacheTtlMs: 120_000,
     headers: { "user-agent": "Voltia/1.0 (EV trip planner)" },
   });
-  const places: Place[] = [];
-  for (const f of data.features ?? []) {
+  const ranked = (data.features ?? [])
+    .map((f, i) => ({ f, i, rank: photonRank(f.properties) }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i);
+  return ranked.map(({ f, rank }) => {
     const [lon, lat] = f.geometry.coordinates;
     const { label, context } = labelOf(f.properties);
     const full = context ? `${label}, ${context}` : label;
-    places.push({ label: full, lat, lon, context });
-  }
-  return places;
+    return { label: full, lat, lon, context, boundary: rank === 2, name: label };
+  });
 }
 
-async function searchOpenMeteo(q: string): Promise<Place[]> {
+type Ranked = Place & { boundary?: boolean; name?: string };
+
+function norm(s: string | undefined): string {
+  return (s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .split(",")[0]!
+    .trim();
+}
+
+/**
+ * Une resultados: quita repetidos (< 1,5 km) y descarta el centro geográfico de
+ * un municipio cuando ya hay un lugar con el mismo nombre a menos de 40 km
+ * (el pueblo): así "Vélez" lleva al casco urbano y no a una vereda.
+ */
+export function mergePlaces(groups: Ranked[][]): Place[] {
+  const all = groups.flat();
+  const out: Place[] = [];
+  for (const p of all) {
+    if (p.boundary) {
+      const hasTown = all.some(
+        (o) =>
+          !o.boundary &&
+          norm(o.name ?? o.label) === norm(p.name ?? p.label) &&
+          haversineKm(o, p) < 40,
+      );
+      if (hasTown) continue;
+    }
+    if (out.some((x) => haversineKm(x, p) < 1.5)) continue;
+    out.push({ label: p.label, lat: p.lat, lon: p.lon, context: p.context });
+  }
+  return out;
+}
+
+async function searchOpenMeteo(q: string): Promise<Ranked[]> {
   const params = new URLSearchParams({ name: q, count: "6", language: "es" });
-  const data = await fetchJson<OpenMeteoGeo>(`https://geocoding-api.open-meteo.com/v1/search?${params}`, {
-    timeoutMs: 8000,
-    cacheTtlMs: 120_000,
-  });
+  const data = await fetchJson<OpenMeteoGeo>(
+    `https://geocoding-api.open-meteo.com/v1/search?${params}`,
+    {
+      timeoutMs: 8000,
+      cacheTtlMs: 120_000,
+    },
+  );
   return (data.results ?? []).map((r) => {
     const label = r.admin1 ? `${r.name}, ${r.admin1}` : r.name;
     const context = r.country;
-    return { label, lat: r.latitude, lon: r.longitude, context };
+    return { label, lat: r.latitude, lon: r.longitude, context, name: r.name };
   });
 }
 
-export async function searchPlaces(query: string, bias?: { lat: number; lon: number }): Promise<Place[]> {
+/**
+ * Búsqueda de lugares. Con token de Mapbox, su geocodificador va primero: es el
+ * mismo que usa al trazar la ruta, así origen y destino coinciden con lo que
+ * muestra Mapbox. Photon y Open-Meteo completan (y son el respaldo sin token).
+ * Los tres se consultan en paralelo; solo falla si fallan todos.
+ */
+export async function searchPlaces(
+  query: string,
+  bias?: { lat: number; lon: number },
+): Promise<Place[]> {
   const q = query.trim();
   if (q.length < 2) return [];
-  let places: Place[] = [];
-  let photonError: unknown = null;
-  try {
-    places = await searchPhoton(q, bias);
-  } catch (error) {
-    photonError = error;
-    console.warn("[geocode] photon falló:", errorText(error));
-  }
-  if (places.length < 4) {
-    try {
-      places = dedupe([...places, ...(await searchOpenMeteo(q))]);
-    } catch (error) {
-      console.warn("[geocode] open-meteo falló:", errorText(error));
-      // Ambos proveedores caídos: se propaga el error para que la UI diga
-      // "no se pudo buscar" en vez de un engañoso "Sin resultados".
-      if (photonError) throw new Error("No se pudo consultar ningún proveedor de búsqueda de lugares.");
+  const token = mapboxServerToken();
+  const [mapbox, photon, openMeteo] = await Promise.allSettled([
+    token ? searchMapbox(q, token, bias) : Promise.reject(new Error("sin token")),
+    searchPhoton(q, bias),
+    searchOpenMeteo(q),
+  ]);
+  const attempts = [
+    ["mapbox", mapbox],
+    ["photon", photon],
+    ["open-meteo", openMeteo],
+  ] as const;
+  for (const [name, r] of attempts) {
+    if (r.status === "rejected" && (name !== "mapbox" || token)) {
+      console.warn(`[geocode] ${name} falló:`, errorText(r.reason));
     }
   }
-  return places.slice(0, 8);
+  if (attempts.every(([, r]) => r.status === "rejected")) {
+    // Todos caídos: se propaga el error para que la UI diga "no se pudo buscar"
+    // en vez de un engañoso "Sin resultados".
+    throw new Error("No se pudo consultar ningún proveedor de búsqueda de lugares.");
+  }
+  const ok = <T>(r: PromiseSettledResult<T[]>): T[] => (r.status === "fulfilled" ? r.value : []);
+  const photonPlaces = ok(photon);
+  return mergePlaces([
+    ok(mapbox),
+    photonPlaces.filter((p) => !p.boundary),
+    ok(openMeteo),
+    photonPlaces.filter((p) => p.boundary),
+  ]).slice(0, 8);
 }
 
 export async function reversePlace(lat: number, lon: number): Promise<Place> {

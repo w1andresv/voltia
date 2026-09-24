@@ -206,3 +206,85 @@ describe("rankPlans", () => {
     expect(ranked.map((p) => p.id)).toEqual(["b", "a"]);
   });
 });
+
+describe("rankPlans con jerarquía vial", () => {
+  type P = Parameters<typeof rankPlans>[0][number];
+  const base = { feasible: true, stops: [], energyKwh: 30, minSoc: 20, arrivalSoc: 20 };
+  const shortcut = { ...base, id: "atajo", totalMinutes: 190, driveMinutes: 190, hierarchyFactor: 1.2, withinTolerance: true } as unknown as P;
+  const trunk = { ...base, id: "troncal", totalMinutes: 205, driveMinutes: 205, hierarchyFactor: 1.0, withinTolerance: true } as unknown as P;
+
+  it("en modo rápido no elige un atajo por vías menores solo porque ahorra minutos", () => {
+    expect(rankPlans([shortcut, trunk], "fastest")[0]?.id).toBe("troncal");
+  });
+
+  it("una ruta fuera de la tolerancia solo gana si no hay otra", () => {
+    const far = { ...trunk, id: "lejana", withinTolerance: false } as P;
+    expect(rankPlans([far, shortcut], "fastest")[0]?.id).toBe("atajo");
+  });
+
+  it("sin clasificación (OSRM) se comporta como antes: gana la más rápida", () => {
+    const a = { ...shortcut, hierarchyFactor: undefined } as P;
+    const b = { ...trunk, hierarchyFactor: undefined } as P;
+    expect(rankPlans([b, a], "fastest")[0]?.id).toBe("atajo");
+  });
+});
+
+describe("rankPlans: menos vías menores antes que minutos", () => {
+  type P = Parameters<typeof rankPlans>[0][number];
+  const base = { feasible: true, stops: [], energyKwh: 30, minSoc: 20, arrivalSoc: 20, withinTolerance: true };
+  it("gana la troncal aunque el atajo sea 30 min más rápido (ambas dentro de la tolerancia)", () => {
+    const shortcut = { ...base, id: "atajo", totalMinutes: 310, driveMinutes: 310, hierarchyFactor: 1.05, minorRoadScore: 40 } as unknown as P;
+    const trunk = { ...base, id: "troncal", totalMinutes: 340, driveMinutes: 340, hierarchyFactor: 1, minorRoadScore: 0 } as unknown as P;
+    expect(rankPlans([shortcut, trunk], "fastest")[0]?.id).toBe("troncal");
+  });
+  it("con puntajes parecidos (< 2) decide el tiempo", () => {
+    const a = { ...base, id: "a", totalMinutes: 300, driveMinutes: 300, minorRoadScore: 1 } as unknown as P;
+    const b = { ...base, id: "b", totalMinutes: 320, driveMinutes: 320, minorRoadScore: 0 } as unknown as P;
+    expect(rankPlans([b, a], "fastest")[0]?.id).toBe("a");
+  });
+});
+
+describe("estilo de conducción: energía y tiempo", () => {
+  const plan = (drivingStyle: "efficient" | "normal" | "sport", avgSpeedKmh: number | null = null) =>
+    buildPlan({
+      raw: straightRoute(100),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 90, arrivalSoc: 20, drivingStyle, avgSpeedKmh }),
+      chargers: [],
+      weather: null,
+      origin: ORIGIN,
+      destination: DESTINATION_100,
+    });
+
+  it("deportiva gasta más y llega antes; eficiente gasta menos y tarda más", () => {
+    const eff = plan("efficient");
+    const nor = plan("normal");
+    const spo = plan("sport");
+    expect(eff.energyKwh).toBeLessThan(nor.energyKwh);
+    expect(spo.energyKwh).toBeGreaterThan(nor.energyKwh);
+    expect(eff.driveMinutes).toBeGreaterThan(nor.driveMinutes);
+    expect(spo.driveMinutes).toBeLessThan(nor.driveMinutes);
+    // Rangos del modelo: ≈ −10 % / +15 % de energía.
+    expect(eff.energyKwh / nor.energyKwh).toBeGreaterThan(0.85);
+    expect(eff.energyKwh / nor.energyKwh).toBeLessThan(0.97);
+    expect(spo.energyKwh / nor.energyKwh).toBeGreaterThan(1.08);
+    expect(spo.energyKwh / nor.energyKwh).toBeLessThan(1.22);
+  });
+
+  it("con velocidad media fija, el estilo no cambia el tiempo (sí la energía)", () => {
+    const nor = plan("normal", 90);
+    const spo = plan("sport", 90);
+    expect(spo.driveMinutes).toBeCloseTo(nor.driveMinutes, 5);
+    expect(spo.energyKwh).toBeGreaterThan(nor.energyKwh);
+  });
+});
+
+describe("rankPlans: 'Más eficiente' también respeta la jerarquía vial", () => {
+  type P = Parameters<typeof rankPlans>[0][number];
+  const base = { feasible: true, stops: [], minSoc: 20, arrivalSoc: 20, withinTolerance: true, totalMinutes: 300, driveMinutes: 300 };
+  it("no elige el atajo por vías menores solo porque gasta 1 kWh menos", () => {
+    const shortcut = { ...base, id: "atajo", energyKwh: 39, minorRoadScore: 40 } as unknown as P;
+    const trunk = { ...base, id: "troncal", energyKwh: 40, minorRoadScore: 0 } as unknown as P;
+    expect(rankPlans([shortcut, trunk], "efficient")[0]?.id).toBe("troncal");
+  });
+});

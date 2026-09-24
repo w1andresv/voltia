@@ -1,3 +1,4 @@
+import type { RoadMix } from "./road-hierarchy";
 import type { VehicleShape, PlaceShape, TripConditionsShape } from "@/domain/schemas";
 
 export type ConnectorType = "ccs2" | "ccs1" | "type2" | "chademo" | "nacs" | "gb_t";
@@ -10,6 +11,7 @@ export type EnergyMode = "manual" | "estimated";
 export type ChargerSource = "osm" | "catalog" | "community" | "plugshare";
 export type StationStatus = "pending" | "approved" | "rejected";
 export type StationAvailability = "unknown" | "available" | "occupied" | "offline";
+export type RoutingEngine = "mapbox-traffic" | "mapbox" | "osrm";
 
 export interface ChargeCurvePoint {
   soc: number;
@@ -121,6 +123,16 @@ export interface RawRoute {
   via?: string;
   /** La ruta evita peajes (pedida con exclude=toll o idéntica a esa). */
   noTolls?: boolean;
+  /** Km por nivel de la jerarquía vial (clasificación del proveedor); sin dato con OSRM. */
+  roadMix?: RoadMix;
+  /** Costo con jerarquía / tiempo real (≥ 1): cuánto "pesan" las vías menores de la ruta. */
+  hierarchyFactor?: number;
+  /** Dentro de la tolerancia (+15 % tiempo, +10 % km frente a la más rápida). */
+  withinTolerance?: boolean;
+  /** Km ponderados por vías menores fuera de los accesos (0 = todo por vías principales). */
+  minorRoadScore?: number;
+  /** Motor que calculó geometría y distancia. */
+  engine?: RoutingEngine;
 }
 
 export interface ItineraryNode {
@@ -138,6 +150,11 @@ export interface RoutePlan {
   label: string;
   via?: string;
   noTolls?: boolean;
+  roadMix?: RoadMix;
+  hierarchyFactor?: number;
+  withinTolerance?: boolean;
+  minorRoadScore?: number;
+  engine?: RoutingEngine;
   geometry: LatLon[];
   samples: RouteSample[];
   /** Distancia de la ruta, sin desvíos a cargadores. */
@@ -215,6 +232,12 @@ export const STATION_AVAIL_LABEL: Record<StationAvailability, string> = {
   available: "Disponible",
   occupied: "Ocupada",
   offline: "Fuera de servicio",
+};
+
+export const ROUTING_ENGINE_LABEL: Record<RoutingEngine, string> = {
+  "mapbox-traffic": "Mapbox (tráfico)",
+  mapbox: "Mapbox",
+  osrm: "OpenStreetMap (OSRM)",
 };
 
 export const DEFAULT_CONDITIONS: TripConditions = {

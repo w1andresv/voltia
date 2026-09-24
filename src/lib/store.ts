@@ -68,7 +68,13 @@ interface PlannerState {
   mapClickArmed: "origin" | "destination" | "waypoint" | "station" | null;
   placeSearchOpen: boolean;
   mapboxToken: string;
-  mapBounds: { minLat: number; maxLat: number; minLon: number; maxLon: number; zoom: number } | null;
+  mapBounds: {
+    minLat: number;
+    maxLat: number;
+    minLon: number;
+    maxLon: number;
+    zoom: number;
+  } | null;
   setVehicleId: (id: string) => void;
   /** Reemplaza la lista de vehículos (catálogo + propios) y corrige la selección si ya no existe. */
   setVehicles: (list: Vehicle[]) => void;
@@ -79,7 +85,13 @@ interface PlannerState {
   addChargerToRoute: (c: Charger) => "origin" | "destination" | "waypoint" | "full";
   swapEnds: () => void;
   applyDemo: (trip: (typeof DEMO_TRIPS)[number]) => void;
-  applySavedRequest: (req: { origin: Place; destination: Place; waypoints: Place[]; vehicle: Vehicle; conditions: TripConditions }) => void;
+  applySavedRequest: (req: {
+    origin: Place;
+    destination: Place;
+    waypoints: Place[];
+    vehicle: Vehicle;
+    conditions: TripConditions;
+  }) => void;
   setResult: (geo: GeoBundle, plans: RoutePlan[], selectedId: string) => void;
   selectPlan: (id: string) => void;
   setHoverKm: (km: number | null) => void;
@@ -106,24 +118,40 @@ function clampTripRegen(n: unknown): number {
   return Math.min(80, Math.max(5, v));
 }
 
-function withRecomputedPlans(s: PlannerState): Pick<PlannerState, "plans" | "selectedPlanId"> | Record<string, never> {
+type PlanInputs = Pick<
+  PlannerState,
+  "geo" | "origin" | "destination" | "vehicles" | "selectedVehicleId" | "conditions"
+>;
+
+/** Planes (ya ordenados) de las rutas calculadas, con estas condiciones. Sin volver a pedir rutas. */
+export function rankedPlansFor(
+  s: PlanInputs,
+  conditions: TripConditions = s.conditions,
+): RoutePlan[] {
   const geo = s.geo;
   const origin = s.origin;
   const destination = s.destination;
-  if (!geo?.routes.length || !origin || !destination) return {};
+  if (!geo?.routes.length || !origin || !destination) return [];
   const vehicle = s.vehicles.find((v) => v.id === s.selectedVehicleId) ?? VEHICLE_CATALOG[0]!;
   const built = geo.routes.map((raw) =>
     buildPlan({
       raw,
       vehicle,
-      conditions: s.conditions,
+      conditions,
       chargers: geo.chargers,
       weather: geo.weather,
       origin,
       destination,
     }),
   );
-  const ranked = rankPlans(built, s.conditions.planningMode);
+  return rankPlans(built, conditions.planningMode);
+}
+
+function withRecomputedPlans(
+  s: PlannerState,
+): Pick<PlannerState, "plans" | "selectedPlanId"> | Record<string, never> {
+  const ranked = rankedPlansFor(s);
+  if (!ranked.length) return {};
   return { plans: ranked, selectedPlanId: ranked[0]?.id ?? null };
 }
 
@@ -160,11 +188,14 @@ export const usePlanner = create<PlannerState>()(
         }),
       setVehicles: (list) =>
         set((s) => {
-          const temp = s.tempVehicle && !list.some((v) => v.id === s.tempVehicle!.id) ? s.tempVehicle : null;
+          const temp =
+            s.tempVehicle && !list.some((v) => v.id === s.tempVehicle!.id) ? s.tempVehicle : null;
           const vehicles = temp ? [...list, temp] : list;
           const selectedVehicleId = vehicles.some((v) => v.id === s.selectedVehicleId)
             ? s.selectedVehicleId
-            : (vehicles.find((v) => v.id === DEFAULT_VEHICLE_ID)?.id ?? vehicles[0]?.id ?? DEFAULT_VEHICLE_ID);
+            : (vehicles.find((v) => v.id === DEFAULT_VEHICLE_ID)?.id ??
+              vehicles[0]?.id ??
+              DEFAULT_VEHICLE_ID);
           const next = { ...s, vehicles, selectedVehicleId, tempVehicle: temp };
           return { vehicles, selectedVehicleId, tempVehicle: temp, ...withRecomputedPlans(next) };
         }),
@@ -224,7 +255,9 @@ export const usePlanner = create<PlannerState>()(
           // catálogo, se usa como temporal (no se persiste ni entra a su lista).
           const known = s.vehicles.some((v) => v.id === req.vehicle.id);
           const tempVehicle = known ? null : req.vehicle;
-          const vehicles = known ? s.vehicles : [...s.vehicles.filter((v) => v.id !== s.tempVehicle?.id), req.vehicle];
+          const vehicles = known
+            ? s.vehicles
+            : [...s.vehicles.filter((v) => v.id !== s.tempVehicle?.id), req.vehicle];
           return {
             origin: req.origin,
             destination: req.destination,
@@ -239,7 +272,8 @@ export const usePlanner = create<PlannerState>()(
             myTripsOpen: false,
           };
         }),
-      setResult: (geo, plans, selectedId) => set({ geo, plans, selectedPlanId: selectedId, hoverKm: null }),
+      setResult: (geo, plans, selectedId) =>
+        set({ geo, plans, selectedPlanId: selectedId, hoverKm: null }),
       selectPlan: (id) => set({ selectedPlanId: id, hoverKm: null }),
       setHoverKm: (km) => set({ hoverKm: km }),
       setShowAllChargers: (v) => set({ showAllChargers: v }),
@@ -261,7 +295,10 @@ export const usePlanner = create<PlannerState>()(
           }
           const geo = s.geo;
           if (!geo) return {};
-          const chargers = uniqueByProximity([c, ...geo.chargers.filter((x) => x.id !== c.id)], 0.15);
+          const chargers = uniqueByProximity(
+            [c, ...geo.chargers.filter((x) => x.id !== c.id)],
+            0.15,
+          );
           const nextGeo = { ...geo, chargers };
           const next = { ...s, geo: nextGeo };
           return { geo: nextGeo, ...withRecomputedPlans(next) };
@@ -324,7 +361,10 @@ export const usePlanner = create<PlannerState>()(
         const regenPct = p.tripRegenV === 2 ? clampTripRegen(storedConditions?.regenPct) : 20;
         return {
           ...current,
-          selectedVehicleId: typeof p.selectedVehicleId === "string" ? p.selectedVehicleId : current.selectedVehicleId,
+          selectedVehicleId:
+            typeof p.selectedVehicleId === "string"
+              ? p.selectedVehicleId
+              : current.selectedVehicleId,
           conditions: { ...DEFAULT_CONDITIONS, ...(storedConditions ?? {}), regenPct },
           mapboxToken: isMapboxPublicToken(storedToken) ? storedToken : current.mapboxToken,
           mapBounds: null,
@@ -346,7 +386,10 @@ export function migratePlannerState(persisted: unknown): Record<string, unknown>
   void _dropped;
   if (Array.isArray(vehicles)) {
     try {
-      const own = extractOwnVehicles(vehicles as Vehicle[], LEGACY_V2_CATALOG).slice(0, MAX_GUEST_VEHICLES);
+      const own = extractOwnVehicles(vehicles as Vehicle[], LEGACY_V2_CATALOG).slice(
+        0,
+        MAX_GUEST_VEHICLES,
+      );
       const guest = createGuestStorage();
       for (const v of own) guest.addVehicle(v);
     } catch (error) {

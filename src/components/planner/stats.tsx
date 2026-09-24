@@ -1,18 +1,17 @@
 import type { ReactNode } from "react";
 import { Mountain, Timer, Zap } from "lucide-react";
-import type { RoutePlan } from "@/domain/types";
+import { ROUTING_ENGINE_LABEL, type RoutePlan } from "@/domain/types";
 import { formatElevation, formatKm, formatKwh, formatKwhPer100, formatMinutes, formatPct } from "@/lib/format";
 
 export function PlanStats({ plan }: { plan: RoutePlan }) {
   const next = plan.stops[0];
+  const engineHint = plan.engine ? ROUTING_ENGINE_LABEL[plan.engine] : undefined;
+  const detourHint = plan.detourKm >= 0.5 ? `+${formatKm(plan.detourKm, 1)} de desvío a cargadores` : undefined;
+  const distanceHint = [detourHint, engineHint].filter(Boolean).join(" · ") || undefined;
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
-        <Stat
-          label="Distancia"
-          value={formatKm(plan.distanceKm)}
-          hint={plan.detourKm >= 0.5 ? `+${formatKm(plan.detourKm, 1)} de desvío a cargadores` : undefined}
-        />
+        <Stat label="Distancia" value={formatKm(plan.distanceKm)} hint={distanceHint} />
         <Stat label="Tiempo total" value={formatMinutes(plan.totalMinutes)} />
         <Stat
           label="Consumo neto"

@@ -8,10 +8,24 @@ const AUX_KW = 0.45;
 const CYCLE_OVERHEAD = 1.14;
 const AIR_RHO = 1.225;
 
-const STYLE_MULT: Record<TripConditions["drivingStyle"], number> = {
-  efficient: 0.9,
+/**
+ * Estilo de conducción, en dos efectos separados (para no contarlo dos veces):
+ *  - STYLE_SPEED_FACTOR: velocidad de crucero relativa a la de la ruta. Cambia el
+ *    TIEMPO y, por la resistencia del aire, también el consumo (vía la física).
+ *  - STYLE_MULT: forma de acelerar y frenar, a igual velocidad.
+ * Juntos dan ≈ −10 % (eficiente) / +15 % (deportiva) de energía en carretera,
+ * como antes, pero ahora "deportiva" también llega antes y "eficiente" después.
+ */
+export const STYLE_SPEED_FACTOR: Record<TripConditions["drivingStyle"], number> = {
+  efficient: 0.93,
   normal: 1,
-  sport: 1.14,
+  sport: 1.06,
+};
+
+export const STYLE_MULT: Record<TripConditions["drivingStyle"], number> = {
+  efficient: 0.95,
+  normal: 1,
+  sport: 1.08,
 };
 
 const AC_KW: Record<TripConditions["ac"], number> = {
@@ -36,7 +50,11 @@ export interface EnergySlice {
 }
 
 export function hasManualConsumption(vehicle: Vehicle): boolean {
-  return Boolean(vehicle.consumptionManual && vehicle.consumptionKwhPer100km && vehicle.consumptionKwhPer100km > 0);
+  return Boolean(
+    vehicle.consumptionManual &&
+    vehicle.consumptionKwhPer100km &&
+    vehicle.consumptionKwhPer100km > 0,
+  );
 }
 
 export function energyMode(vehicle: Vehicle): EnergyMode {
@@ -225,7 +243,8 @@ export function segmentEnergyBreakdown(
   socPct = 50,
 ): EnergySlice {
   if (distanceKm <= 0) return { grossKwh: 0, regenKwh: 0, netKwh: 0 };
-  if (hasManualConsumption(ctx.vehicle)) return manualSlice(distanceKm, elevDeltaM, speedKmh, ctx, socPct);
+  if (hasManualConsumption(ctx.vehicle))
+    return manualSlice(distanceKm, elevDeltaM, speedKmh, ctx, socPct);
   return physicsSlice(distanceKm, elevDeltaM, speedKmh, ctx, socPct);
 }
 
@@ -254,7 +273,10 @@ export function segmentEnergyKwh(
 }
 
 export function annotateEnergy(
-  samples: Omit<RouteSample, "energyKwh" | "energyGrossKwh" | "energyRegenKwh" | "cumulativeKwh" | "avgKwhPer100" | "soc">[],
+  samples: Omit<
+    RouteSample,
+    "energyKwh" | "energyGrossKwh" | "energyRegenKwh" | "cumulativeKwh" | "avgKwhPer100" | "soc"
+  >[],
   ctx: EnergyContext,
   initialSoc: number,
 ): RouteSample[] {
@@ -314,7 +336,11 @@ export function batteryBudget(
   wltpKm: number;
   wltpKwhPer100: number | null;
 } {
-  const floorPct = Math.max(safetyPct(conditions), vehicle.minSocRecommended, conditions.arrivalSoc);
+  const floorPct = Math.max(
+    safetyPct(conditions),
+    vehicle.minSocRecommended,
+    conditions.arrivalSoc,
+  );
   const usablePct = Math.max(0, conditions.initialSoc - floorPct);
   const packedKwh = (conditions.initialSoc / 100) * vehicle.batteryKwh;
   const usableKwh = (usablePct / 100) * vehicle.batteryKwh;

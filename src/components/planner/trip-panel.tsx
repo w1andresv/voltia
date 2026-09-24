@@ -1,3 +1,4 @@
+import { formatRoadMix } from "@/domain/road-hierarchy";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowDownUp, Flag, LoaderCircle, MapPin, Plus } from "lucide-react";
 import { useRef } from "react";
@@ -17,7 +18,7 @@ import { PlanStats } from "./stats";
 import { SaveTripButton } from "@/components/trips/save-trip-button";
 import { TripParams } from "./trip-params";
 import { VehicleBar } from "./vehicle-bar";
-import type { RoutePlan } from "@/domain/types";
+import { ROUTING_ENGINE_LABEL, type RoutePlan } from "@/domain/types";
 
 export function TripSetup() {
   const origin = usePlanner((s) => s.origin);
@@ -29,7 +30,9 @@ export function TripSetup() {
   const swap = usePlanner((s) => s.swapEnds);
   const applyDemo = usePlanner((s) => s.applyDemo);
   const setResult = usePlanner((s) => s.setResult);
-  const plan = usePlanner((s) => s.plans.find((p) => p.id === s.selectedPlanId) ?? s.plans[0] ?? null);
+  const plan = usePlanner(
+    (s) => s.plans.find((p) => p.id === s.selectedPlanId) ?? s.plans[0] ?? null,
+  );
   const armed = usePlanner((s) => s.mapClickArmed);
   const setArmed = usePlanner((s) => s.setMapClickArmed);
   const destInput = useRef<HTMLInputElement>(null);
@@ -53,9 +56,13 @@ export function TripSetup() {
     },
     onSuccess: (res) => {
       setResult(res.geo, res.plans, res.selectedId);
-      if (res.geo.warnings.length) toast.message(res.geo.warnings[0]);
+      const routingWarn = res.geo.warnings.find((w) => w.includes("OSRM") || w.includes("Mapbox"));
+      if (routingWarn) toast.warning(routingWarn);
+      else if (res.geo.warnings.length) toast.message(res.geo.warnings[0]);
       requestAnimationFrame(() => {
-        document.getElementById("voltia-map-slot")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document
+          .getElementById("voltia-map-slot")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     },
     onError: (err) => {
@@ -67,7 +74,9 @@ export function TripSetup() {
 
   return (
     <section className="relative z-20 space-y-3 px-4 pb-3 pt-3">
-      <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">Configuración del viaje</h2>
+      <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">
+        Configuración del viaje
+      </h2>
       <VehicleBar />
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1 space-y-2">
@@ -206,6 +215,7 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
   const plans = usePlanner((s) => s.plans);
   const warnings = usePlanner((s) => s.geo?.warnings);
   const weather = usePlanner((s) => s.geo?.weather);
+  const engineLabel = plan.engine ? ROUTING_ENGINE_LABEL[plan.engine] : null;
 
   return (
     <div className="space-y-8 px-4 pb-24 pt-2">
@@ -222,12 +232,23 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
           </h2>
           <SaveTripButton plan={plan} />
         </div>
-        {plan.via ? <p className="-mt-1 text-xs text-muted">Por {plan.via}</p> : null}
+        {plan.via || engineLabel ? (
+          <p className="-mt-1 text-xs text-muted">
+            {plan.via ? `Por ${plan.via}` : null}
+            {plan.via && engineLabel ? " · " : null}
+            {engineLabel ? `Distancia según ${engineLabel}` : null}
+          </p>
+        ) : null}
+        {plan.roadMix && formatRoadMix(plan.roadMix) ? (
+          <p className="-mt-1 text-xs text-subtle">Vías: {formatRoadMix(plan.roadMix)}</p>
+        ) : null}
         <PlanStats plan={plan} />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">Puntos de carga</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">
+          Puntos de carga
+        </h2>
         {plan.canArriveWithoutCharge ? (
           <p className="text-sm leading-relaxed text-ok">
             La batería alcanza el destino. No se recomienda ninguna electrolinera.
@@ -239,8 +260,8 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
           </p>
         ) : plan.stops.length ? (
           <p className="text-xs leading-relaxed text-muted">
-            Paradas en electrolineras reales y verificadas sobre la ruta o con un desvío razonable. El SOC de llegada respeta tu
-            margen de seguridad.
+            Paradas en electrolineras reales y verificadas sobre la ruta o con un desvío razonable.
+            El SOC de llegada respeta tu margen de seguridad.
           </p>
         ) : null}
         <Itinerary plan={plan} />
@@ -248,15 +269,19 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
 
       {plan.stops.length ? (
         <section className="space-y-3">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">Detalles de electrolineras</h2>
+          <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">
+            Detalles de electrolineras
+          </h2>
           <ul className="space-y-3">
             {plan.stops.map((st) => (
               <li key={st.charger.id} className="rounded-xl bg-bg-elevated p-3">
                 <ChargerFacts charger={st.charger} />
                 <p className="mt-2 text-xs text-muted">
-                  Llegas al {formatPct(st.arriveSoc)} · sales al {formatPct(st.departSoc)} · {formatMinutes(st.chargeMinutes)} ·{" "}
-                  {formatKwh(st.energyAddedKwh)}
-                  {st.fromRouteKm > 0.15 ? ` · ${formatKm(st.fromRouteKm, 1)} de la ruta` : " · sobre la ruta"}
+                  Llegas al {formatPct(st.arriveSoc)} · sales al {formatPct(st.departSoc)} ·{" "}
+                  {formatMinutes(st.chargeMinutes)} · {formatKwh(st.energyAddedKwh)}
+                  {st.fromRouteKm > 0.15
+                    ? ` · ${formatKm(st.fromRouteKm, 1)} de la ruta`
+                    : " · sobre la ruta"}
                   {st.kmToNext > 0 ? ` · siguiente en ${formatKm(st.kmToNext)}` : ""}
                 </p>
               </li>
@@ -266,9 +291,13 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
       ) : null}
 
       <section className="space-y-3">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">Recomendaciones de carga</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">
+          Recomendaciones de carga
+        </h2>
         <ChargeAdvice plan={plan} />
-        <p className="text-xs text-muted">Toca un marcador del mapa para usarlo como origen, destino o parada.</p>
+        <p className="text-xs text-muted">
+          Toca un marcador del mapa para usarlo como origen, destino o parada.
+        </p>
         {(warnings ?? []).map((w) => (
           <p key={w} className="text-xs text-warn">
             {w}
@@ -288,7 +317,8 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
         <SocChart plan={plan} />
         {weather ? (
           <p className="mt-2 text-xs text-subtle">
-            Clima en ruta: {Math.round(weather.temperatureC)}°C · viento {Math.round(weather.windKmh)} km/h
+            Clima en ruta: {Math.round(weather.temperatureC)}°C · viento{" "}
+            {Math.round(weather.windKmh)} km/h
             {weather.source ? ` · ${weather.source}` : ""}
           </p>
         ) : null}
@@ -301,7 +331,8 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
   if (plan.canArriveWithoutCharge) {
     return (
       <p className="rounded-lg bg-ok/10 px-3 py-2.5 text-sm leading-relaxed text-ok">
-        Puedes llegar sin recargar. Reserva {formatPct(plan.safetyPct)} y llegas con {formatPct(plan.arrivalSoc)}.
+        Puedes llegar sin recargar. Reserva {formatPct(plan.safetyPct)} y llegas con{" "}
+        {formatPct(plan.arrivalSoc)}.
       </p>
     );
   }
@@ -315,12 +346,16 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
   return (
     <ul className="space-y-2">
       {plan.stops.map((st, i) => (
-        <li key={st.charger.id} className="rounded-lg bg-bg-elevated px-3 py-2.5 text-sm leading-relaxed text-muted">
+        <li
+          key={st.charger.id}
+          className="rounded-lg bg-bg-elevated px-3 py-2.5 text-sm leading-relaxed text-muted"
+        >
           <span className="font-medium text-fg">
             {i + 1}. {st.charger.name}
           </span>
-          {" · "}llegas al {formatPct(st.arriveSoc)}, carga a {formatPct(st.departSoc)} ({formatKwh(st.energyAddedKwh)},{" "}
-          {formatMinutes(st.chargeMinutes)}). Siguiente tramo {formatKm(st.kmToNext)}
+          {" · "}llegas al {formatPct(st.arriveSoc)}, carga a {formatPct(st.departSoc)} (
+          {formatKwh(st.energyAddedKwh)}, {formatMinutes(st.chargeMinutes)}). Siguiente tramo{" "}
+          {formatKm(st.kmToNext)}
           {st.fromRouteKm > 0.15 ? ` · desvío ${formatKm(st.fromRouteKm, 1)}` : ""}.
         </li>
       ))}

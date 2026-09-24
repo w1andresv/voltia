@@ -1,5 +1,12 @@
+import { compareByHierarchy } from "./road-hierarchy";
 import { bestSocket, chargeTimeMinutes, effectiveChargeKw, isDc } from "./charging";
-import { annotateEnergy, energyBetween, energyMode, segmentEnergyKwh } from "./energy";
+import {
+  STYLE_SPEED_FACTOR,
+  annotateEnergy,
+  energyBetween,
+  energyMode,
+  segmentEnergyKwh,
+} from "./energy";
 import { haversineKm } from "./geo";
 import type {
   ChargeStop,
@@ -23,7 +30,10 @@ const DETOUR_SPEED_KMH = 50;
 
 type EnergyCtx = { vehicle: Vehicle; conditions: TripConditions; weather: WeatherSnapshot | null };
 
-export function attachChargersToRoute(chargers: Charger[], samples: { lat: number; lon: number; km: number }[]): Charger[] {
+export function attachChargersToRoute(
+  chargers: Charger[],
+  samples: { lat: number; lon: number; km: number }[],
+): Charger[] {
   return chargers
     .filter((c) => isVerifiedForPlanning(c))
     .map((c) => {
@@ -101,7 +111,11 @@ function arriveAt(
   return { arrive: socAfter(soc, e, cap), detourKwh, sIdx };
 }
 
-function scoreCharger(cand: Candidate, mode: TripConditions["planningMode"], safety: number): number {
+function scoreCharger(
+  cand: Candidate,
+  mode: TripConditions["planningMode"],
+  safety: number,
+): number {
   const detour = cand.fromRouteKm;
   const power = cand.socketKw;
   const arrive = cand.arriveSoc;
@@ -161,7 +175,9 @@ function pickStops(args: {
   });
 
   if (!usable.length) {
-    return conditions.allowBelowSafety ? { stops: [], feasible: true, reason: NO_VERIFIED_STOP_REASON } : unreachable();
+    return conditions.allowBelowSafety
+      ? { stops: [], feasible: true, reason: NO_VERIFIED_STOP_REASON }
+      : unreachable();
   }
 
   const canReachDestFrom = (fromIdx: number, fromSoc: number, extraKwh = 0) =>
@@ -244,7 +260,10 @@ function pickStops(args: {
     }
 
     if (conditions.planningMode === "fewer_stops" || conditions.planningMode === "safer") {
-      return Math.min(hardCap, Math.max(minBump, destNeed, conditions.planningMode === "safer" ? 70 : 80));
+      return Math.min(
+        hardCap,
+        Math.max(minBump, destNeed, conditions.planningMode === "safer" ? 70 : 80),
+      );
     }
 
     let nextNeed = destNeed;
@@ -266,7 +285,8 @@ function pickStops(args: {
         fromRouteKm: fromRouteKmOf(ch),
         detourKwh: hit.detourKwh,
       };
-      const sc = scoreCharger(cand, conditions.planningMode, safety) - (hit.sIdx - pick.sIdx) * 0.02;
+      const sc =
+        scoreCharger(cand, conditions.planningMode, safety) - (hit.sIdx - pick.sIdx) * 0.02;
       if (sc < bestScore) {
         bestScore = sc;
         bestNext = cand;
@@ -303,30 +323,51 @@ function pickStops(args: {
     const pool = narrow(raw);
     pool.sort((a, b) => {
       if (conditions.planningMode === "fewer_stops") {
-        return b.sIdx - a.sIdx || scoreCharger(a, conditions.planningMode, safety) - scoreCharger(b, conditions.planningMode, safety);
+        return (
+          b.sIdx - a.sIdx ||
+          scoreCharger(a, conditions.planningMode, safety) -
+            scoreCharger(b, conditions.planningMode, safety)
+        );
       }
-      return scoreCharger(a, conditions.planningMode, safety) - scoreCharger(b, conditions.planningMode, safety);
+      return (
+        scoreCharger(a, conditions.planningMode, safety) -
+        scoreCharger(b, conditions.planningMode, safety)
+      );
     });
 
     const pick = pool[0]!;
     let chargeTo = chooseDepart(pick);
     chargeTo = Math.min(100, Math.max(chargeTo, pick.arriveSoc + 8));
-    if (chargeTo > maxTravel && neededDepartSoc({
-      samples,
-      fromIdx: pick.sIdx,
-      destIdx,
-      arrivalTarget,
-      capacity: cap,
-      detourKwh: pick.detourKwh,
-    }) <= maxTravel + 1) {
+    if (
+      chargeTo > maxTravel &&
+      neededDepartSoc({
+        samples,
+        fromIdx: pick.sIdx,
+        destIdx,
+        arrivalTarget,
+        capacity: cap,
+        detourKwh: pick.detourKwh,
+      }) <=
+        maxTravel + 1
+    ) {
       chargeTo = maxTravel;
     }
-    if (!continuationOk(pick.sIdx, chargeTo, pick.charger.id) && continuationOk(pick.sIdx, maxTravel, pick.charger.id)) {
+    if (
+      !continuationOk(pick.sIdx, chargeTo, pick.charger.id) &&
+      continuationOk(pick.sIdx, maxTravel, pick.charger.id)
+    ) {
       chargeTo = maxTravel;
     }
 
     const peak = isDc(pick.socket.connector) ? vehicle.dcMaxKw : vehicle.acMaxKw;
-    const minutes = chargeTimeMinutes(cap, pick.arriveSoc, chargeTo, peak, pick.socket.powerKw, vehicle.chargeCurve);
+    const minutes = chargeTimeMinutes(
+      cap,
+      pick.arriveSoc,
+      chargeTo,
+      peak,
+      pick.socket.powerKw,
+      vehicle.chargeCurve,
+    );
     const detourKm = pick.charger.detourKm ?? pick.fromRouteKm * 2;
 
     stops.push({
@@ -387,11 +428,19 @@ function applyStopsToSamples(
   });
 }
 
+function hasFixedSpeed(conditions: TripConditions): boolean {
+  return Boolean(conditions.avgSpeedKmh && conditions.avgSpeedKmh > 10);
+}
+
+/**
+ * Tiempo de manejo: con velocidad media fijada por el usuario, esa manda (el
+ * estilo ya no la cambia); si no, el de la ruta ajustado por el estilo.
+ */
 function driveMinutesFor(raw: RawRoute, conditions: TripConditions): number {
-  if (conditions.avgSpeedKmh && conditions.avgSpeedKmh > 10) {
-    return (raw.distanceKm / conditions.avgSpeedKmh) * 60;
+  if (hasFixedSpeed(conditions)) {
+    return (raw.distanceKm / (conditions.avgSpeedKmh as number)) * 60;
   }
-  return raw.driveMinutes;
+  return raw.driveMinutes / STYLE_SPEED_FACTOR[conditions.drivingStyle];
 }
 
 export function buildPlan(args: {
@@ -407,10 +456,12 @@ export function buildPlan(args: {
   const safety = safetyPct(conditions);
   const ctx = { vehicle, conditions, weather };
 
-  const speedAdj = conditions.avgSpeedKmh;
+  const styleSpeed = STYLE_SPEED_FACTOR[conditions.drivingStyle];
   const samplesPre = raw.samples.map((s) => ({
     ...s,
-    speedKmh: speedAdj && speedAdj > 10 ? speedAdj : s.speedKmh,
+    speedKmh: hasFixedSpeed(conditions)
+      ? (conditions.avgSpeedKmh as number)
+      : s.speedKmh * styleSpeed,
   }));
 
   const energySamples = annotateEnergy(samplesPre, ctx, conditions.initialSoc);
@@ -440,7 +491,8 @@ export function buildPlan(args: {
   const arrivalSoc = last.soc;
   const minSoc = samples.reduce((m, s) => Math.min(m, s.soc), 100);
   const remainingKwh = Math.max(0, (arrivalSoc / 100) * vehicle.batteryKwh);
-  const canArriveWithoutCharge = stops.length === 0 && arrivalSoc >= Math.max(conditions.arrivalSoc, safety);
+  const canArriveWithoutCharge =
+    stops.length === 0 && arrivalSoc >= Math.max(conditions.arrivalSoc, safety);
 
   const itinerary: ItineraryNode[] = [
     {
@@ -483,6 +535,11 @@ export function buildPlan(args: {
     label: raw.label,
     via: raw.via,
     noTolls: raw.noTolls,
+    roadMix: raw.roadMix,
+    hierarchyFactor: raw.hierarchyFactor,
+    withinTolerance: raw.withinTolerance,
+    minorRoadScore: raw.minorRoadScore,
+    engine: raw.engine,
     geometry: raw.geometry,
     samples,
     // Distancia de la ruta (comparable con Google Maps); el desvío hasta los
@@ -513,21 +570,48 @@ export function buildPlan(args: {
   };
 }
 
+/**
+ * Tiempo "efectivo" para comparar rutas: el total, más el recargo por usar vías
+ * de menor jerarquía (secundarias, terciarias, locales) fuera de los accesos.
+ * Así una ruta no gana solo porque un atajo por vías menores ahorra minutos.
+ */
+export function effectiveMinutes(
+  p: Pick<RoutePlan, "totalMinutes" | "driveMinutes" | "hierarchyFactor">,
+): number {
+  return p.totalMinutes + p.driveMinutes * Math.max(0, (p.hierarchyFactor ?? 1) - 1);
+}
+
 export function rankPlans(plans: RoutePlan[], mode: TripConditions["planningMode"]): RoutePlan[] {
   const copy = [...plans];
+  // Jerarquía vial primero (menos km por vías menores), luego el criterio de la
+  // estrategia: así ninguna estrategia elige un atajo por vías secundarias o
+  // terciarias si hay una alternativa razonable por vías principales.
+  const byHierarchy = (a: RoutePlan, b: RoutePlan, then: number) =>
+    compareByHierarchy(
+      { minorScore: a.minorRoadScore, cost: then },
+      { minorScore: b.minorRoadScore, cost: 0 },
+    );
   copy.sort((a, b) => {
     if (a.feasible !== b.feasible) return a.feasible ? -1 : 1;
+    // Fuera de la tolerancia (+15 % tiempo / +10 % km): solo si no hay otra.
+    const ta = a.withinTolerance !== false;
+    const tb = b.withinTolerance !== false;
+    if (ta !== tb) return ta ? -1 : 1;
     switch (mode) {
       case "efficient":
-        return a.energyKwh - b.energyKwh;
+        return byHierarchy(a, b, a.energyKwh - b.energyKwh);
       case "fewer_stops":
-        return a.stops.length - b.stops.length || a.totalMinutes - b.totalMinutes;
+        // En esta estrategia, las paradas mandan; la jerarquía desempata.
+        return (
+          a.stops.length - b.stops.length ||
+          byHierarchy(a, b, effectiveMinutes(a) - effectiveMinutes(b))
+        );
       case "safer":
-        return b.minSoc - a.minSoc || b.arrivalSoc - a.arrivalSoc;
+        return byHierarchy(a, b, b.minSoc - a.minSoc || b.arrivalSoc - a.arrivalSoc);
       case "fastest":
       case "custom":
       default:
-        return a.totalMinutes - b.totalMinutes;
+        return byHierarchy(a, b, effectiveMinutes(a) - effectiveMinutes(b));
     }
   });
   return copy;

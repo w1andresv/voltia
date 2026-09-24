@@ -17,12 +17,53 @@ export const OsrmRouteSchema = z.object({
   distance: z.number(),
   duration: z.number(),
   geometry: z.object({ coordinates: z.array(z.tuple([z.number(), z.number()])) }),
-  legs: z.array(z.object({ summary: z.string().optional() }).passthrough()).optional(),
+  legs: z
+    .array(
+      z
+        .object({
+          summary: z.string().optional(),
+          distance: z.number().optional(),
+          // Solo con steps=true (Mapbox): cada paso con su geometría y sus intersecciones,
+          // que traen la clase vial del proveedor (mapbox_streets_v8.class).
+          steps: z
+            .array(
+              z
+                .object({
+                  distance: z.number(),
+                  duration: z.number(),
+                  geometry: z
+                    .object({ coordinates: z.array(z.tuple([z.number(), z.number()])) })
+                    .optional(),
+                  intersections: z
+                    .array(
+                      z
+                        .object({
+                          location: z.tuple([z.number(), z.number()]),
+                          mapbox_streets_v8: z
+                            .object({ class: z.string().optional() })
+                            .passthrough()
+                            .optional(),
+                        })
+                        .passthrough(),
+                    )
+                    .optional(),
+                })
+                .passthrough(),
+            )
+            .optional(),
+        })
+        .passthrough(),
+    )
+    .optional(),
 });
 
 export const OsrmResponseSchema = z.object({
   code: z.string(),
   routes: z.array(OsrmRouteSchema).optional(),
+  /** Punto de la vía donde el motor "pegó" cada coordenada; `distance` = metros hasta ella. */
+  waypoints: z
+    .array(z.object({ distance: z.number().optional(), name: z.string().optional() }).passthrough())
+    .optional(),
 });
 
 export type OsrmRoute = z.infer<typeof OsrmRouteSchema>;

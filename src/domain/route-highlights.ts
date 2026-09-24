@@ -1,8 +1,11 @@
+import { primaryShare } from "./road-hierarchy";
 import type { RoutePlan } from "./types";
 
-export type RouteHighlight = "fastest" | "shortest" | "fewest_stops" | "no_tolls" | "best_arrival";
+export type RouteHighlight =
+  "most_primary" | "fastest" | "shortest" | "fewest_stops" | "no_tolls" | "best_arrival";
 
 export const HIGHLIGHT_LABEL: Record<RouteHighlight, string> = {
+  most_primary: "Más vías principales",
   fastest: "Más rápida",
   shortest: "Más corta",
   fewest_stops: "Menos paradas",
@@ -12,7 +15,7 @@ export const HIGHLIGHT_LABEL: Record<RouteHighlight, string> = {
 
 type Comparable = Pick<
   RoutePlan,
-  "id" | "totalMinutes" | "distanceKm" | "stops" | "arrivalSoc" | "noTolls" | "feasible"
+  "id" | "totalMinutes" | "distanceKm" | "stops" | "arrivalSoc" | "noTolls" | "feasible" | "roadMix"
 >;
 
 /** Id de la única ruta con el mejor valor, o null si hay empate (no destaca a nadie). */
@@ -40,6 +43,13 @@ export function routeHighlights<T extends Comparable>(plans: T[]): Map<string, R
   };
   const feasible = plans.filter((p) => p.feasible);
   if (feasible.length >= 2) {
+    // Solo si el proveedor clasificó las vías de todas (3 puntos de diferencia mínima).
+    if (feasible.every((p) => p.roadMix)) {
+      add(
+        uniqueBest(feasible, (p) => -primaryShare(p.roadMix!), 0.03),
+        "most_primary",
+      );
+    }
     add(
       uniqueBest(feasible, (p) => p.totalMinutes, 1),
       "fastest",

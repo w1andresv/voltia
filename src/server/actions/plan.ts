@@ -36,7 +36,9 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
 
     const waypoints = [data.origin, ...data.waypoints, data.destination];
     const warnings: string[] = [];
-    const rawRoutes = await fetchRoutes(waypoints);
+    const routed = await fetchRoutes(waypoints);
+    const rawRoutes = routed.routes;
+    warnings.push(...routed.warnings);
     const mid = rawRoutes[0]?.samples[Math.floor((rawRoutes[0].samples.length || 1) / 2)];
     // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
     // alternativa puede planear sus paradas. Las sondas no se repiten donde se solapan.
@@ -66,12 +68,11 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
     );
     const ranked = rankPlans(built, data.conditions.planningMode);
 
-    // Log estructurado, sin coordenadas exactas del usuario (solo la
-    // distancia total y el conteo de tramos alternativos que devolvió OSRM).
     console.log(
       "[plan-trip]",
       JSON.stringify({
         ms: Date.now() - startedAt,
+        engine: routed.engine,
         routes: routes.length,
         distanceKm: Math.round(routes[0]?.distanceKm ?? 0),
         chargers: chargers.length,

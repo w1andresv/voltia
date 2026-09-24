@@ -1,4 +1,5 @@
 import { Check, TriangleAlert } from "lucide-react";
+import { formatRoadMix } from "@/domain/road-hierarchy";
 import { HIGHLIGHT_LABEL, routeHighlights } from "@/domain/route-highlights";
 import type { RoutePlan } from "@/domain/types";
 import { formatKm, formatMinutes, formatPct } from "@/lib/format";
@@ -97,6 +98,9 @@ export function RouteCompare({ plans }: { plans: RoutePlan[] }) {
                 {p.stops.length === 1 ? "parada" : "paradas"}
                 {p.chargeMinutes > 0 ? ` · ${formatMinutes(p.chargeMinutes)} carga` : ""}
               </div>
+              {p.roadMix && formatRoadMix(p.roadMix) ? (
+                <div className="mt-0.5 text-xs text-subtle">Vías: {formatRoadMix(p.roadMix)}</div>
+              ) : null}
               {delta ? <div className="mt-0.5 text-xs text-subtle">{delta}</div> : null}
               {!p.feasible ? (
                 <div className="mt-1 flex items-center gap-1 text-xs text-warn">
