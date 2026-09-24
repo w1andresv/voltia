@@ -8,6 +8,7 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
   const engineHint = plan.engine ? ROUTING_ENGINE_LABEL[plan.engine] : undefined;
   const detourHint = plan.detourKm >= 0.5 ? `+${formatKm(plan.detourKm, 1)} de desvío a cargadores` : undefined;
   const distanceHint = [detourHint, engineHint].filter(Boolean).join(" · ") || undefined;
+  const chargeKwh = plan.stops.reduce((sum, stop) => sum + stop.energyAddedKwh, 0);
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
@@ -23,6 +24,10 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
           value={formatPct(plan.arrivalSoc)}
           tone={plan.arrivalSoc < plan.safetyPct ? "danger" : plan.arrivalSoc < plan.safetyPct + 8 ? "warn" : "ok"}
         />
+        <Stat label="Batería inicial" value={formatPct(plan.initialSoc)} />
+        <Stat label="Paradas" value={String(plan.stops.length)} />
+        <Stat label="Tiempo de carga" value={formatMinutes(plan.chargeMinutes)} />
+        <Stat label="Energía a cargar" value={formatKwh(chargeKwh)} />
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-center">
@@ -98,9 +103,9 @@ function Stat({
   const color =
     tone === "ok" ? "text-ok" : tone === "warn" ? "text-warn" : tone === "danger" ? "text-danger" : "text-fg";
   return (
-    <div className="rounded-lg bg-bg-elevated px-3 py-2.5">
-      <div className="text-xs text-muted">{label}</div>
-      <div className={`mt-0.5 font-mono text-base tabular-nums ${color}`}>{value}</div>
+    <div className="rounded-md border border-border bg-bg-elevated px-3 py-2.5">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-subtle">{label}</div>
+      <div className={`mt-1 font-mono text-lg font-medium tabular-nums tracking-tight ${color}`}>{value}</div>
       {hint ? <div className="mt-0.5 font-mono text-xs tabular-nums text-subtle">{hint}</div> : null}
     </div>
   );

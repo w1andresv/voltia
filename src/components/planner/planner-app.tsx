@@ -73,14 +73,14 @@ export function PlannerApp() {
         </div>
       ) : null}
 
-      <div className="bg-surface md:flex md:h-full md:w-[400px] md:shrink-0 md:flex-col md:overflow-y-auto md:shadow-panel">
-        <TripSetup />
+      <div className="border-border bg-surface md:flex md:h-full md:w-[420px] md:shrink-0 md:flex-col md:overflow-y-auto md:border-r">
         <div
           id="voltia-map-slot"
-          className="relative mx-3 mb-3 h-[min(40vh,20rem)] shrink-0 overflow-hidden rounded-xl bg-bg scroll-mt-16 md:hidden"
+          className="relative h-[46vh] min-h-64 shrink-0 overflow-hidden bg-bg md:hidden"
         >
           {!wide ? <MapPane mode="plan" /> : null}
         </div>
+        <TripSetup />
         {plan ? <TripResults plan={plan} /> : <div className="h-8 md:hidden" />}
       </div>
 

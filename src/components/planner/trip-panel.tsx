@@ -367,11 +367,25 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
             ) : !isDc(st.bestSocket.connector) ? (
               <span className="text-warn"> · Carga lenta — sin adaptador · {formatKw(st.chargeKw)}</span>
             ) : null}
-            {" · "}llegas al {formatPct(st.arriveSoc)}, mínimo {formatPct(st.minDepartSoc)}, sales al{" "}
-            {formatPct(st.departSoc)} ({formatKwh(st.energyAddedKwh)}, {formatMinutes(st.chargeMinutes)}, alcance{" "}
-            {formatKm(st.rangeGainKm)}). Siguiente tramo{" "}
-            {formatKm(st.kmToNext)}
-            {st.fromRouteKm > 0.15 ? ` · desvío ${formatKm(st.fromRouteKm, 1)}` : ""}.
+            <span className="mt-2 grid grid-cols-3 gap-2">
+              <span className="rounded-md bg-bg px-2 py-1.5">
+                <span className="block text-[11px] uppercase tracking-wide text-subtle">Llegas</span>
+                <span className="font-mono text-sm text-fg">{formatPct(st.arriveSoc)}</span>
+              </span>
+              <span className="rounded-md bg-bg px-2 py-1.5">
+                <span className="block text-[11px] uppercase tracking-wide text-subtle">Mínimo</span>
+                <span className="font-mono text-sm text-warn">{formatPct(st.minDepartSoc)}</span>
+              </span>
+              <span className="rounded-md bg-bg px-2 py-1.5">
+                <span className="block text-[11px] uppercase tracking-wide text-subtle">Sales</span>
+                <span className="font-mono text-sm text-accent">{formatPct(st.departSoc)}</span>
+              </span>
+            </span>
+            <span className="mt-2 block font-mono text-xs text-muted">
+              {formatKwh(st.energyAddedKwh)} · {formatMinutes(st.chargeMinutes)} · alcance {formatKm(st.rangeGainKm)}
+              {" · "}siguiente {formatKm(st.kmToNext)}
+              {st.fromRouteKm > 0.15 ? ` · desvío ${formatKm(st.fromRouteKm, 1)}` : ""}
+            </span>
             <span className="mt-1.5 block text-xs leading-relaxed">
               Llegas al {formatPct(st.arriveSoc)}: es lo que queda al entrar
               {st.fromRouteKm > 0.15 ? `, después del tramo anterior y del desvío de ${formatKm(st.fromRouteKm, 1)}` : ""}.

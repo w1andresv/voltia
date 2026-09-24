@@ -9,9 +9,10 @@ export function envMapboxToken(): string {
   return isMapboxPublicToken(ENV_TOKEN) ? ENV_TOKEN : "";
 }
 
-export function mapboxTileUrl(token: string): string {
+export function mapboxTileUrl(token: string, scheme: "light" | "dark" = "dark"): string {
   const access = encodeURIComponent(token.trim());
-  return `https://api.mapbox.com/styles/v1/mapbox/navigation-night-v1/tiles/256/{z}/{x}/{y}?access_token=${access}`;
+  const style = scheme === "light" ? "navigation-day-v1" : "navigation-night-v1";
+  return `https://api.mapbox.com/styles/v1/mapbox/${style}/tiles/256/{z}/{x}/{y}?access_token=${access}`;
 }
 
 export const MAPBOX_ATTRIBUTION =

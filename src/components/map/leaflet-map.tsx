@@ -18,7 +18,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
 import { isDc } from "@/domain/charging";
 import { CONNECTOR_LABEL, type Charger, type LatLon, type RouteSample } from "@/domain/types";
-import { MAP_COLORS, socColor } from "@/lib/map-colors";
+import { mapPalette, socColor, type MapPalette } from "@/lib/map-colors";
+import { useColorScheme } from "@/components/shell/theme";
 import { formatKm, formatKwh, formatKw, formatMinutes, formatPct } from "@/lib/format";
 import { ChargerFacts } from "@/components/planner/charger-facts";
 import { suppressMapClicks } from "@/components/planner/map-click";
@@ -28,10 +29,10 @@ import type { ChargerAction, LeafletMapProps, MapBounds } from "./map-types";
 
 export type { LeafletMapProps };
 
-function pinIcon(kind: "origin" | "dest" | "charger" | "pending") {
+function pinIcon(kind: "origin" | "dest" | "charger" | "pending", colors: MapPalette) {
   const bg =
-    kind === "origin" ? MAP_COLORS.origin : kind === "pending" ? MAP_COLORS.socMid : MAP_COLORS.dest;
-  const fg = kind === "origin" ? "#0b0e12" : kind === "pending" ? "#2a2114" : "#06221d";
+    kind === "origin" ? colors.origin : kind === "pending" ? colors.socMid : colors.dest;
+  const fg = kind === "origin" ? colors.ink : kind === "pending" ? colors.inkWarn : colors.ink;
   const node =
     kind === "origin" ? (
       <MapPin size={14} color={fg} strokeWidth={2.4} />
@@ -53,34 +54,37 @@ function pinIcon(kind: "origin" | "dest" | "charger" | "pending") {
   });
 }
 
-function stopIcon(n: number) {
+function stopIcon(n: number, colors: MapPalette, kind: "direct" | "adapter" | "slow" = "direct") {
+  const bg = kind === "adapter" ? colors.adapter : kind === "slow" ? colors.slow : colors.dest;
+  const fg = kind === "slow" ? colors.ink : kind === "adapter" ? colors.inkWarn : colors.ink;
   const html = renderToStaticMarkup(
     <div
       className="voltia-pin"
       style={{
-        background: MAP_COLORS.dest,
-        width: 32,
-        height: 32,
-        boxShadow: "0 0 0 3px rgb(61 222 200 / 0.35), 0 8px 16px -10px rgb(0 0 0 / 0.7)",
+        background: bg,
+        width: 30,
+        height: 30,
       }}
     >
-      <span style={{ color: "#06221d", fontWeight: 700, fontSize: 13, lineHeight: 1 }}>{n}</span>
+      <span style={{ color: fg, fontWeight: 700, fontSize: 13, lineHeight: 1 }}>{n}</span>
     </div>,
   );
   return L.divIcon({
     className: "voltia-marker",
     html,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
   });
 }
 
-const ICONS = {
-  origin: pinIcon("origin"),
-  dest: pinIcon("dest"),
-  charger: pinIcon("charger"),
-  pending: pinIcon("pending"),
-};
+function markerIcons(colors: MapPalette) {
+  return {
+    origin: pinIcon("origin", colors),
+    dest: pinIcon("dest", colors),
+    charger: pinIcon("charger", colors),
+    pending: pinIcon("pending", colors),
+  };
+}
 
 function Fit({ points }: { points: LatLon[] }) {
   const map = useMap();
@@ -231,14 +235,17 @@ function sampleAt(samples: RouteSample[], km: number): RouteSample | null {
   return best;
 }
 
-function coloredSegments(samples: RouteSample[]): { positions: [number, number][]; color: string }[] {
+function coloredSegments(
+  samples: RouteSample[],
+  colors: MapPalette,
+): { positions: [number, number][]; color: string }[] {
   const segs: { positions: [number, number][]; color: string }[] = [];
   if (samples.length < 2) return segs;
   let current: [number, number][] = [[samples[0]!.lat, samples[0]!.lon]];
-  let color = socColor(samples[0]!.soc);
+  let color = socColor(samples[0]!.soc, colors);
   for (let i = 1; i < samples.length; i++) {
     const s = samples[i]!;
-    const c = socColor(s.soc);
+    const c = socColor(s.soc, colors);
     current.push([s.lat, s.lon]);
     if (c !== color) {
       segs.push({ positions: current, color });
@@ -317,9 +324,11 @@ function cullChargers(chargers: Charger[], bounds: L.LatLngBounds, zoom: number)
 function ChargerDots({
   chargers,
   action,
+  icons,
 }: {
   chargers: Charger[];
   action: ChargerAction;
+  icons: ReturnType<typeof markerIcons>;
 }) {
   const map = useMap();
   const [view, setView] = useState(() => ({ bounds: map.getBounds(), zoom: map.getZoom() }));
@@ -349,7 +358,7 @@ function ChargerDots({
         <Marker
           key={c.id}
           position={[c.lat, c.lon]}
-          icon={c.status === "pending" ? ICONS.pending : ICONS.charger}
+          icon={c.status === "pending" ? icons.pending : icons.charger}
           eventHandlers={{ click: () => setPicked(c) }}
         />
       ))}
@@ -400,7 +409,7 @@ function BoundsReporter({ onChange }: { onChange?: (b: MapBounds) => void }) {
   return null;
 }
 
-function MapboxTiles({ token }: { token: string }) {
+function MapboxTiles({ token, scheme }: { token: string; scheme: "light" | "dark" }) {
   const setToken = usePlanner((s) => s.setMapboxToken);
   const fails = useRef(0);
   useEffect(() => {
@@ -418,7 +427,8 @@ function MapboxTiles({ token }: { token: string }) {
   return (
     <TileLayer
       attribution={MAPBOX_ATTRIBUTION}
-      url={mapboxTileUrl(token)}
+      key={scheme}
+      url={mapboxTileUrl(token, scheme)}
       tileSize={256}
       maxZoom={22}
       keepBuffer={2}
@@ -445,6 +455,9 @@ export function LeafletMap({
   onViewChange,
 }: LeafletMapProps) {
   const mapboxToken = usePlanner((s) => s.mapboxToken);
+  const scheme = useColorScheme();
+  const colors = mapPalette(scheme);
+  const icons = useMemo(() => markerIcons(colors), [colors]);
   const fitPoints = useMemo(() => {
     // Encuadra todas las rutas encontradas, así elegir otra no mueve el mapa.
     if (plan?.geometry.length) return [...plan.geometry, ...alternatives.flatMap((a) => a.geometry)];
@@ -454,7 +467,7 @@ export function LeafletMap({
     return pts;
   }, [plan, alternatives, origin, destination]);
 
-  const segs = useMemo(() => (plan ? coloredSegments(plan.samples) : []), [plan]);
+  const segs = useMemo(() => (plan ? coloredSegments(plan.samples, colors) : []), [plan, colors]);
   const hover = plan && hoverKm != null ? sampleAt(plan.samples, hoverKm) : null;
   const extras = useMemo(() => {
     if (!showAllChargers) return [];
@@ -476,7 +489,7 @@ export function LeafletMap({
       <Ready />
       {onViewChange ? <BoundsReporter onChange={onViewChange} /> : null}
       <ZoomControl position="topright" />
-      {mapboxToken ? <MapboxTiles token={mapboxToken} /> : null}
+      {mapboxToken ? <MapboxTiles token={mapboxToken} scheme={scheme} /> : null}
       <InteractionLock locked={mapLocked} />
       <ClickTrap enabled={mapClickEnabled && !mapLocked} onMapClick={onMapClick} />
       {plan ? <HoverTrap samples={plan.samples} onHoverKm={onHoverKm} /> : null}
@@ -493,13 +506,13 @@ export function LeafletMap({
           <Fragment key={`alt-${alt.id}`}>
             <Polyline
               positions={positions}
-              pathOptions={{ color: MAP_COLORS.alternative, weight: 5, opacity: 0.55, lineCap: "round", lineJoin: "round" }}
+              pathOptions={{ color: colors.alternative, weight: 5, opacity: 0.55, lineCap: "round", lineJoin: "round" }}
               interactive={false}
             />
             {/* Línea ancha e invisible: más fácil de tocar en el celular. */}
             <Polyline
               positions={positions}
-              pathOptions={{ color: MAP_COLORS.alternative, weight: 18, opacity: 0.01 }}
+              pathOptions={{ color: colors.alternative, weight: 18, opacity: 0.01 }}
               eventHandlers={{ click: select }}
             >
               <Tooltip sticky>
@@ -519,12 +532,12 @@ export function LeafletMap({
       ))}
 
       {origin ? (
-        <Marker position={[origin.lat, origin.lon]} icon={ICONS.origin}>
+        <Marker position={[origin.lat, origin.lon]} icon={icons.origin}>
           <Popup>{origin.label}</Popup>
         </Marker>
       ) : null}
       {destination ? (
-        <Marker position={[destination.lat, destination.lon]} icon={ICONS.dest}>
+        <Marker position={[destination.lat, destination.lon]} icon={icons.dest}>
           <Popup>{destination.label}</Popup>
         </Marker>
       ) : null}
@@ -533,7 +546,11 @@ export function LeafletMap({
         <Marker
           key={`stop-${st.charger.id}`}
           position={[st.charger.lat, st.charger.lon]}
-          icon={stopIcon(i + 1)}
+          icon={stopIcon(
+            i + 1,
+            colors,
+            st.adapter ? "adapter" : !isDc(st.bestSocket.connector) ? "slow" : "direct",
+          )}
           zIndexOffset={600}
         >
           <Popup>
@@ -583,13 +600,13 @@ export function LeafletMap({
         </Marker>
       ))}
 
-      {extras.length ? <ChargerDots chargers={extras} action={chargerAction} /> : null}
+      {extras.length ? <ChargerDots chargers={extras} action={chargerAction} icons={icons} /> : null}
 
       {hover ? (
         <CircleMarker
           center={[hover.lat, hover.lon]}
           radius={8}
-          pathOptions={{ color: socColor(hover.soc), fillColor: socColor(hover.soc), fillOpacity: 1, weight: 2 }}
+          pathOptions={{ color: socColor(hover.soc, colors), fillColor: socColor(hover.soc, colors), fillOpacity: 1, weight: 2 }}
         />
       ) : null}
     </MapContainer>

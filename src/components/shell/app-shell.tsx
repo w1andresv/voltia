@@ -12,7 +12,9 @@ import { BatteryDialog } from "@/components/planner/battery-panel";
 import { ConditionsDialog } from "@/components/planner/conditions-form";
 import { MyTripsDialog } from "@/components/trips/my-trips-dialog";
 import { VehicleEditor } from "@/components/planner/vehicle-editor";
+import { ThemeToggle } from "@/components/shell/theme";
 import { Button } from "@/components/ui/button";
+import { canSeeStationsMenu } from "@/lib/stations-access";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -51,11 +53,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const actor = useActor();
+  const links = canSeeStationsMenu(actor.email) ? LINKS : LINKS.filter((item) => item.to !== "/electrolineras");
   const title = pathname.startsWith("/electrolineras") ? "Electrolineras" : "Planificar ruta";
 
   return (
     <>
-      <header className="pointer-events-auto fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-bg/90 px-2 backdrop-blur md:px-4">
+      <header className="pointer-events-auto fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-bg/95 px-2 backdrop-blur-md md:px-4">
         <Button
           type="button"
           variant="ghost"
@@ -76,7 +80,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="truncate text-xs text-muted">Voltia</div>
           </div>
         </div>
-        <div className="ml-auto shrink-0">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <ThemeToggle />
           <AccountMenu />
         </div>
       </header>
@@ -98,7 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="mt-6 grid gap-1 px-3" aria-label="Principal">
-          {LINKS.map((item) => {
+          {links.map((item) => {
             const active =
               item.to === "/planificar"
                 ? pathname === "/" || pathname.startsWith("/planificar")
@@ -257,12 +262,16 @@ function Drawer({
   const [drag, setDrag] = useState(0);
 
   function onPointerDown(e: React.PointerEvent) {
+    if (e.button !== 0) return;
     startX.current = e.clientX;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
   function onPointerMove(e: React.PointerEvent) {
     if (startX.current == null) return;
-    setDrag(Math.min(0, e.clientX - startX.current));
+    const dx = Math.min(0, e.clientX - startX.current);
+    if (dx > -10) return;
+    const el = e.currentTarget as HTMLElement;
+    if (!el.hasPointerCapture(e.pointerId)) el.setPointerCapture(e.pointerId);
+    setDrag(dx);
   }
   function onPointerUp() {
     if (startX.current == null) return;
