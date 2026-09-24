@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { VERIFIED_DC_ADAPTERS } from "@/domain/charging";
 import { CONNECTOR_LABEL, type ConnectorType, type Vehicle } from "@/domain/types";
 import { mixedCycleKwhPer100, wltpKwhPer100 } from "@/domain/energy";
 import { emptyCustomVehicle, vehicleLabel } from "@/domain/vehicles";
@@ -318,6 +319,17 @@ function VehicleForm({
           })}
         </div>
       </div>
+      {(() => {
+        const offered = VERIFIED_DC_ADAPTERS.filter((a) => value.connectors.includes(a.to));
+        if (!offered.length) return null;
+        return (
+          <p className="text-xs leading-relaxed text-muted">
+            Adaptadores que la ruta puede proponer, porque están definidos:{" "}
+            {offered.map((a) => `${CONNECTOR_LABEL[a.from]} → ${CONNECTOR_LABEL[a.to]}`).join(", ")}. El resto de
+            combinaciones no se asume.
+          </p>
+        );
+      })()}
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancelar

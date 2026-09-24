@@ -64,6 +64,8 @@ export async function fetchMapboxCandidates(
     // steps=true: cada paso trae sus intersecciones con la clase vial del
     // proveedor (mapbox_streets_v8.class), base de la jerarquía de vías.
     steps: "true",
+    // Metros y segundos entre cada par de puntos: velocidad por tramo para el consumo.
+    annotations: "distance,duration",
     // Sin `language`: Mapbox exige steps=true para usarlo y, si no, rechaza la
     // petición entera (eso hacía caer todo a OSRM y dar 198 km en vez de 212).
   });

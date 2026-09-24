@@ -1,11 +1,17 @@
 import type { RoadMix } from "./road-hierarchy";
-import type { VehicleShape, PlaceShape, TripConditionsShape } from "@/domain/schemas";
+import type {
+  VehicleShape,
+  PlaceShape,
+  TripConditionsShape,
+  RegenLevelShape,
+} from "@/domain/schemas";
 
 export type ConnectorType = "ccs2" | "ccs1" | "type2" | "chademo" | "nacs" | "gb_t";
 
 export type DrivingStyle = "efficient" | "normal" | "sport";
 export type ClimateControl = "off" | "eco" | "normal" | "max";
 export type SafetyMode = "conservative" | "normal" | "low" | "custom";
+export type RegenLevel = RegenLevelShape;
 export type PlanningMode = "fastest" | "efficient" | "fewer_stops" | "safer" | "custom";
 export type EnergyMode = "manual" | "estimated";
 export type ChargerSource = "osm" | "catalog" | "community" | "plugshare";
@@ -81,13 +87,49 @@ export interface Charger {
   fromRouteKm?: number;
 }
 
+export interface ChargeChoice {
+  mode: "direct" | "adapter" | "ac";
+  socket: ChargerSocket;
+  adapter?: { from: ConnectorType; to: ConnectorType };
+  nominalKw: number;
+  chargeKw: number;
+  arriveSoc: number;
+  minDepartSoc: number;
+  departSoc: number;
+  energyAddedKwh: number;
+  chargeMinutes: number;
+  rangeGainKm: number;
+  reachesNext: boolean;
+}
+
+export interface ChargeAlternative {
+  mode: "ac";
+  socket: ChargerSocket;
+  arriveSoc: number;
+  minDepartSoc: number;
+  departSoc: number;
+  energyAddedKwh: number;
+  chargeKw: number;
+  chargeMinutes: number;
+  rangeGainKm: number;
+}
+
 export interface ChargeStop {
   charger: Charger;
   arriveSoc: number;
   departSoc: number;
+  /** Mínimo para llegar al siguiente punto o al destino, con el margen de seguridad. */
+  minDepartSoc: number;
   chargeMinutes: number;
   energyAddedKwh: number;
   bestSocket: ChargerSocket;
+  /** Presente cuando la opción elegida usa un adaptador de la lista verificada. */
+  adapter?: { from: ConnectorType; to: ConnectorType };
+  /** Carga lenta en la misma estación, cuando el plan usa otra opción. */
+  alternative?: ChargeAlternative;
+  /** Directo, cada adaptador definido y la carga lenta, si existen. */
+  options?: ChargeChoice[];
+  rangeGainKm: number;
   kmAlongRoute: number;
   fromRouteKm: number;
   detourKm: number;
@@ -108,6 +150,8 @@ export interface WeatherSnapshot {
   temperatureC: number;
   windKmh: number;
   windDirDeg: number;
+  /** Altura (m) de la celda del pronóstico: la temperatura se corrige desde ahí. */
+  elevationM?: number;
   source?: string;
 }
 
@@ -234,6 +278,12 @@ export const STATION_AVAIL_LABEL: Record<StationAvailability, string> = {
   offline: "Fuera de servicio",
 };
 
+export const REGEN_LEVEL_LABEL: Record<RegenLevel, string> = {
+  low: "Baja",
+  medium: "Media",
+  high: "Alta",
+};
+
 export const ROUTING_ENGINE_LABEL: Record<RoutingEngine, string> = {
   "mapbox-traffic": "Mapbox (tráfico)",
   mapbox: "Mapbox",
@@ -253,7 +303,7 @@ export const DEFAULT_CONDITIONS: TripConditions = {
   customSafetyPct: 15,
   planningMode: "fastest",
   allowBelowSafety: false,
-  regenPct: 20,
+  regenLevel: "medium",
 };
 
 export const DRIVER_KG = 75;

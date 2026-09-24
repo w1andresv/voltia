@@ -13,6 +13,7 @@ import {
 } from "@/domain/types";
 import { DEFAULT_VEHICLE_ID, VEHICLE_CATALOG } from "@/domain/vehicles";
 import { LEGACY_V2_CATALOG } from "@/domain/legacy-catalog";
+import { RegenLevelSchema, regenLevelFromLegacyPct } from "@/domain/schemas";
 import { extractOwnVehicles } from "@/domain/user/catalog-rules";
 import { createGuestStorage, MAX_GUEST_VEHICLES } from "@/infrastructure/user-data/guest-storage";
 import { envMapboxToken, isMapboxPublicToken } from "@/lib/mapbox";
@@ -113,9 +114,20 @@ interface PlannerState {
   nearbyChargers: () => Charger[];
 }
 
-function clampTripRegen(n: unknown): number {
-  const v = typeof n === "number" && Number.isFinite(n) ? n : 20;
-  return Math.min(80, Math.max(5, v));
+/**
+ * Nivel de regeneración de las condiciones guardadas. Con `tripRegenV` 3 ya se
+ * guarda el nivel; con 2 venía un porcentaje (`regenPct`) que se traduce; antes
+ * de eso el valor no era confiable y se usa el de por defecto. Exportada para probarla.
+ */
+export function storedRegenLevel(
+  conditions: unknown,
+  version: number | undefined,
+): TripConditions["regenLevel"] {
+  const c = (conditions ?? {}) as { regenLevel?: unknown; regenPct?: unknown };
+  const level = RegenLevelSchema.safeParse(c.regenLevel);
+  if (level.success) return level.data;
+  if (version === 2) return regenLevelFromLegacyPct(c.regenPct);
+  return DEFAULT_CONDITIONS.regenLevel;
 }
 
 type PlanInputs = Pick<
@@ -201,11 +213,7 @@ export const usePlanner = create<PlannerState>()(
         }),
       patchConditions: (p) =>
         set((s) => {
-          const conditions = {
-            ...s.conditions,
-            ...p,
-            regenPct: p.regenPct != null ? clampTripRegen(p.regenPct) : s.conditions.regenPct,
-          };
+          const conditions = { ...s.conditions, ...p };
           const next = { ...s, conditions };
           return { conditions, ...withRecomputedPlans(next) };
         }),
@@ -351,21 +359,24 @@ export const usePlanner = create<PlannerState>()(
         selectedVehicleId: s.selectedVehicleId,
         conditions: s.conditions,
         mapboxToken: s.mapboxToken,
-        tripRegenV: 2,
+        tripRegenV: 3,
       }),
       migrate: (persisted) => migratePlannerState(persisted),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<PlannerState> & { tripRegenV?: number };
         const storedToken = (p.mapboxToken ?? "").trim();
         const storedConditions = p.conditions;
-        const regenPct = p.tripRegenV === 2 ? clampTripRegen(storedConditions?.regenPct) : 20;
+        const regenLevel = storedRegenLevel(storedConditions, p.tripRegenV);
+        const { regenPct: _legacyRegen, ...restConditions } = (storedConditions ??
+          {}) as Partial<TripConditions> & { regenPct?: unknown };
+        void _legacyRegen;
         return {
           ...current,
           selectedVehicleId:
             typeof p.selectedVehicleId === "string"
               ? p.selectedVehicleId
               : current.selectedVehicleId,
-          conditions: { ...DEFAULT_CONDITIONS, ...(storedConditions ?? {}), regenPct },
+          conditions: { ...DEFAULT_CONDITIONS, ...restConditions, regenLevel },
           mapboxToken: isMapboxPublicToken(storedToken) ? storedToken : current.mapboxToken,
           mapBounds: null,
         };

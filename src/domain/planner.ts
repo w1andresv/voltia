@@ -1,5 +1,5 @@
 import { compareByHierarchy } from "./road-hierarchy";
-import { bestSocket, chargeTimeMinutes, effectiveChargeKw, isDc } from "./charging";
+import { chargeTimeMinutes, effectiveChargeKw, isDc, routePlugs, routeSocket } from "./charging";
 import {
   STYLE_SPEED_FACTOR,
   annotateEnergy,
@@ -9,8 +9,11 @@ import {
 } from "./energy";
 import { haversineKm } from "./geo";
 import type {
+  ChargeChoice,
   ChargeStop,
   Charger,
+  ChargerSocket,
+  ConnectorType,
   ItineraryNode,
   Place,
   RawRoute,
@@ -27,8 +30,24 @@ const PREFERRED_FROM_ROUTE_KM = 5;
 const MAX_FROM_ROUTE_KM = 12;
 const MIN_PROGRESS_KM = 4;
 const DETOUR_SPEED_KMH = 50;
+const FLAT_CURVE = [
+  { soc: 0, powerFactor: 1 },
+  { soc: 100, powerFactor: 1 },
+];
 
-type EnergyCtx = { vehicle: Vehicle; conditions: TripConditions; weather: WeatherSnapshot | null };
+function rangeFromEnergy(vehicle: Vehicle, kwh: number): number {
+  if (!(vehicle.batteryKwh > 0)) return 0;
+  return (kwh / vehicle.batteryKwh) * vehicle.rangeKm;
+}
+
+
+
+type EnergyCtx = {
+  vehicle: Vehicle;
+  conditions: TripConditions;
+  weather: WeatherSnapshot | null;
+  originAltitudeM?: number;
+};
 
 export function attachChargersToRoute(
   chargers: Charger[],
@@ -89,7 +108,8 @@ function neededDepartSoc(args: {
 interface Candidate {
   charger: Charger;
   arriveSoc: number;
-  socket: NonNullable<ReturnType<typeof bestSocket>>;
+  socket: ChargerSocket;
+  adapter: { from: ConnectorType; to: ConnectorType } | null;
   socketKw: number;
   sIdx: number;
   fromRouteKm: number;
@@ -106,7 +126,9 @@ function arriveAt(
 ): { arrive: number; detourKwh: number; sIdx: number } | null {
   const sIdx = charger.nearestSampleIndex ?? 0;
   if (sIdx <= fromIdx) return null;
-  const detourKwh = segmentEnergyKwh(charger.detourKm ?? 0, 0, DETOUR_SPEED_KMH, ctx, soc);
+  const detourKwh = segmentEnergyKwh(charger.detourKm ?? 0, 0, DETOUR_SPEED_KMH, ctx, soc, {
+    altitudeM: samples[sIdx]?.elevM,
+  });
   const e = energyBetween(samples, fromIdx, sIdx) + detourKwh;
   return { arrive: socAfter(soc, e, cap), detourKwh, sIdx };
 }
@@ -154,7 +176,7 @@ function pickStops(args: {
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
   const maxTravel = Math.min(100, vehicle.maxSocTravel);
-  const ctx: EnergyCtx = { vehicle, conditions, weather };
+  const ctx: EnergyCtx = { vehicle, conditions, weather, originAltitudeM: samples[0]?.elevM };
   const floor = conditions.allowBelowSafety ? 2 : safety;
   const destKm = samples[destIdx]?.km ?? 0;
 
@@ -169,7 +191,7 @@ function pickStops(args: {
 
   const usable = args.chargers.filter((c) => {
     if (!isVerifiedForPlanning(c)) return false;
-    if (!bestSocket(c, vehicle)) return false;
+    if (!routeSocket(c, vehicle)) return false;
     const sIdx = c.nearestSampleIndex ?? 0;
     return sIdx > 0 && sIdx < destIdx;
   });
@@ -194,20 +216,26 @@ function pickStops(args: {
     return false;
   };
 
-  const collect = (fromIdx: number, fromSoc: number, currentKm: number): Candidate[] => {
+  const collect = (
+    fromIdx: number,
+    fromSoc: number,
+    currentKm: number,
+    minArrive: number,
+  ): Candidate[] => {
     const out: Candidate[] = [];
     for (const ch of usable) {
       if (stops.some((s) => s.charger.id === ch.id)) continue;
       if ((ch.nearestKm ?? 0) < currentKm + MIN_PROGRESS_KM) continue;
-      const sock = bestSocket(ch, vehicle);
-      if (!sock) continue;
+      const plug = routeSocket(ch, vehicle);
+      if (!plug) continue;
       const hit = arriveAt(ch, fromIdx, fromSoc, samples, cap, ctx);
-      if (!hit || hit.arrive < floor) continue;
+      if (!hit || hit.arrive < minArrive) continue;
       out.push({
         charger: ch,
         arriveSoc: hit.arrive,
-        socket: sock,
-        socketKw: effectiveChargeKw(sock, vehicle),
+        socket: plug.socket,
+        adapter: plug.adapter,
+        socketKw: effectiveChargeKw(plug.socket, vehicle),
         sIdx: hit.sIdx,
         fromRouteKm: fromRouteKmOf(ch),
         detourKwh: hit.detourKwh,
@@ -229,6 +257,16 @@ function pickStops(args: {
       if (cont.length) pool = cont;
       else if (close.length) pool = close;
     }
+    const fastOk = pool.filter(
+      (c) => isDc(c.socket.connector) && continuationOk(c.sIdx, maxTravel, c.charger.id),
+    );
+    if (fastOk.length) pool = fastOk;
+    else {
+      const slowOk = pool.filter(
+        (c) => !isDc(c.socket.connector) && continuationOk(c.sIdx, maxTravel, c.charger.id),
+      );
+      if (slowOk.length) pool = slowOk;
+    }
     if (conditions.planningMode !== "fewer_stops") {
       const windowed = pool.filter((c) => c.arriveSoc <= 40);
       if (windowed.length) pool = windowed;
@@ -236,7 +274,38 @@ function pickStops(args: {
     return pool;
   };
 
+  const minimumDepart = (pick: Candidate): number => {
+    let nextIdx = destIdx;
+    let detour = pick.detourKwh;
+    let reserve = arrivalTarget;
+    let nearest = Infinity;
+    for (const ch of usable) {
+      if (ch.id === pick.charger.id) continue;
+      if (stops.some((s) => s.charger.id === ch.id)) continue;
+      const hit = arriveAt(ch, pick.sIdx, maxTravel, samples, cap, ctx);
+      if (!hit || hit.arrive < 2) continue;
+      const km = ch.nearestKm ?? Infinity;
+      if (km < nearest) {
+        nearest = km;
+        nextIdx = hit.sIdx;
+        detour = pick.detourKwh + hit.detourKwh;
+        reserve = safety;
+      }
+    }
+    const need = neededDepartSoc({
+      samples,
+      fromIdx: pick.sIdx,
+      destIdx: nextIdx,
+      arrivalTarget: reserve,
+      capacity: cap,
+      detourKwh: detour,
+    });
+    return Math.min(maxTravel, Math.max(need, pick.arriveSoc + 1));
+  };
+
   const chooseDepart = (pick: Candidate): number => {
+    if (!isDc(pick.socket.connector)) return minimumDepart(pick);
+
     const destNeed = neededDepartSoc({
       samples,
       fromIdx: pick.sIdx,
@@ -274,13 +343,14 @@ function pickStops(args: {
       if (stops.some((s) => s.charger.id === ch.id)) continue;
       const hit = arriveAt(ch, pick.sIdx, maxTravel, samples, cap, ctx);
       if (!hit || hit.arrive < floor) continue;
-      const sock = bestSocket(ch, vehicle);
-      if (!sock) continue;
+      const plug = routeSocket(ch, vehicle);
+      if (!plug) continue;
       const cand: Candidate = {
         charger: ch,
         arriveSoc: hit.arrive,
-        socket: sock,
-        socketKw: effectiveChargeKw(sock, vehicle),
+        socket: plug.socket,
+        adapter: plug.adapter,
+        socketKw: effectiveChargeKw(plug.socket, vehicle),
         sIdx: hit.sIdx,
         fromRouteKm: fromRouteKmOf(ch),
         detourKwh: hit.detourKwh,
@@ -312,7 +382,10 @@ function pickStops(args: {
     if (canReachDestFrom(idx, soc)) break;
 
     const currentKm = samples[idx]?.km ?? 0;
-    const raw = collect(idx, soc, currentKm);
+    // Primero el margen de seguridad. Si ningún cargador cabe ahí, se usa el
+    // que sí se alcanza (aunque se llegue justo): es el punto y la carga a mostrar.
+    let raw = collect(idx, soc, currentKm, floor);
+    if (!raw.length && floor > 2) raw = collect(idx, soc, currentKm, 2);
     if (!raw.length) {
       if (conditions.allowBelowSafety) {
         return { stops, feasible: true, reason: NO_VERIFIED_STOP_REASON };
@@ -336,58 +409,124 @@ function pickStops(args: {
     });
 
     const pick = pool[0]!;
+    const slow = !isDc(pick.socket.connector);
     let chargeTo = chooseDepart(pick);
-    chargeTo = Math.min(100, Math.max(chargeTo, pick.arriveSoc + 8));
-    if (
-      chargeTo > maxTravel &&
-      neededDepartSoc({
-        samples,
-        fromIdx: pick.sIdx,
-        destIdx,
-        arrivalTarget,
-        capacity: cap,
-        detourKwh: pick.detourKwh,
-      }) <=
-        maxTravel + 1
-    ) {
-      chargeTo = maxTravel;
-    }
-    if (
-      !continuationOk(pick.sIdx, chargeTo, pick.charger.id) &&
-      continuationOk(pick.sIdx, maxTravel, pick.charger.id)
-    ) {
-      chargeTo = maxTravel;
+    if (!slow) {
+      chargeTo = Math.min(100, Math.max(chargeTo, pick.arriveSoc + 8));
+      if (
+        chargeTo > maxTravel &&
+        neededDepartSoc({
+          samples,
+          fromIdx: pick.sIdx,
+          destIdx,
+          arrivalTarget,
+          capacity: cap,
+          detourKwh: pick.detourKwh,
+        }) <=
+          maxTravel + 1
+      ) {
+        chargeTo = maxTravel;
+      }
+      if (
+        !continuationOk(pick.sIdx, chargeTo, pick.charger.id) &&
+        continuationOk(pick.sIdx, maxTravel, pick.charger.id)
+      ) {
+        chargeTo = maxTravel;
+      }
     }
 
-    const peak = isDc(pick.socket.connector) ? vehicle.dcMaxKw : vehicle.acMaxKw;
-    const minutes = chargeTimeMinutes(
-      cap,
-      pick.arriveSoc,
-      chargeTo,
-      peak,
-      pick.socket.powerKw,
-      vehicle.chargeCurve,
-    );
+    const minDepartSoc = minimumDepart(pick);
+    const reachesNext = continuationOk(pick.sIdx, maxTravel, pick.charger.id);
+    const options: ChargeChoice[] = routePlugs(pick.charger, vehicle)
+      .map((plug) => {
+        const acMode = !isDc(plug.socket.connector);
+        const leave = acMode ? minDepartSoc : chargeTo;
+        const chargeKw = effectiveChargeKw(plug.socket, vehicle);
+        const energyAddedKwh = Math.max(0, ((leave - pick.arriveSoc) / 100) * cap);
+        return {
+          mode: plug.adapter ? ("adapter" as const) : acMode ? ("ac" as const) : ("direct" as const),
+          socket: plug.socket,
+          adapter: plug.adapter ?? undefined,
+          nominalKw: plug.socket.powerKw,
+          chargeKw,
+          arriveSoc: pick.arriveSoc,
+          minDepartSoc,
+          departSoc: leave,
+          energyAddedKwh,
+          chargeMinutes: chargeTimeMinutes(
+            cap,
+            pick.arriveSoc,
+            leave,
+            acMode ? vehicle.acMaxKw : vehicle.dcMaxKw,
+            chargeKw,
+            acMode ? FLAT_CURVE : vehicle.chargeCurve,
+          ),
+          rangeGainKm: rangeFromEnergy(vehicle, energyAddedKwh),
+          reachesNext,
+        };
+      })
+      .sort((a, b) => {
+        if (a.reachesNext !== b.reachesNext) return a.reachesNext ? -1 : 1;
+        if (b.chargeKw !== a.chargeKw) return b.chargeKw - a.chargeKw;
+        const rank = { direct: 0, adapter: 1, ac: 2 };
+        return rank[a.mode] - rank[b.mode];
+      });
+    const chosen = options[0] ?? {
+      socket: pick.socket,
+      adapter: pick.adapter ?? undefined,
+      chargeKw: pick.socketKw,
+      arriveSoc: pick.arriveSoc,
+      minDepartSoc,
+      departSoc: chargeTo,
+      energyAddedKwh: ((chargeTo - pick.arriveSoc) / 100) * cap,
+      chargeMinutes: chargeTimeMinutes(
+        cap,
+        pick.arriveSoc,
+        chargeTo,
+        slow ? vehicle.acMaxKw : vehicle.dcMaxKw,
+        pick.socketKw,
+        slow ? FLAT_CURVE : vehicle.chargeCurve,
+      ),
+      rangeGainKm: 0,
+    };
+    const acOpt = options.find((o) => o.mode === "ac" && o.socket !== chosen.socket);
     const detourKm = pick.charger.detourKm ?? pick.fromRouteKm * 2;
 
     stops.push({
       charger: pick.charger,
-      arriveSoc: pick.arriveSoc,
-      departSoc: chargeTo,
-      chargeMinutes: minutes,
-      energyAddedKwh: ((chargeTo - pick.arriveSoc) / 100) * cap,
-      bestSocket: pick.socket,
+      arriveSoc: chosen.arriveSoc,
+      departSoc: chosen.departSoc,
+      minDepartSoc: chosen.minDepartSoc,
+      chargeMinutes: chosen.chargeMinutes,
+      energyAddedKwh: chosen.energyAddedKwh,
+      bestSocket: chosen.socket,
+      adapter: chosen.adapter,
+      alternative: acOpt
+        ? {
+            mode: "ac",
+            socket: acOpt.socket,
+            arriveSoc: acOpt.arriveSoc,
+            minDepartSoc: acOpt.minDepartSoc,
+            departSoc: acOpt.departSoc,
+            energyAddedKwh: acOpt.energyAddedKwh,
+            chargeKw: acOpt.chargeKw,
+            chargeMinutes: acOpt.chargeMinutes,
+            rangeGainKm: acOpt.rangeGainKm,
+          }
+        : undefined,
+      options,
+      rangeGainKm: chosen.rangeGainKm || rangeFromEnergy(vehicle, chosen.energyAddedKwh),
       kmAlongRoute: pick.charger.nearestKm ?? samples[pick.sIdx]!.km,
       fromRouteKm: pick.fromRouteKm,
       detourKm,
       detourMinutes: detourMinutesOf(detourKm),
-      chargeKw: pick.socketKw,
+      chargeKw: chosen.chargeKw,
       kmToNext: 0,
       nextLabel: "",
     });
 
     idx = pick.sIdx;
-    soc = chargeTo;
+    soc = chosen.departSoc;
   }
 
   const finalSoc = socAfter(soc, energyBetween(samples, idx, destIdx), cap);
@@ -454,7 +593,7 @@ export function buildPlan(args: {
 }): RoutePlan {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
   const safety = safetyPct(conditions);
-  const ctx = { vehicle, conditions, weather };
+  const ctx = { vehicle, conditions, weather, originAltitudeM: raw.samples[0]?.elevM };
 
   const styleSpeed = STYLE_SPEED_FACTOR[conditions.drivingStyle];
   const samplesPre = raw.samples.map((s) => ({

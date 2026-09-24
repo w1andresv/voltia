@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { planTripFn } from "@/server/actions/plan";
 import { ChargerFacts } from "./charger-facts";
 import { DEMO_TRIPS, usePlanner } from "@/lib/store";
-import { formatKm, formatKwh, formatMinutes, formatPct } from "@/lib/format";
+import { isDc } from "@/domain/charging";
+import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { ConsumptionChart } from "./consumption-chart";
 import { ElevationChart } from "./elevation-chart";
@@ -18,7 +19,7 @@ import { PlanStats } from "./stats";
 import { SaveTripButton } from "@/components/trips/save-trip-button";
 import { TripParams } from "./trip-params";
 import { VehicleBar } from "./vehicle-bar";
-import { ROUTING_ENGINE_LABEL, type RoutePlan } from "@/domain/types";
+import { CONNECTOR_LABEL, ROUTING_ENGINE_LABEL, type RoutePlan } from "@/domain/types";
 
 export function TripSetup() {
   const origin = usePlanner((s) => s.origin);
@@ -130,15 +131,6 @@ export function TripSetup() {
           Punto de destino {destination ? "✓" : "— falta"}
         </li>
       </ul>
-      {!canPlan && !planMut.isPending ? (
-        <p className="text-xs text-warn">
-          {!origin && !destination
-            ? "Faltan el punto de inicio y el destino para planificar el viaje."
-            : !origin
-              ? "Falta el punto de inicio. Búscalo o tócalo en el mapa."
-              : "Falta el punto de destino. Búscalo o tócalo en el mapa."}
-        </p>
-      ) : null}
       <div className="flex gap-2">
         <Button
           variant="outline"
@@ -159,33 +151,44 @@ export function TripSetup() {
           Tocar mapa
         </Button>
       </div>
-      <Button
-        className="w-full"
-        disabled={!canPlan}
-        onClick={() => {
-          if (!origin || !destination) {
-            toast.error(
-              !origin && !destination
-                ? "Elige origen y destino antes de planificar."
-                : !origin
-                  ? "Falta el punto de inicio."
-                  : "Falta el punto de destino.",
-            );
-            return;
-          }
-          planMut.mutate();
-        }}
-      >
-        {planMut.isPending ? (
-          <>
-            <LoaderCircle className="size-4 animate-spin" />
-            Calculando ruta y energía
-          </>
-        ) : (
-          "Planificar viaje"
-        )}
-      </Button>
       <TripParams />
+      <div className="space-y-2 pt-1">
+        {!canPlan && !planMut.isPending ? (
+          <p className="text-xs text-warn">
+            {!origin && !destination
+              ? "Faltan el punto de inicio y el destino para planificar el viaje."
+              : !origin
+                ? "Falta el punto de inicio. Búscalo o tócalo en el mapa."
+                : "Falta el punto de destino. Búscalo o tócalo en el mapa."}
+          </p>
+        ) : null}
+        <Button
+          className="h-12 w-full"
+          disabled={!canPlan}
+          onClick={() => {
+            if (!origin || !destination) {
+              toast.error(
+                !origin && !destination
+                  ? "Elige origen y destino antes de planificar."
+                  : !origin
+                    ? "Falta el punto de inicio."
+                    : "Falta el punto de destino.",
+              );
+              return;
+            }
+            planMut.mutate();
+          }}
+        >
+          {planMut.isPending ? (
+            <>
+              <LoaderCircle className="size-4 animate-spin" />
+              Calculando ruta y energía
+            </>
+          ) : (
+            "Planificar viaje"
+          )}
+        </Button>
+      </div>
       {!plan ? (
         <div className="space-y-2">
           <p className="text-xs text-muted">Ejemplos</p>
@@ -253,15 +256,16 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
           <p className="text-sm leading-relaxed text-ok">
             La batería alcanza el destino. No se recomienda ninguna electrolinera.
           </p>
+        ) : plan.stops.length ? (
+          <p className="text-xs leading-relaxed text-muted">
+            {plan.feasible
+              ? "Paradas en electrolineras reales y verificadas sobre la ruta o con un desvío razonable. El SOC de llegada respeta tu margen de seguridad."
+              : "Recarga en el punto que sí alcanza. Con los cargadores de esta ruta no se cubre el margen al llegar."}
+          </p>
         ) : !plan.feasible ? (
           <p className="text-sm leading-relaxed text-danger">
             {plan.infeasibleReason ??
               "No se encontró una electrolinera verificada dentro de la autonomía disponible. No es posible generar una estrategia de recarga segura para este tramo."}
-          </p>
-        ) : plan.stops.length ? (
-          <p className="text-xs leading-relaxed text-muted">
-            Paradas en electrolineras reales y verificadas sobre la ruta o con un desvío razonable.
-            El SOC de llegada respeta tu margen de seguridad.
           </p>
         ) : null}
         <Itinerary plan={plan} />
@@ -336,7 +340,7 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
       </p>
     );
   }
-  if (!plan.feasible) {
+  if (!plan.feasible && plan.stops.length === 0) {
     return (
       <p className="rounded-lg bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-danger">
         {plan.infeasibleReason ?? "No es posible completar el viaje con el margen actual."}
@@ -344,21 +348,66 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
     );
   }
   return (
-    <ul className="space-y-2">
-      {plan.stops.map((st, i) => (
-        <li
-          key={st.charger.id}
-          className="rounded-lg bg-bg-elevated px-3 py-2.5 text-sm leading-relaxed text-muted"
-        >
-          <span className="font-medium text-fg">
-            {i + 1}. {st.charger.name}
-          </span>
-          {" · "}llegas al {formatPct(st.arriveSoc)}, carga a {formatPct(st.departSoc)} (
-          {formatKwh(st.energyAddedKwh)}, {formatMinutes(st.chargeMinutes)}). Siguiente tramo{" "}
-          {formatKm(st.kmToNext)}
-          {st.fromRouteKm > 0.15 ? ` · desvío ${formatKm(st.fromRouteKm, 1)}` : ""}.
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      <ul className="space-y-2">
+        {plan.stops.map((st, i) => (
+          <li
+            key={st.charger.id}
+            className="rounded-lg bg-bg-elevated px-3 py-2.5 text-sm leading-relaxed text-muted"
+          >
+            <span className="font-medium text-fg">
+              {i + 1}. {st.charger.name}
+            </span>
+            {st.adapter ? (
+              <span className="text-warn">
+                {" "}
+                · Necesario adaptador para carga rápida ({CONNECTOR_LABEL[st.adapter.from]} →{" "}
+                {CONNECTOR_LABEL[st.adapter.to]})
+              </span>
+            ) : !isDc(st.bestSocket.connector) ? (
+              <span className="text-warn"> · Carga lenta — sin adaptador · {formatKw(st.chargeKw)}</span>
+            ) : null}
+            {" · "}llegas al {formatPct(st.arriveSoc)}, mínimo {formatPct(st.minDepartSoc)}, sales al{" "}
+            {formatPct(st.departSoc)} ({formatKwh(st.energyAddedKwh)}, {formatMinutes(st.chargeMinutes)}, alcance{" "}
+            {formatKm(st.rangeGainKm)}). Siguiente tramo{" "}
+            {formatKm(st.kmToNext)}
+            {st.fromRouteKm > 0.15 ? ` · desvío ${formatKm(st.fromRouteKm, 1)}` : ""}.
+            <span className="mt-1.5 block text-xs leading-relaxed">
+              Llegas al {formatPct(st.arriveSoc)}: es lo que queda al entrar
+              {st.fromRouteKm > 0.15 ? `, después del tramo anterior y del desvío de ${formatKm(st.fromRouteKm, 1)}` : ""}.
+              {" "}Mínimo {formatPct(st.minDepartSoc)}: lo menos con lo que puedes salir para cubrir los{" "}
+              {formatKm(st.kmToNext)} siguientes
+              {st.nextLabel ? ` hasta ${st.nextLabel}` : " hasta el destino"} y todavía conservar el margen de{" "}
+              {formatPct(plan.safetyPct)}. Sales al {formatPct(st.departSoc)}: es lo que el plan pide cargar, el
+              mínimo más un poco de reserva. De {formatPct(st.arriveSoc)} a {formatPct(st.departSoc)} son{" "}
+              {formatKwh(st.energyAddedKwh)} y {formatMinutes(st.chargeMinutes)}. Esos kWh equivalen a unos{" "}
+              {formatKm(st.rangeGainKm)} de autonomía
+              {st.kmToNext > 0 ? `; el tramo que sigue mide ${formatKm(st.kmToNext)}` : ""}.
+            </span>
+            {st.options && st.options.length > 1 ? (
+              <span className="mt-1 block">
+                {st.options.slice(1).map((option, n) => (
+                  <span key={`${option.socket.connector}-${n}`} className="mt-1 block text-warn">
+                    {option.mode === "adapter" && option.adapter
+                      ? `${CONNECTOR_LABEL[option.adapter.from]} → ${CONNECTOR_LABEL[option.adapter.to]} — ${formatKw(option.nominalKw)} — con adaptador`
+                      : option.mode === "ac"
+                        ? `Carga lenta — sin adaptador · ${formatKw(option.chargeKw)}`
+                        : `Carga directa · ${CONNECTOR_LABEL[option.socket.connector]} · ${formatKw(option.chargeKw)}`}
+                    {" · "}
+                    {formatMinutes(option.chargeMinutes)}
+                    {option.reachesNext ? " · también alcanza para seguir, pero tarda más" : " · no cubre el tramo siguiente"}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {!plan.feasible ? (
+        <p className="text-xs leading-relaxed text-warn">
+          Con esta recarga no se cubre el margen al llegar.
+        </p>
+      ) : null}
+    </div>
   );
 }

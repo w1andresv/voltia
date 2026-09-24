@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LEGACY_V2_CATALOG } from "@/domain/legacy-catalog";
 import { makeVehicle } from "@/domain/user/test-fixtures";
 import { GUEST_KEY } from "@/infrastructure/user-data/guest-storage";
-import { migratePlannerState } from "./store";
+import { migratePlannerState, storedRegenLevel } from "./store";
 
 let data: Map<string, string>;
 beforeEach(() => {
@@ -65,5 +65,23 @@ describe("migratePlannerState (v2 → v3)", () => {
     );
     expect(() => migratePlannerState({ vehicles: many })).not.toThrow();
     expect(JSON.parse(data.get(GUEST_KEY)!).vehicles).toHaveLength(20);
+  });
+});
+
+describe("storedRegenLevel", () => {
+  it("usa el nivel guardado si es válido", () => {
+    expect(storedRegenLevel({ regenLevel: "high" }, 3)).toBe("high");
+  });
+
+  it("con la versión 2 traduce el porcentaje viejo", () => {
+    expect(storedRegenLevel({ regenPct: 5 }, 2)).toBe("low");
+    expect(storedRegenLevel({ regenPct: 20 }, 2)).toBe("medium");
+    expect(storedRegenLevel({ regenPct: 70 }, 2)).toBe("high");
+  });
+
+  it("sin dato confiable queda en media", () => {
+    expect(storedRegenLevel({ regenPct: 70 }, undefined)).toBe("medium");
+    expect(storedRegenLevel(undefined, 3)).toBe("medium");
+    expect(storedRegenLevel({ regenLevel: "turbo" }, 3)).toBe("medium");
   });
 });

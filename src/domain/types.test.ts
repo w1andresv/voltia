@@ -39,7 +39,7 @@ function conditions(overrides: Partial<TripConditions> = {}): TripConditions {
     customSafetyPct: 15,
     planningMode: "fastest",
     allowBelowSafety: false,
-    regenPct: 20,
+    regenLevel: "medium",
     ...overrides,
   };
 }

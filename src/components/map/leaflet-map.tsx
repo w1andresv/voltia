@@ -16,7 +16,8 @@ import L from "leaflet";
 import { Flag, MapPin, Zap } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
-import type { Charger, LatLon, RouteSample } from "@/domain/types";
+import { isDc } from "@/domain/charging";
+import { CONNECTOR_LABEL, type Charger, type LatLon, type RouteSample } from "@/domain/types";
 import { MAP_COLORS, socColor } from "@/lib/map-colors";
 import { formatKm, formatKwh, formatKw, formatMinutes, formatPct } from "@/lib/format";
 import { ChargerFacts } from "@/components/planner/charger-facts";
@@ -540,9 +541,24 @@ export function LeafletMap({
               <div className="font-medium text-fg">
                 Parada {i + 1} — {st.charger.name}
               </div>
+              {st.adapter ? (
+                <div className="mt-1 text-xs font-medium text-warn">
+                  Necesario adaptador para carga rápida · {CONNECTOR_LABEL[st.adapter.from]} →{" "}
+                  {CONNECTOR_LABEL[st.adapter.to]}
+                </div>
+              ) : !isDc(st.bestSocket.connector) ? (
+                <div className="mt-1 text-xs font-medium text-warn">Carga lenta — sin adaptador</div>
+              ) : null}
               <div className="mt-1 text-xs text-accent">
-                Cargar {formatPct(st.arriveSoc)} → {formatPct(st.departSoc)}
+                Llegas al {formatPct(st.arriveSoc)} · mínimo {formatPct(st.minDepartSoc)} · sales al{" "}
+                {formatPct(st.departSoc)}
               </div>
+              {st.alternative ? (
+                <div className="text-xs text-warn">
+                  Carga lenta — sin adaptador · {formatKw(st.alternative.chargeKw)} ·{" "}
+                  {formatMinutes(st.alternative.chargeMinutes)} · alcance {formatKm(st.alternative.rangeGainKm)}
+                </div>
+              ) : null}
               <div className="text-xs text-muted">
                 {formatKwh(st.energyAddedKwh)} · {formatMinutes(st.chargeMinutes)} · {formatKw(st.chargeKw)}
               </div>

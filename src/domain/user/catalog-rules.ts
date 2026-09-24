@@ -73,6 +73,7 @@ export function differsFromCatalog(vehicle: Vehicle, catalog: readonly Vehicle[]
   return (
     !sameScalars ||
     JSON.stringify(vehicle.connectors) !== JSON.stringify(factory.connectors) ||
+    JSON.stringify(vehicle.adapters ?? []) !== JSON.stringify(factory.adapters ?? []) ||
     JSON.stringify(vehicle.chargeCurve) !== JSON.stringify(factory.chargeCurve)
   );
 }

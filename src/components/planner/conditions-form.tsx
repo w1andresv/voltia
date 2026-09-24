@@ -1,9 +1,6 @@
-import { useMemo } from "react";
 import { TriangleAlert } from "lucide-react";
-import { conditionWarnings, previewDelta, type PlanPreview } from "@/domain/conditions-advice";
-import type { DrivingStyle, PlanningMode, SafetyMode, TripConditions } from "@/domain/types";
-import { safetyPct } from "@/domain/types";
-import { rankedPlansFor, usePlanner } from "@/lib/store";
+import { conditionWarnings } from "@/domain/conditions-advice";
+import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,108 +13,29 @@ import {
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-
-const STYLES: { id: DrivingStyle; label: string; hint: string }[] = [
-  { id: "efficient", label: "Eficiente", hint: "≈ −10 % energía, ~7 % más lenta" },
-  { id: "normal", label: "Normal", hint: "Velocidad de la ruta" },
-  { id: "sport", label: "Deportiva", hint: "≈ +15 % energía, ~6 % más rápida" },
-];
-
-const MARGINS: [SafetyMode, string][] = [
-  ["conservative", "Conservador 20%"],
-  ["normal", "Normal 15%"],
-  ["low", "Bajo 10%"],
-  ["custom", "Personalizado"],
-];
-
-function toPreview(p: PlanPreview | undefined): PlanPreview | null {
-  return p
-    ? {
-        energyKwh: p.energyKwh,
-        totalMinutes: p.totalMinutes,
-        stops: p.stops,
-        arrivalSoc: p.arrivalSoc,
-        feasible: p.feasible,
-      }
-    : null;
-}
+import { MODES, usePlanPreviews } from "./use-plan-previews";
 
 /**
- * Vista previa: cómo cambiaría el plan recomendado con cada opción, recalculado
- * sobre las rutas ya encontradas (sin pedir rutas nuevas). Solo con el diálogo
- * abierto y si ya hay un viaje planificado.
+ * Ajustes avanzados: estrategia, permitir bajar del margen, temperatura y
+ * velocidad media. El estilo de conducción y el margen de seguridad están en el
+ * formulario del viaje (TripParams).
  */
-function usePreviews(open: boolean) {
-  const geo = usePlanner((s) => s.geo);
-  const origin = usePlanner((s) => s.origin);
-  const destination = usePlanner((s) => s.destination);
-  const vehicles = usePlanner((s) => s.vehicles);
-  const selectedVehicleId = usePlanner((s) => s.selectedVehicleId);
-  const conditions = usePlanner((s) => s.conditions);
-  return useMemo(() => {
-    if (!open || !geo?.routes.length || !origin || !destination) return null;
-    const inputs = { geo, origin, destination, vehicles, selectedVehicleId, conditions };
-    const with_ = (p: Partial<TripConditions>) =>
-      toPreview(rankedPlansFor(inputs, { ...conditions, ...p })[0]);
-    const current = with_({});
-    if (!current) return null;
-    const text = (p: Partial<TripConditions>) => {
-      const next = with_(p);
-      return next ? previewDelta(current, next) : null;
-    };
-    return {
-      mode: Object.fromEntries(MODES.map((m) => [m.id, text({ planningMode: m.id })])) as Record<
-        PlanningMode,
-        string | null
-      >,
-      margin: Object.fromEntries(MARGINS.map(([id]) => [id, text({ safetyMode: id })])) as Record<
-        SafetyMode,
-        string | null
-      >,
-      style: Object.fromEntries(
-        STYLES.map((st) => [st.id, text({ drivingStyle: st.id })]),
-      ) as Record<DrivingStyle, string | null>,
-    };
-  }, [open, geo, origin, destination, vehicles, selectedVehicleId, conditions]);
-}
-
-const MODES: { id: PlanningMode; label: string; hint: string }[] = [
-  { id: "fastest", label: "Más rápida", hint: "Menos tiempo total, cargadores de alta potencia." },
-  {
-    id: "efficient",
-    label: "Más eficiente",
-    hint: "Ruta y cargadores que menos energía gastan (tu forma de conducir la fija el estilo).",
-  },
-  { id: "fewer_stops", label: "Menos paradas", hint: "Cargas más largas, menos detenciones." },
-  {
-    id: "safer",
-    label: "Más segura",
-    hint: "Carga con holgura (≥ 70 %) y prefiere la ruta con más batería mínima.",
-  },
-  {
-    id: "custom",
-    label: "Personalizada",
-    hint: "Sin ajustes propios: usa tu margen y estilo tal cual.",
-  },
-];
-
 export function ConditionsDialog() {
   const open = usePlanner((s) => s.settingsOpen);
   const setOpen = usePlanner((s) => s.setSettingsOpen);
   const c = usePlanner((s) => s.conditions);
   const patch = usePlanner((s) => s.patchConditions);
-  const floor = safetyPct(c);
-  const previews = usePreviews(open);
+  const previews = usePlanPreviews(["mode"], open);
   const warnings = conditionWarnings(c);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Condiciones del viaje</DialogTitle>
+          <DialogTitle>Ajustes avanzados</DialogTitle>
           <DialogDescription>
-            Estrategia, margen de seguridad y estilo de conducción. La llegada mínima está en la
-            gestión de batería; pasajeros, equipaje y A/C, en cada ruta.
+            Estrategia, temperatura y velocidad media. El estilo de conducción, el margen de
+            seguridad, los pasajeros y el A/C están en el formulario del viaje.
           </DialogDescription>
         </DialogHeader>
 
@@ -163,52 +81,8 @@ export function ConditionsDialog() {
           </div>
         </section>
 
-        <section className="mt-5 space-y-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">
-            Carga y margen
-          </h3>
-          <div className="grid gap-2">
-            <Label>Margen de seguridad · {floor}%</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {MARGINS.map(([id, label]) => (
-                <Button
-                  key={id}
-                  type="button"
-                  size="sm"
-                  className="h-11"
-                  variant={c.safetyMode === id ? "default" : "secondary"}
-                  onClick={() => patch({ safetyMode: id })}
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-            {previews ? (
-              <ul className="grid gap-0.5 text-xs text-muted">
-                {MARGINS.filter(([id]) => id !== "custom" && id !== c.safetyMode).map(
-                  ([id, label]) => (
-                    <li key={id}>
-                      {label}: <span className="text-accent">{previews.margin[id]}</span>
-                    </li>
-                  ),
-                )}
-              </ul>
-            ) : null}
-            <p className="text-xs text-subtle">
-              Batería mínima para llegar a cada cargador y al destino. No cambia el consumo: cambia
-              cuántas paradas y cuánto cargar.
-            </p>
-            {c.safetyMode === "custom" ? (
-              <Row label="Personalizado" value={`${c.customSafetyPct}%`}>
-                <Slider
-                  min={5}
-                  max={35}
-                  value={[c.customSafetyPct]}
-                  onValueChange={([v]) => patch({ customSafetyPct: v ?? 15 })}
-                />
-              </Row>
-            ) : null}
-          </div>
+        <section className="mt-5 space-y-3">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">Margen</h3>
           <label className="flex items-center justify-between gap-3 rounded-lg bg-bg-elevated px-3 py-2.5">
             <span className="text-sm">Permitir bajar del margen</span>
             <Switch
@@ -219,36 +93,9 @@ export function ConditionsDialog() {
         </section>
 
         <section className="mt-5 space-y-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">Conducción</h3>
-          <div className="grid gap-2">
-            <Label>Estilo</Label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {STYLES.map((st) => (
-                <div key={st.id} className="grid gap-1">
-                  <Button
-                    size="sm"
-                    className="h-11"
-                    variant={c.drivingStyle === st.id ? "default" : "secondary"}
-                    onClick={() => patch({ drivingStyle: st.id })}
-                  >
-                    {st.label}
-                  </Button>
-                  <span className="text-center text-[11px] leading-tight text-muted">
-                    {previews && c.drivingStyle !== st.id && previews.style[st.id] ? (
-                      <span className="text-accent">{previews.style[st.id]}</span>
-                    ) : (
-                      st.hint
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {c.avgSpeedKmh != null ? (
-              <p className="text-xs text-subtle">
-                Con velocidad media fija, el estilo solo cambia el consumo, no el tiempo.
-              </p>
-            ) : null}
-          </div>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">
+            Clima y velocidad
+          </h3>
           <Row
             label="Temperatura (vacío = clima real)"
             value={c.temperatureC == null ? "auto" : `${c.temperatureC}°C`}

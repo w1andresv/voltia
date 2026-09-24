@@ -64,7 +64,7 @@ const REQUEST: PlanRequestShape = {
     customSafetyPct: 15,
     planningMode: "fastest",
     allowBelowSafety: false,
-    regenPct: 20,
+    regenLevel: "medium",
   },
 };
 

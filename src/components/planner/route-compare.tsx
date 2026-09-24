@@ -1,8 +1,9 @@
 import { Check, TriangleAlert } from "lucide-react";
 import { formatRoadMix } from "@/domain/road-hierarchy";
 import { HIGHLIGHT_LABEL, routeHighlights } from "@/domain/route-highlights";
-import type { RoutePlan } from "@/domain/types";
-import { formatKm, formatMinutes, formatPct } from "@/lib/format";
+import { CONNECTOR_LABEL, type RoutePlan } from "@/domain/types";
+import { isDc } from "@/domain/charging";
+import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -102,7 +103,34 @@ export function RouteCompare({ plans }: { plans: RoutePlan[] }) {
                 <div className="mt-0.5 text-xs text-subtle">Vías: {formatRoadMix(p.roadMix)}</div>
               ) : null}
               {delta ? <div className="mt-0.5 text-xs text-subtle">{delta}</div> : null}
-              {!p.feasible ? (
+              {p.stops[0] ? (
+                <div className="mt-1 space-y-0.5 text-xs text-fg">
+                  <div>
+                    {p.stops[0].adapter
+                      ? `Necesario adaptador para carga rápida (${CONNECTOR_LABEL[p.stops[0].adapter.from]} → ${CONNECTOR_LABEL[p.stops[0].adapter.to]}) · `
+                      : !isDc(p.stops[0].bestSocket.connector)
+                        ? "Carga lenta — sin adaptador · "
+                        : ""}
+                    {p.stops[0].charger.name}: {formatPct(p.stops[0].arriveSoc)} →{" "}
+                    {formatPct(p.stops[0].departSoc)} · {formatKwh(p.stops[0].energyAddedKwh)} ·{" "}
+                    {formatMinutes(p.stops[0].chargeMinutes)} · {formatKw(p.stops[0].chargeKw)}
+                  </div>
+                  {p.stops[0].options && p.stops[0].options.length > 1
+                    ? p.stops[0].options.slice(1).map((option, n) => (
+                        <div key={`${option.socket.connector}-${n}`} className="text-warn">
+                          {option.mode === "adapter" && option.adapter
+                            ? `${CONNECTOR_LABEL[option.adapter.from]} → ${CONNECTOR_LABEL[option.adapter.to]} — ${formatKw(option.nominalKw)} — con adaptador`
+                            : option.mode === "ac"
+                              ? `Carga lenta — sin adaptador · ${formatKw(option.chargeKw)}`
+                              : `Carga directa · ${CONNECTOR_LABEL[option.socket.connector]}`}
+                          {" · "}
+                          {formatMinutes(option.chargeMinutes)}
+                          {option.reachesNext ? " · sigue al siguiente punto" : ""}
+                        </div>
+                      ))
+                    : null}
+                </div>
+              ) : !p.feasible ? (
                 <div className="mt-1 flex items-center gap-1 text-xs text-warn">
                   <TriangleAlert className="size-3.5" /> No se puede completar con la batería y
                   cargadores disponibles

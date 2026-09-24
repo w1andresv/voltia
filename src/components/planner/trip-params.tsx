@@ -1,14 +1,38 @@
-import { ChevronDown, Minus, Plus, RotateCcw, Settings2, Users } from "lucide-react";
-import { extraWeightKg, tripMassKg, type ClimateControl } from "@/domain/types";
+import {
+  ChevronDown,
+  Gauge,
+  Minus,
+  Plus,
+  RotateCcw,
+  Settings2,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+import {
+  REGEN_LEVEL_LABEL,
+  extraWeightKg,
+  safetyPct,
+  tripMassKg,
+  type ClimateControl,
+  type RegenLevel,
+} from "@/domain/types";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { MARGINS, MARGIN_NAME, STYLES, usePlanPreviews } from "./use-plan-previews";
 
 const AC: { id: ClimateControl; label: string }[] = [
   { id: "off", label: "Sin A/C" },
   { id: "eco", label: "Eco" },
   { id: "normal", label: "A/C" },
   { id: "max", label: "Máx" },
+];
+
+const REGEN: { id: RegenLevel; hint: string }[] = [
+  { id: "low", hint: "Frenas mucho con el pedal o el carro regenera poco." },
+  { id: "medium", hint: "Uso normal: el carro regenera y a veces usas el freno." },
+  { id: "high", hint: "Un pedal y anticipando las bajadas: casi no tocas el freno." },
 ];
 
 export function TripParams() {
@@ -18,6 +42,8 @@ export function TripParams() {
   const openSettings = usePlanner((s) => s.setSettingsOpen);
   const mass = tripMassKg(vehicle, c);
   const extra = extraWeightKg(c);
+  const floor = safetyPct(c);
+  const previews = usePlanPreviews(["style", "margin"]);
 
   return (
     <div className="space-y-3">
@@ -80,23 +106,125 @@ export function TripParams() {
       </details>
 
       <div className="rounded-xl bg-bg-elevated p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <RotateCcw className="size-4 shrink-0 text-accent" />
-            <Label className="text-sm text-fg">Regeneración</Label>
-          </div>
-          <Stepper
-            value={c.regenPct}
-            min={5}
-            max={80}
-            step={5}
-            onChange={(n) => patch({ regenPct: n })}
-            label={`${c.regenPct} %`}
-          />
+        <div className="flex min-w-0 items-center gap-2">
+          <RotateCcw className="size-4 shrink-0 text-accent" />
+          <Label className="text-sm text-fg">Regeneración</Label>
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-1.5" role="group" aria-label="Nivel de regeneración">
+          {REGEN.map((opt) => (
+            <Button
+              key={opt.id}
+              type="button"
+              size="sm"
+              className="h-11 px-1 text-xs"
+              variant={c.regenLevel === opt.id ? "default" : "secondary"}
+              aria-pressed={c.regenLevel === opt.id}
+              onClick={() => patch({ regenLevel: opt.id })}
+            >
+              {REGEN_LEVEL_LABEL[opt.id]}
+            </Button>
+          ))}
         </div>
         <p className="mt-2 text-xs leading-relaxed text-muted">
-          Valor utilizado para estimar la energía recuperada durante descensos y frenadas. No toda la
-          energía potencial de una bajada vuelve a la batería.
+          {REGEN.find((opt) => opt.id === c.regenLevel)?.hint} En bajada, la pendiente primero paga
+          la rodadura y el aire; de lo que sobra se recupera una parte.
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-bg-elevated p-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Gauge className="size-4 shrink-0 text-accent" />
+          <Label className="text-sm text-fg">Conducción</Label>
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-1.5" role="group" aria-label="Estilo de conducción">
+          {STYLES.map((st) => (
+            <Button
+              key={st.id}
+              type="button"
+              size="sm"
+              className="h-11 px-1 text-xs"
+              variant={c.drivingStyle === st.id ? "default" : "secondary"}
+              aria-pressed={c.drivingStyle === st.id}
+              onClick={() => patch({ drivingStyle: st.id })}
+            >
+              {st.label}
+            </Button>
+          ))}
+        </div>
+        <ul className="mt-2 grid gap-0.5 text-xs leading-relaxed text-muted">
+          {STYLES.map((st) =>
+            st.id === c.drivingStyle ? (
+              <li key={st.id} className="text-fg">
+                {st.label}: {st.hint}
+              </li>
+            ) : (
+              <li key={st.id}>
+                {st.label}:{" "}
+                {previews?.style[st.id] ? (
+                  <span className="text-accent">{previews.style[st.id]}</span>
+                ) : (
+                  st.hint
+                )}
+              </li>
+            ),
+          )}
+        </ul>
+        {c.avgSpeedKmh != null ? (
+          <p className="mt-1.5 text-xs text-subtle">
+            Con velocidad media fija, el estilo solo cambia el consumo, no el tiempo.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="rounded-xl bg-bg-elevated p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <ShieldCheck className="size-4 shrink-0 text-accent" />
+            <Label className="text-sm text-fg">Margen de seguridad</Label>
+          </div>
+          <span className="font-mono text-sm tabular-nums text-fg">{floor} %</span>
+        </div>
+        <div className="mt-2 grid grid-cols-4 gap-1.5" role="group" aria-label="Margen de seguridad">
+          {MARGINS.map((m) => (
+            <Button
+              key={m.id}
+              type="button"
+              size="sm"
+              className="h-11 px-1 text-xs"
+              variant={c.safetyMode === m.id ? "default" : "secondary"}
+              aria-pressed={c.safetyMode === m.id}
+              aria-label={`${MARGIN_NAME[m.id]} ${m.id === "custom" ? "" : m.label}`.trim()}
+              onClick={() => patch({ safetyMode: m.id })}
+            >
+              {m.label}
+            </Button>
+          ))}
+        </div>
+        {c.safetyMode === "custom" ? (
+          <div className="mt-3 grid gap-2">
+            <Slider
+              min={5}
+              max={35}
+              value={[c.customSafetyPct]}
+              onValueChange={([v]) => patch({ customSafetyPct: v ?? 15 })}
+              aria-label="Margen personalizado"
+            />
+          </div>
+        ) : null}
+        {previews ? (
+          <ul className="mt-2 grid gap-0.5 text-xs text-muted">
+            {MARGINS.filter((m) => m.id !== "custom" && m.id !== c.safetyMode).map((m) =>
+              previews.margin[m.id] ? (
+                <li key={m.id}>
+                  {m.label}: <span className="text-accent">{previews.margin[m.id]}</span>
+                </li>
+              ) : null,
+            )}
+          </ul>
+        ) : null}
+        <p className="mt-2 text-xs leading-relaxed text-muted">
+          Batería mínima para llegar a cada cargador y al destino. No cambia el consumo: cambia
+          cuántas paradas y cuánto cargar.
         </p>
       </div>
 
@@ -108,7 +236,7 @@ export function TripParams() {
         <Settings2 className="size-4 shrink-0 text-accent" />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium text-fg">Ajustes avanzados</span>
-          <span className="block text-xs text-muted">Estrategia, margen de seguridad y conducción</span>
+          <span className="block text-xs text-muted">Estrategia, temperatura y velocidad media</span>
         </span>
       </button>
     </div>

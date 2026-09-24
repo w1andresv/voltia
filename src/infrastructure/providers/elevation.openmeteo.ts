@@ -12,6 +12,9 @@ interface OpenTopo {
   results?: { elevation: number | null }[];
 }
 
+/** Puntos de elevación por ruta. Con 48, una ruta de 400 km tenía un punto cada ~8 km. */
+export const ELEVATION_PROBES = 96;
+
 async function fromOpenTopo(lats: number[], lons: number[]): Promise<number[]> {
   const locs = lats.map((lat, i) => `${lat},${lons[i]}`).join("|");
   const url = `https://api.opentopodata.org/v1/aster30m?locations=${locs}`;
@@ -45,7 +48,8 @@ async function elevationsFor(lats: number[], lons: number[]): Promise<number[]> 
 export async function applyElevation(route: RawRoute): Promise<RawRoute> {
   const samples = route.samples;
   if (samples.length < 2) return route;
-  const probes = downsample(samples, 48);
+  // Open-Meteo y OpenTopoData admiten hasta 100 puntos por consulta.
+  const probes = downsample(samples, ELEVATION_PROBES);
   try {
     const elev = await elevationsFor(
       probes.map((p) => p.lat),
