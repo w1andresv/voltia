@@ -8,6 +8,16 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { suppressMapClicks } from "./map-click";
 
+/** El toque que elige un resultado también genera un click fantasma en lo que quede debajo (p.ej. "Mi ubicación"); lo absorbemos. */
+function swallowGhostClick() {
+  const swallow = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  document.addEventListener("click", swallow, { capture: true, once: true });
+  setTimeout(() => document.removeEventListener("click", swallow, true), 400);
+}
+
 export function PlaceSearch({
   value,
   onChange,
@@ -76,6 +86,7 @@ export function PlaceSearch({
 
   function pick(p: Place) {
     suppressMapClicks(900);
+    swallowGhostClick();
     onChange(p);
     setQ(p.label);
     setOpen(false);
