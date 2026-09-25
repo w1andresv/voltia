@@ -21,7 +21,15 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
           value={formatKwh(plan.avgKwhPer100km, true)}
           hint="Promedio estimado de la ruta"
         />
-        <Stat label="Batería inicial" value={formatPct(plan.initialSoc)} />
+        <Stat
+          label="Batería inicial"
+          value={formatPct(plan.initialSoc)}
+          hint={
+            plan.departureCharge
+              ? `incluye ${plan.departureCharge.additionalPct}% antes de salir`
+              : undefined
+          }
+        />
         <Stat
           label="Llegada"
           value={formatPct(plan.arrivalSoc)}

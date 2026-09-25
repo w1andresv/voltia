@@ -458,26 +458,31 @@ export function LeafletMap({
   chargerAction = "browse",
   onViewChange,
 }: LeafletMapProps) {
+  const drawn = plan?.firstChargerUnreachable ? null : plan;
+  const drawnAlts = useMemo(
+    () => alternatives.filter((alt) => !alt.firstChargerUnreachable),
+    [alternatives],
+  );
   const mapboxToken = MAPBOX_TOKEN;
   const scheme = useColorScheme();
   const colors = mapPalette(scheme);
   const icons = useMemo(() => markerIcons(colors), [colors]);
   const fitPoints = useMemo(() => {
     // Encuadra todas las rutas encontradas, así elegir otra no mueve el mapa.
-    if (plan?.geometry.length) return [...plan.geometry, ...alternatives.flatMap((a) => a.geometry)];
+    if (drawn?.geometry.length) return [...drawn.geometry, ...drawnAlts.flatMap((a) => a.geometry)];
     const pts: LatLon[] = [];
     if (origin) pts.push(origin);
     if (destination) pts.push(destination);
     return pts;
-  }, [plan, alternatives, origin, destination]);
+  }, [drawn, drawnAlts, origin, destination]);
 
-  const segs = useMemo(() => (plan ? coloredSegments(plan.samples, colors) : []), [plan, colors]);
-  const hover = plan && hoverKm != null ? sampleAt(plan.samples, hoverKm) : null;
+  const segs = useMemo(() => (drawn ? coloredSegments(drawn.samples, colors) : []), [drawn, colors]);
+  const hover = drawn && hoverKm != null ? sampleAt(drawn.samples, hoverKm) : null;
   const extras = useMemo(() => {
     if (!showAllChargers) return [];
-    const stopIds = new Set(plan?.stops.map((s) => s.charger.id) ?? []);
+    const stopIds = new Set(drawn?.stops.map((s) => s.charger.id) ?? []);
     return chargers.filter((c) => !stopIds.has(c.id));
-  }, [showAllChargers, chargers, plan]);
+  }, [showAllChargers, chargers, drawn]);
 
   return (
     <MapContainer
@@ -502,10 +507,10 @@ export function LeafletMap({
       ) : null}
       <InteractionLock locked={mapLocked} />
       <ClickTrap enabled={mapClickEnabled && !mapLocked} onMapClick={onMapClick} />
-      {plan ? <HoverTrap samples={plan.samples} onHoverKm={onHoverKm} /> : null}
+      {drawn ? <HoverTrap samples={drawn.samples} onHoverKm={onHoverKm} /> : null}
       {fitPoints.length > 0 ? <Fit points={fitPoints} /> : null}
 
-      {alternatives.map((alt) => {
+      {drawnAlts.map((alt) => {
         const positions = alt.geometry.map((p) => [p.lat, p.lon] as [number, number]);
         const select = (e: L.LeafletMouseEvent) => {
           L.DomEvent.stopPropagation(e);
@@ -552,7 +557,7 @@ export function LeafletMap({
         </Marker>
       ) : null}
 
-      {plan?.stops.map((st, i) => (
+      {drawn?.stops.map((st, i) => (
         <Marker
           key={`stop-${st.charger.id}`}
           position={[st.charger.lat, st.charger.lon]}

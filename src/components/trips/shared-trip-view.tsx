@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Route as RouteIcon } from "lucide-react";
 import type { PlanRequestShape } from "@/domain/schemas";
-import type { RoutePlan } from "@/domain/types";
+import { departureChargeAdvice, FIRST_CHARGER_UNREACHABLE_REASON, type RoutePlan } from "@/domain/types";
 import { formatKm, formatMinutes } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -53,10 +53,12 @@ export function SharedTripView({
           <h1 className="truncate text-lg font-semibold text-fg">
             {request.origin.label} → {request.destination.label}
           </h1>
-          <p className="text-xs text-muted">
-            Viaje compartido en Voltia · {request.vehicle.brand} {request.vehicle.model} ·{" "}
-            {formatKm(plan.distanceKm)} · {formatMinutes(plan.totalMinutes)}
-          </p>
+          {plan.firstChargerUnreachable ? null : (
+            <p className="text-xs text-muted">
+              Viaje compartido en Voltia · {request.vehicle.brand} {request.vehicle.model} ·{" "}
+              {formatKm(plan.distanceKm)} · {formatMinutes(plan.totalMinutes)}
+            </p>
+          )}
         </div>
         <Button
           size="sm"
@@ -71,14 +73,27 @@ export function SharedTripView({
         </Button>
       </div>
 
-      <div className="space-y-3">
-        <PlanStats plan={plan} />
-        <RouteCompare plans={plans} />
-      </div>
-      <Itinerary plan={plan} />
-      <ElevationChart plan={plan} />
-      <SocChart plan={plan} />
-      <ConsumptionChart plan={plan} />
+      {plan.firstChargerUnreachable ? (
+        <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-danger">
+          {plan.infeasibleReason ?? FIRST_CHARGER_UNREACHABLE_REASON}
+        </p>
+      ) : (
+        <>
+          {plan.departureCharge ? (
+            <p role="alert" className="rounded-lg bg-warn/15 px-3 py-2.5 text-sm leading-relaxed text-warn">
+              {departureChargeAdvice(plan.departureCharge.additionalPct)}
+            </p>
+          ) : null}
+          <div className="space-y-3">
+            <PlanStats plan={plan} />
+            <RouteCompare plans={plans} />
+          </div>
+          <Itinerary plan={plan} />
+          <ElevationChart plan={plan} />
+          <SocChart plan={plan} />
+          <ConsumptionChart plan={plan} />
+        </>
+      )}
     </main>
   );
 }

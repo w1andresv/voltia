@@ -179,6 +179,17 @@ export interface RawRoute {
   engine?: RoutingEngine;
 }
 
+export interface DepartureCharge {
+  /** SOC que el vehículo tiene ahora, antes de salir. */
+  currentSoc: number;
+  /** Puntos porcentuales extra, redondeados hacia arriba. */
+  additionalPct: number;
+  /** SOC de salida con el que se calcula el plan. */
+  requiredStartSoc: number;
+  chargerId: string;
+  chargerName: string;
+}
+
 export interface ItineraryNode {
   kind: "origin" | "destination" | "charger" | "via";
   label: string;
@@ -222,6 +233,13 @@ export interface RoutePlan {
   canArriveWithoutCharge: boolean;
   feasible: boolean;
   infeasibleReason?: string;
+  /**
+   * Recarga en el origen para llegar a la primera electrolinera verificada.
+   * Solo cuando esa recarga cabe en el 100 %.
+   */
+  departureCharge?: DepartureCharge;
+  /** Ni saliendo al 100 % se alcanza la primera electrolinera verificada. */
+  firstChargerUnreachable?: boolean;
   stops: ChargeStop[];
   itinerary: ItineraryNode[];
   elevation: ElevationStats;
@@ -312,6 +330,15 @@ export const PERSON_KG = 75;
 /** Shown when the trip needs a charge and no verified station is in remaining range. */
 export const NO_VERIFIED_STOP_REASON =
   "No se encontró una electrolinera verificada dentro de la autonomía disponible. No es posible generar una estrategia de recarga segura para este tramo.";
+
+/** Ni al 100 % de batería se llega a la primera electrolinera verificada. */
+export const FIRST_CHARGER_UNREACHABLE_REASON =
+  "No es posible realizar esta ruta con la autonomía disponible. El vehículo no puede alcanzar el primer punto de carga desde el punto de partida, incluso iniciando con el 100% de batería.";
+
+export function departureChargeAdvice(additionalPct: number): string {
+  const pct = Math.max(0, Math.round(additionalPct));
+  return `Antes de iniciar la ruta debes cargar al menos un ${pct}% adicional para poder llegar al primer punto de carga.`;
+}
 
 export function hasValidCoords(c: { lat: number; lon: number }): boolean {
   return (

@@ -26,11 +26,12 @@ function deltaText(plan: RoutePlan, reference: RoutePlan): string {
 export function RouteCompare({ plans }: { plans: RoutePlan[] }) {
   const selected = usePlanner((s) => s.selectedPlanId);
   const select = usePlanner((s) => s.selectPlan);
-  if (plans.length < 2) return null;
+  const visible = plans.filter((p) => !p.firstChargerUnreachable);
+  if (visible.length < 2) return null;
 
-  const highlights = routeHighlights(plans);
-  const candidates = plans.filter((p) => p.feasible);
-  const fastest = [...(candidates.length ? candidates : plans)].sort(
+  const highlights = routeHighlights(visible);
+  const candidates = visible.filter((p) => p.feasible);
+  const fastest = [...(candidates.length ? candidates : visible)].sort(
     (a, b) => a.totalMinutes - b.totalMinutes,
   )[0]!;
 
@@ -38,12 +39,12 @@ export function RouteCompare({ plans }: { plans: RoutePlan[] }) {
     <div className="grid gap-2">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">
-          {plans.length} rutas encontradas
+          {visible.length} rutas encontradas
         </h2>
         <span className="text-xs text-subtle">Toca una para verla en el mapa</span>
       </div>
       <div role="radiogroup" aria-label="Rutas encontradas" className="grid gap-2">
-        {plans.map((p) => {
+        {visible.map((p) => {
           const active = selected === p.id;
           const tags = highlights.get(p.id) ?? [];
           const delta = deltaText(p, fastest);

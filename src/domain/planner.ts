@@ -23,7 +23,13 @@ import type {
   Vehicle,
   WeatherSnapshot,
 } from "./types";
-import { extraWeightKg, isVerifiedForPlanning, NO_VERIFIED_STOP_REASON, safetyPct } from "./types";
+import {
+  extraWeightKg,
+  FIRST_CHARGER_UNREACHABLE_REASON,
+  isVerifiedForPlanning,
+  NO_VERIFIED_STOP_REASON,
+  safetyPct,
+} from "./types";
 
 const MAX_STOPS = 7;
 const PREFERRED_FROM_ROUTE_KM = 5;
@@ -178,6 +184,8 @@ function pickStops(args: {
   const maxTravel = Math.min(100, vehicle.maxSocTravel);
   const ctx: EnergyCtx = { vehicle, conditions, weather, originAltitudeM: samples[0]?.elevM };
   const floor = conditions.allowBelowSafety ? 2 : safety;
+  // 0: llegar justo a la electrolinera. Con "bajar del margen" se mantiene el 2 %.
+  const reachFloor = conditions.allowBelowSafety ? 2 : 0;
   const destKm = samples[destIdx]?.km ?? 0;
 
   let idx = 0;
@@ -385,7 +393,7 @@ function pickStops(args: {
     // Primero el margen de seguridad. Si ningún cargador cabe ahí, se usa el
     // que sí se alcanza (aunque se llegue justo): es el punto y la carga a mostrar.
     let raw = collect(idx, soc, currentKm, floor);
-    if (!raw.length && floor > 2) raw = collect(idx, soc, currentKm, 2);
+    if (!raw.length && floor > reachFloor) raw = collect(idx, soc, currentKm, reachFloor);
     if (!raw.length) {
       if (conditions.allowBelowSafety) {
         return { stops, feasible: true, reason: NO_VERIFIED_STOP_REASON };
@@ -582,6 +590,140 @@ function driveMinutesFor(raw: RawRoute, conditions: TripConditions): number {
   return raw.driveMinutes / STYLE_SPEED_FACTOR[conditions.drivingStyle];
 }
 
+const ARRIVE_TOLERANCE = 1e-4;
+
+/**
+ * SOC de salida mínimo (en puntos enteros sobre la batería actual) para llegar
+ * a una electrolinera. `socNeededToArrive` sale del consumo del tramo.
+ */
+export function classifyFirstChargerCharge(
+  currentSoc: number,
+  socNeededToArrive: number,
+):
+  | { kind: "enough" }
+  | { kind: "precharge"; additionalPct: number; requiredStartSoc: number }
+  | { kind: "impossible" } {
+  if (!(socNeededToArrive > currentSoc + 1e-6)) return { kind: "enough" };
+  const additionalPct = Math.ceil(socNeededToArrive - currentSoc - 1e-6);
+  const requiredStartSoc = currentSoc + additionalPct;
+  if (requiredStartSoc > 100 + 1e-6) return { kind: "impossible" };
+  return { kind: "precharge", additionalPct, requiredStartSoc };
+}
+
+type BareSample = Parameters<typeof annotateEnergy>[0][number];
+
+/**
+ * Primera electrolinera verificada y usable a la que el vehículo puede llegar
+ * con menos batería. El consumo es el del tramo (ruta + desvío), no una distancia fija.
+ */
+function assessFirstCharger(args: {
+  samplesPre: BareSample[];
+  chargers: Charger[];
+  vehicle: Vehicle;
+  conditions: TripConditions;
+  weather: WeatherSnapshot | null;
+}):
+  | { kind: "skip" }
+  | { kind: "impossible" }
+  | {
+      kind: "precharge";
+      additionalPct: number;
+      requiredStartSoc: number;
+      charger: Charger;
+    } {
+  const { samplesPre, vehicle, conditions, weather } = args;
+  if (samplesPre.length < 2) return { kind: "skip" };
+
+  const cap = Math.max(vehicle.batteryKwh, 1);
+  const destIdx = samplesPre.length - 1;
+  const arrivalTarget = Math.max(conditions.arrivalSoc, safetyPct(conditions));
+  const energyCtx: EnergyCtx = {
+    vehicle,
+    conditions,
+    weather,
+    originAltitudeM: samplesPre[0]?.elevM,
+  };
+  const usable = args.chargers.filter((c) => {
+    if (!isVerifiedForPlanning(c)) return false;
+    if (!routeSocket(c, vehicle)) return false;
+    const sIdx = c.nearestSampleIndex ?? 0;
+    return sIdx > 0 && sIdx < destIdx;
+  });
+
+  const cache = new Map<number, RouteSample[]>();
+  const samplesAt = (soc: number) => {
+    const key = Math.round(soc * 1000) / 1000;
+    let hit = cache.get(key);
+    if (!hit) {
+      hit = annotateEnergy(samplesPre, energyCtx, soc);
+      cache.set(key, hit);
+    }
+    return hit;
+  };
+
+  const currentSamples = samplesAt(conditions.initialSoc);
+  const destSoc = socAfter(conditions.initialSoc, energyBetween(currentSamples, 0, destIdx), cap);
+  if (destSoc >= arrivalTarget || !usable.length) return { kind: "skip" };
+
+  // Igual que pickStops: primero exigir el margen de seguridad al llegar a la
+  // primera electrolinera; solo se baja a "llega justo" si ni al 100 % cabe.
+  const safety = safetyPct(conditions);
+  const floor = conditions.allowBelowSafety ? 2 : safety;
+  const reachFloor = conditions.allowBelowSafety ? 2 : 0;
+
+  const reachableCharger = (soc: number, minArrive: number): Charger | null => {
+    const samples = samplesAt(soc);
+    let best: Charger | null = null;
+    let bestKm = Infinity;
+    for (const charger of usable) {
+      const hit = arriveAt(charger, 0, soc, samples, cap, energyCtx);
+      if (!hit || hit.arrive < minArrive - ARRIVE_TOLERANCE) continue;
+      const km = charger.nearestKm ?? Infinity;
+      if (km < bestKm) {
+        bestKm = km;
+        best = charger;
+      }
+    }
+    return best;
+  };
+
+  const reaches = (soc: number, minArrive: number) => reachableCharger(soc, minArrive) != null;
+  const current = conditions.initialSoc;
+  let minArrive = floor;
+  if (!reaches(100, minArrive) && floor > reachFloor) minArrive = reachFloor;
+  if (reaches(current, minArrive)) return { kind: "skip" };
+  if (!reaches(100, minArrive)) return { kind: "impossible" };
+
+  const maxAdd = Math.floor(100 - current + 1e-9);
+  let additional = Math.max(1, maxAdd);
+  if (current + maxAdd < 100 - 1e-6) {
+    additional = Math.ceil(100 - current - 1e-9);
+  } else {
+    let low = 1;
+    let high = Math.max(1, maxAdd);
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (mid >= 1 && reaches(current + mid, minArrive)) {
+        additional = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+  }
+
+  const decision = classifyFirstChargerCharge(current, current + additional);
+  if (decision.kind !== "precharge") return { kind: "impossible" };
+  const charger = reachableCharger(decision.requiredStartSoc, minArrive);
+  if (!charger) return { kind: "impossible" };
+  return {
+    kind: "precharge",
+    additionalPct: decision.additionalPct,
+    requiredStartSoc: decision.requiredStartSoc,
+    charger,
+  };
+}
+
 export function buildPlan(args: {
   raw: RawRoute;
   vehicle: Vehicle;
@@ -603,15 +745,38 @@ export function buildPlan(args: {
       : s.speedKmh * styleSpeed,
   }));
 
-  const energySamples = annotateEnergy(samplesPre, ctx, conditions.initialSoc);
-  const attached = attachChargersToRoute(args.chargers, energySamples);
-  const picked = pickStops({
-    samples: energySamples,
+  const attached = attachChargersToRoute(args.chargers, samplesPre);
+  const gate = assessFirstCharger({
+    samplesPre,
     chargers: attached,
     vehicle,
     conditions,
     weather,
   });
+  const planningSoc = gate.kind === "precharge" ? gate.requiredStartSoc : conditions.initialSoc;
+  const planningConditions =
+    planningSoc === conditions.initialSoc ? conditions : { ...conditions, initialSoc: planningSoc };
+  const energySamples = annotateEnergy(samplesPre, ctx, planningSoc);
+  const picked =
+    gate.kind === "impossible"
+      ? { stops: [] as ChargeStop[], feasible: false, reason: FIRST_CHARGER_UNREACHABLE_REASON }
+      : pickStops({
+          samples: energySamples,
+          chargers: attached,
+          vehicle,
+          conditions: planningConditions,
+          weather,
+        });
+  const departureCharge =
+    gate.kind === "precharge"
+      ? {
+          currentSoc: conditions.initialSoc,
+          additionalPct: gate.additionalPct,
+          requiredStartSoc: gate.requiredStartSoc,
+          chargerId: gate.charger.id,
+          chargerName: gate.charger.name,
+        }
+      : undefined;
   const stops = picked.stops.map((st) => ({
     ...st,
     nextLabel: st.nextLabel || destination.label,
@@ -619,7 +784,7 @@ export function buildPlan(args: {
   const feasible = picked.feasible;
   const reason = picked.reason;
 
-  const samples = applyStopsToSamples(energySamples, stops, vehicle, conditions.initialSoc);
+  const samples = applyStopsToSamples(energySamples, stops, vehicle, planningSoc);
   const last = samples[samples.length - 1]!;
   const energyGrossKwh = samples.reduce((a, s) => a + s.energyGrossKwh, 0);
   const energyRegenKwh = samples.reduce((a, s) => a + s.energyRegenKwh, 0);
@@ -638,7 +803,7 @@ export function buildPlan(args: {
       kind: "origin",
       label: origin.label,
       km: 0,
-      soc: conditions.initialSoc,
+      soc: planningSoc,
       durationFromStartMin: 0,
       place: origin,
     },
@@ -694,7 +859,7 @@ export function buildPlan(args: {
     avgKwhPer100km: raw.distanceKm > 0 ? (last.cumulativeKwh / raw.distanceKm) * 100 : 0,
     energyMode: energyMode(vehicle),
     arrivalSoc,
-    initialSoc: conditions.initialSoc,
+    initialSoc: planningSoc,
     remainingKwh,
     minSoc,
     safetyPct: safety,
@@ -702,6 +867,8 @@ export function buildPlan(args: {
     canArriveWithoutCharge,
     feasible,
     infeasibleReason: reason,
+    departureCharge,
+    firstChargerUnreachable: gate.kind === "impossible" ? true : undefined,
     stops,
     itinerary,
     elevation: raw.elevation,
