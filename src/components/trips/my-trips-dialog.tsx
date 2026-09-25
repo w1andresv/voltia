@@ -4,12 +4,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Link2, Route as RouteIcon, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteTripFn, shareTripFn, type SavedTrip } from "@/server/actions/trips";
+import { shareTripFn, type SavedTrip } from "@/server/actions/trips";
 import { formatKm, formatMinutes, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useMyTrips } from "./use-my-trips";
+import { useSavedTrips } from "@/components/user/user-context";
 
 /**
  * "Mis viajes": historial guardado del usuario (src/lib/api/trips.ts).
@@ -24,8 +24,8 @@ export function MyTripsDialog() {
   const setOpen = usePlanner((s) => s.setMyTripsOpen);
   const applySavedRequest = usePlanner((s) => s.applySavedRequest);
   const router = useRouter();
+  const { trips, isLoading, deleteTrip, canShare } = useSavedTrips();
   const queryClient = useQueryClient();
-  const { data: trips = [], isLoading } = useMyTrips();
 
   const shareMut = useMutation({
     mutationFn: (id: string) => shareTripFn({ data: { id } }),
@@ -37,7 +37,7 @@ export function MyTripsDialog() {
       } catch {
         toast.success("Link generado", { description: url });
       }
-      void queryClient.invalidateQueries({ queryKey: ["my-trips"] });
+      void queryClient.invalidateQueries({ queryKey: ["user-data"] });
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "No se pudo compartir el viaje.");
@@ -45,9 +45,8 @@ export function MyTripsDialog() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => deleteTripFn({ data: { id } }),
+    mutationFn: (id: string) => deleteTrip(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["my-trips"] });
       toast.success("Viaje borrado.");
     },
     onError: (err) => {
@@ -60,7 +59,11 @@ export function MyTripsDialog() {
       <DialogContent className="w-[min(100%-1.5rem,560px)]">
         <DialogHeader>
           <DialogTitle>Mis viajes</DialogTitle>
-          <DialogDescription>Viajes que has guardado desde el planificador. Puedes retomarlos o compartirlos por link.</DialogDescription>
+          <DialogDescription>
+            {canShare
+              ? "Viajes que has guardado desde el planificador. Puedes retomarlos o compartirlos por link."
+              : "Viajes guardados en este navegador. Inicia sesión para conservarlos en tu cuenta y compartirlos por link."}
+          </DialogDescription>
         </DialogHeader>
         {isLoading ? (
           <p className="text-sm text-muted">Cargando…</p>
@@ -75,6 +78,7 @@ export function MyTripsDialog() {
                   setOpen(false);
                   router.push("/planificar");
                 }}
+                canShare={canShare}
                 onShare={() => shareMut.mutate(trip.id)}
                 onDelete={() => deleteMut.mutate(trip.id)}
                 sharing={shareMut.isPending && shareMut.variables === trip.id}
@@ -83,7 +87,7 @@ export function MyTripsDialog() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted">Todavía no has guardado ningún viaje. Usa "Guardar viaje" en los resultados de una ruta.</p>
+          <p className="text-sm text-muted">Todavía no has guardado ningún viaje. Usa "Guardar ruta" en los resultados de una ruta.</p>
         )}
       </DialogContent>
     </Dialog>
@@ -95,6 +99,7 @@ function TripRow({
   onReplan,
   onShare,
   onDelete,
+  canShare,
   sharing,
   deleting,
 }: {
@@ -102,6 +107,7 @@ function TripRow({
   onReplan: () => void;
   onShare: () => void;
   onDelete: () => void;
+  canShare: boolean;
   sharing: boolean;
   deleting: boolean;
 }) {
@@ -123,10 +129,12 @@ function TripRow({
           <RouteIcon className="size-4" />
           Replanificar
         </Button>
-        <Button size="sm" variant="outline" className="h-11" disabled={sharing} onClick={onShare}>
-          <Link2 className="size-4" />
-          {trip.shared ? "Copiar link" : "Compartir"}
-        </Button>
+        {canShare ? (
+          <Button size="sm" variant="outline" className="h-11" disabled={sharing} onClick={onShare}>
+            <Link2 className="size-4" />
+            {trip.shared ? "Copiar link" : "Compartir"}
+          </Button>
+        ) : null}
         <Button size="sm" variant="danger" className="h-11" disabled={deleting} onClick={onDelete}>
           <Trash2 className="size-4" />
           Borrar

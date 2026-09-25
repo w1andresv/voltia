@@ -1,17 +1,54 @@
-import type { RouteSample, TripConditions, Vehicle, WeatherSnapshot } from "./types";
+import type { RegenLevel, RouteSample, TripConditions, Vehicle, WeatherSnapshot } from "./types";
 import { tripMassKg, safetyPct } from "./types";
+import { bearingDeg, toRad } from "./geo";
 
 const G = 9.81;
 const J_PER_KWH = 3_600_000;
 const REF_SPEED = 70;
 const AUX_KW = 0.45;
 const CYCLE_OVERHEAD = 1.14;
-const AIR_RHO = 1.225;
+/** Gradiente térmico estándar de la atmósfera: °C que se pierden por km de altura. */
+const LAPSE_C_PER_KM = 6.5;
+/** El pronóstico da el viento a 10 m; a la altura del carro sopla más o menos un 70 %. */
+const WIND_GROUND_FACTOR = 0.7;
+/** Parte del consumo manual que se atribuye al aire a 70 km/h (el resto no depende de la velocidad). */
+const MANUAL_AERO_SHARE = 0.42;
+const MIN_SPEED_KMH = 10;
+const MAX_SPEED_KMH = 140;
+/** Tope de potencia de regeneración, como fracción de la potencia del motor. */
+const REGEN_POWER_SHARE = 0.4;
 
-const STYLE_MULT: Record<TripConditions["drivingStyle"], number> = {
-  efficient: 0.9,
+/**
+ * Estilo de conducción, en dos efectos separados (para no contarlo dos veces):
+ *  - STYLE_SPEED_FACTOR: velocidad de crucero relativa a la de la ruta. Cambia el
+ *    TIEMPO y, por la resistencia del aire, también el consumo (vía la física).
+ *  - STYLE_MULT: forma de acelerar y frenar, a igual velocidad. Solo afecta la
+ *    rodadura y el aire: la energía de subir una pendiente no depende del estilo.
+ */
+export const STYLE_SPEED_FACTOR: Record<TripConditions["drivingStyle"], number> = {
+  efficient: 0.93,
   normal: 1,
-  sport: 1.14,
+  sport: 1.06,
+};
+
+export const STYLE_MULT: Record<TripConditions["drivingStyle"], number> = {
+  efficient: 0.95,
+  normal: 1,
+  sport: 1.08,
+};
+
+/**
+ * Fracción del excedente de energía en la rueda (lo que la bajada da de más
+ * después de pagar rodadura y aire) que termina en la batería. Ya incluye
+ * motor, inversor, batería y lo que se pierde en el freno de fricción.
+ *  - low: regeneración suave o mucho uso del freno.
+ *  - medium: uso normal (valor por defecto).
+ *  - high: conducción de un pedal, anticipando las bajadas.
+ */
+export const REGEN_RECOVERY: Record<RegenLevel, number> = {
+  low: 0.35,
+  medium: 0.55,
+  high: 0.7,
 };
 
 const AC_KW: Record<TripConditions["ac"], number> = {
@@ -21,12 +58,36 @@ const AC_KW: Record<TripConditions["ac"], number> = {
   max: 2.2,
 };
 
+/** Factor por temperatura (batería, llantas y tren fríos o calientes). Se interpola entre estos puntos. */
+const CLIMATE_POINTS: readonly (readonly [number, number])[] = [
+  [0, 1.28],
+  [5, 1.16],
+  [10, 1.07],
+  [15, 1],
+  [26, 1],
+  [32, 1.05],
+  [38, 1.1],
+];
+
 export type EnergyMode = "manual" | "estimated";
 
 export interface EnergyContext {
   vehicle: Vehicle;
   conditions: TripConditions;
   weather: WeatherSnapshot | null;
+  /**
+   * Altitud del origen (m). Es la altura a la que se asume la temperatura que
+   * escribió el usuario; sin ella no se corrige la temperatura por altitud.
+   */
+  originAltitudeM?: number;
+}
+
+/** Datos del tramo que no son distancia, desnivel ni velocidad. Todos opcionales. */
+export interface SegmentGeo {
+  /** Altitud media del tramo, m s. n. m. Cambia la densidad del aire y la temperatura. */
+  altitudeM?: number;
+  /** Rumbo del tramo en grados (0 = norte, 90 = este). Orienta el viento. */
+  headingDeg?: number;
 }
 
 export interface EnergySlice {
@@ -36,7 +97,11 @@ export interface EnergySlice {
 }
 
 export function hasManualConsumption(vehicle: Vehicle): boolean {
-  return Boolean(vehicle.consumptionManual && vehicle.consumptionKwhPer100km && vehicle.consumptionKwhPer100km > 0);
+  return Boolean(
+    vehicle.consumptionManual &&
+    vehicle.consumptionKwhPer100km &&
+    vehicle.consumptionKwhPer100km > 0,
+  );
 }
 
 export function energyMode(vehicle: Vehicle): EnergyMode {
@@ -65,30 +130,29 @@ export function drivetrainEff(vehicle: Vehicle): number {
   return clamp(0.86 + vehicle.motorKw / 2800, 0.85, 0.925);
 }
 
-export function regenFactor(vehicle: Vehicle): number {
-  return clamp(0.5 + vehicle.motorKw / 1800, 0.48, 0.68);
+/** Fracción del excedente de bajada que vuelve a la batería según el nivel elegido. */
+export function regenRecovery(conditions: TripConditions): number {
+  return REGEN_RECOVERY[conditions.regenLevel] ?? REGEN_RECOVERY.medium;
 }
 
-/** Trip regen as a fraction of recoverable descent potential. Default 20%. */
-export function tripRegenCap(conditions: TripConditions): number {
-  const pct = Number.isFinite(conditions.regenPct) ? conditions.regenPct : 20;
-  return clamp(pct / 100, 0.05, 0.8);
-}
-
-export function effectiveRegen(_vehicle: Vehicle, conditions: TripConditions, socPct = 50): number {
-  let r = tripRegenCap(conditions);
+/** Recuperación con la batería llena: completa hasta 80 %, baja en línea y es 0 desde 98 %. */
+export function effectiveRegen(conditions: TripConditions, socPct = 50): number {
   if (socPct >= 98) return 0;
-  if (socPct > 80) r *= (98 - socPct) / 18;
-  return r;
+  const r = regenRecovery(conditions);
+  return socPct > 80 ? (r * (98 - socPct)) / 18 : r;
 }
 
 export function climateMultiplier(tempC: number): number {
-  if (tempC <= 0) return 1.28;
-  if (tempC < 8) return 1.16;
-  if (tempC < 15) return 1.07;
-  if (tempC <= 26) return 1;
-  if (tempC <= 32) return 1.05;
-  return 1.1;
+  const pts = CLIMATE_POINTS;
+  if (tempC <= pts[0]![0]) return pts[0]![1];
+  for (let i = 1; i < pts.length; i++) {
+    const [t1, m1] = pts[i]!;
+    if (tempC <= t1) {
+      const [t0, m0] = pts[i - 1]!;
+      return m0 + ((m1 - m0) * (tempC - t0)) / (t1 - t0);
+    }
+  }
+  return pts[pts.length - 1]![1];
 }
 
 export function acPowerKw(ac: TripConditions["ac"], tempC: number): number {
@@ -99,39 +163,83 @@ export function acPowerKw(ac: TripConditions["ac"], tempC: number): number {
   return base + heat + cool;
 }
 
+/**
+ * Temperatura del tramo. La del usuario se asume a la altura del origen; la del
+ * clima, a la altura de su celda del pronóstico. Si se conocen esa altura de
+ * referencia y la del tramo, se corrige con el gradiente estándar (6,5 °C/km).
+ */
+export function segmentTempC(ctx: EnergyContext, altitudeM?: number): number {
+  const { conditions, weather } = ctx;
+  let base: number;
+  let refAltitude: number | undefined;
+  if (conditions.temperatureC != null) {
+    base = conditions.temperatureC;
+    refAltitude = ctx.originAltitudeM;
+  } else if (weather) {
+    base = weather.temperatureC;
+    refAltitude = weather.elevationM;
+  } else {
+    return 20;
+  }
+  if (altitudeM == null || refAltitude == null) return base;
+  return base - (LAPSE_C_PER_KM * (altitudeM - refAltitude)) / 1000;
+}
+
+/** Densidad del aire (kg/m³) por temperatura y altitud: presión barométrica estándar y gas ideal. */
+export function airDensity(tempC: number, altitudeM = 0): number {
+  const h = clamp(altitudeM, -500, 6000);
+  const pressurePa = 101_325 * Math.pow(1 - 2.25577e-5 * h, 5.25588);
+  return pressurePa / (287.05 * (273.15 + tempC));
+}
+
+/**
+ * Cuadrado de la velocidad relativa al aire (m²/s²), con signo: negativo si el
+ * viento de cola es más rápido que el carro. Con rumbo, el viento se proyecta
+ * sobre la vía (`windDirDeg` es de dónde viene). Sin rumbo se usa el promedio
+ * sobre todas las direcciones: v² + w²/2.
+ */
+export function airSpeedSq(
+  speedKmh: number,
+  weather: WeatherSnapshot | null,
+  headingDeg?: number,
+): number {
+  const v = speedKmh / 3.6;
+  const w = ((weather?.windKmh ?? 0) * WIND_GROUND_FACTOR) / 3.6;
+  if (!(w > 0)) return v * v;
+  if (headingDeg == null || !Number.isFinite(weather?.windDirDeg)) return v * v + (w * w) / 2;
+  const headwind = w * Math.cos(toRad((weather!.windDirDeg as number) - headingDeg));
+  const va = v + headwind;
+  return va * Math.abs(va);
+}
+
 function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-function airDensity(tempC: number): number {
-  return AIR_RHO * (288.15 / (273.15 + tempC));
+function clampSpeed(speedKmh: number): number {
+  return clamp(speedKmh || REF_SPEED, MIN_SPEED_KMH, MAX_SPEED_KMH);
 }
 
-function speedFactor(speedKmh: number): number {
-  const r = Math.max(30, Math.min(140, speedKmh)) / REF_SPEED;
-  return Math.min(1.55, Math.max(0.88, 1 + 0.42 * (r * r - 1)));
-}
-
-function wheelForcesKwh(args: {
-  distanceKm: number;
-  elevDeltaM: number;
-  speedKmh: number;
-  massKg: number;
-  cda: number;
-  crr: number;
-  tempC: number;
-}): { rollAero: number; gravity: number } {
-  const dM = args.distanceKm * 1000;
-  if (dM <= 0) return { rollAero: 0, gravity: 0 };
-  const v = Math.max(6, args.speedKmh) / 3.6;
-  const rho = airDensity(args.tempC);
-  const fRoll = args.crr * args.massKg * G;
-  const fAero = 0.5 * rho * args.cda * v * v;
-  const fGrav = args.massKg * G * (args.elevDeltaM / dM);
-  return {
-    rollAero: ((fRoll + fAero) * dM) / J_PER_KWH,
-    gravity: (fGrav * dM) / J_PER_KWH,
-  };
+/**
+ * Factor de velocidad del modo manual, relativo a 70 km/h. El consumo manual se
+ * reparte en una parte fija (58 %) y una de aire (42 % a 70 km/h) que escala con
+ * la velocidad relativa al aire y con la densidad del aire frente a la del origen.
+ */
+export function manualSpeedFactor(
+  speedKmh: number,
+  ctx: EnergyContext,
+  geo: SegmentGeo = {},
+): number {
+  const speed = clamp(speedKmh || REF_SPEED, 30, MAX_SPEED_KMH);
+  const alt = geo.altitudeM;
+  const refAlt = ctx.originAltitudeM;
+  const rhoRatio =
+    alt != null && refAlt != null
+      ? airDensity(segmentTempC(ctx, alt), alt) / airDensity(segmentTempC(ctx, refAlt), refAlt)
+      : 1;
+  const refSq = (REF_SPEED / 3.6) ** 2;
+  const aeroRatio = (airSpeedSq(speed, ctx.weather, geo.headingDeg) / refSq) * rhoRatio;
+  return Math.max(0.88, 1 - MANUAL_AERO_SHARE + MANUAL_AERO_SHARE * aeroRatio);
 }
 
 function physicsSlice(
@@ -140,47 +248,45 @@ function physicsSlice(
   speedKmh: number,
   ctx: EnergyContext,
   socPct: number,
+  geo: SegmentGeo = {},
   opts?: { includeCycle?: boolean },
 ): EnergySlice {
   const { vehicle, conditions, weather } = ctx;
   const mass = tripMassKg(vehicle, conditions);
-  const speed = Math.max(20, Math.min(140, speedKmh || REF_SPEED));
-  const temp = conditions.temperatureC ?? weather?.temperatureC ?? 20;
-  const wind = weather?.windKmh ?? 0;
-  const windFactor = 1 + Math.max(-0.06, Math.min(0.1, wind * 0.002));
+  const speed = clampSpeed(speedKmh);
+  const altitude = geo.altitudeM ?? ctx.originAltitudeM ?? 0;
+  const temp = segmentTempC(ctx, geo.altitudeM);
   const hours = distanceKm / speed;
   const aux = (acPowerKw(conditions.ac, temp) + AUX_KW) * hours;
   const eff = drivetrainEff(vehicle);
-  const climate = climateMultiplier(temp) * windFactor;
-  const packOver = 1 + Math.max(0, vehicle.batteryKwh - 55) * 0.0007;
-  const style = STYLE_MULT[conditions.drivingStyle];
   const cycle = opts?.includeCycle === false ? 1 : CYCLE_OVERHEAD;
+  const dM = distanceKm * 1000;
 
-  const { rollAero, gravity } = wheelForcesKwh({
-    distanceKm,
-    elevDeltaM,
-    speedKmh: speed,
-    massKg: mass,
-    cda: dragAreaM2(vehicle),
-    crr: rollingCrr(vehicle),
-    tempC: temp,
-  });
+  const fRoll = rollingCrr(vehicle) * mass * G;
+  const fAero =
+    0.5 *
+    airDensity(temp, altitude) *
+    dragAreaM2(vehicle) *
+    airSpeedSq(speed, weather, geo.headingDeg);
+  // Rodadura y aire, con el ciclo (aceleraciones, curvas, tráfico) y el estilo.
+  const resistKwh =
+    (((fRoll + fAero) * dM) / J_PER_KWH) * cycle * STYLE_MULT[conditions.drivingStyle];
+  // Gravedad con signo: en bajada paga primero la rodadura y el aire.
+  const gravityKwh = (mass * G * elevDeltaM) / J_PER_KWH;
+  const wheelKwh = resistKwh + gravityKwh;
 
-  const climb = Math.max(0, gravity);
-  const descent = Math.max(0, -gravity);
-  let traction = (rollAero + climb) / eff;
-  traction *= cycle * style * climate * packOver;
+  let traction = 0;
+  let regen = 0;
+  if (wheelKwh >= 0) {
+    traction = (wheelKwh / eff) * climateMultiplier(temp);
+  } else {
+    // Solo el excedente se puede regenerar, y no más rápido que el tope del motor.
+    const speedRegen = speed < 15 ? speed / 15 : 1;
+    const capKwh = Math.max(0, vehicle.motorKw * REGEN_POWER_SHARE * hours);
+    regen = Math.min(-wheelKwh * effectiveRegen(conditions, socPct) * speedRegen, capKwh);
+  }
   const gross = traction + aux;
-
-  const regenEff = effectiveRegen(vehicle, conditions, socPct);
-  const speedRegen = speed < 15 ? clamp(speed / 15, 0, 1) : 1;
-  const motorCapKwh = vehicle.motorKw * 0.4 * hours;
-  // Recoverable potential = descent gravity energy. Regen % is applied to that
-  // potential; drivetrain + motor cap keep it from becoming 100% pack energy.
-  let regen = descent * regenEff * eff * speedRegen;
-  regen = Math.min(regen, Math.max(0, motorCapKwh), gross + descent);
-  const net = gross - regen;
-  return { grossKwh: gross, regenKwh: regen, netKwh: net };
+  return { grossKwh: gross, regenKwh: regen, netKwh: gross - regen };
 }
 
 function manualSlice(
@@ -189,44 +295,52 @@ function manualSlice(
   speedKmh: number,
   ctx: EnergyContext,
   socPct: number,
+  geo: SegmentGeo = {},
 ): EnergySlice {
-  const { vehicle, conditions, weather } = ctx;
+  const { vehicle, conditions } = ctx;
   const mass = tripMassKg(vehicle, conditions);
   const massRatio = mass / Math.max(vehicle.weightKg, 1);
   const massFactor = 1 + 0.4 * (massRatio - 1);
-  const speed = Math.max(20, Math.min(140, speedKmh || REF_SPEED));
-  const temp = conditions.temperatureC ?? weather?.temperatureC ?? 20;
-  const wind = weather?.windKmh ?? 0;
-  const windFactor = 1 + Math.max(-0.06, Math.min(0.1, wind * 0.002));
+  const speed = clampSpeed(speedKmh);
+  const temp = segmentTempC(ctx, geo.altitudeM);
   const basePerKm = (vehicle.consumptionKwhPer100km as number) / 100;
   const hours = distanceKm / speed;
   const road =
     basePerKm *
       distanceKm *
       massFactor *
-      speedFactor(speed) *
+      manualSpeedFactor(speed, ctx, geo) *
       STYLE_MULT[conditions.drivingStyle] *
-      climateMultiplier(temp) *
-      windFactor +
+      climateMultiplier(temp) +
     acPowerKw(conditions.ac, temp) * hours;
-  const phys = physicsSlice(distanceKm, elevDeltaM, speed, ctx, socPct, { includeCycle: false });
-  const flat = physicsSlice(distanceKm, 0, speed, ctx, socPct, { includeCycle: false });
-  const gravNet = phys.netKwh - flat.netKwh;
-  const gross = Math.max(0, road + Math.max(0, gravNet));
+  // Efecto del desnivel = física con pendiente − física en llano (sin el ciclo, que
+  // ya viene en el consumo manual). En bajada es negativo y descuenta de la base.
+  const phys = physicsSlice(distanceKm, elevDeltaM, speed, ctx, socPct, geo, {
+    includeCycle: false,
+  });
+  const flat = physicsSlice(distanceKm, 0, speed, ctx, socPct, geo, { includeCycle: false });
+  const net = road + (phys.netKwh - flat.netKwh);
   const regen = phys.regenKwh;
+  const gross = Math.max(0, net + regen);
   return { grossKwh: gross, regenKwh: regen, netKwh: gross - regen };
 }
 
+/**
+ * Energía del tramo. `netKwh` puede ser negativo en una bajada fuerte: la
+ * batería gana carga.
+ */
 export function segmentEnergyBreakdown(
   distanceKm: number,
   elevDeltaM: number,
   speedKmh: number,
   ctx: EnergyContext,
   socPct = 50,
+  geo: SegmentGeo = {},
 ): EnergySlice {
   if (distanceKm <= 0) return { grossKwh: 0, regenKwh: 0, netKwh: 0 };
-  if (hasManualConsumption(ctx.vehicle)) return manualSlice(distanceKm, elevDeltaM, speedKmh, ctx, socPct);
-  return physicsSlice(distanceKm, elevDeltaM, speedKmh, ctx, socPct);
+  if (hasManualConsumption(ctx.vehicle))
+    return manualSlice(distanceKm, elevDeltaM, speedKmh, ctx, socPct, geo);
+  return physicsSlice(distanceKm, elevDeltaM, speedKmh, ctx, socPct, geo);
 }
 
 /** Mixed-cycle reference at ~70 km/h on flat, kWh/100 km. */
@@ -249,16 +363,24 @@ export function segmentEnergyKwh(
   speedKmh: number,
   ctx: EnergyContext,
   socPct = 50,
+  geo: SegmentGeo = {},
 ): number {
-  return segmentEnergyBreakdown(distanceKm, elevDeltaM, speedKmh, ctx, socPct).netKwh;
+  return segmentEnergyBreakdown(distanceKm, elevDeltaM, speedKmh, ctx, socPct, geo).netKwh;
 }
 
 export function annotateEnergy(
-  samples: Omit<RouteSample, "energyKwh" | "energyGrossKwh" | "energyRegenKwh" | "cumulativeKwh" | "avgKwhPer100" | "soc">[],
+  samples: Omit<
+    RouteSample,
+    "energyKwh" | "energyGrossKwh" | "energyRegenKwh" | "cumulativeKwh" | "avgKwhPer100" | "soc"
+  >[],
   ctx: EnergyContext,
   initialSoc: number,
 ): RouteSample[] {
   const cap = Math.max(ctx.vehicle.batteryKwh, 1);
+  const energyCtx: EnergyContext = {
+    ...ctx,
+    originAltitudeM: ctx.originAltitudeM ?? samples[0]?.elevM,
+  };
   let cum = 0;
   let soc = initialSoc;
   const out: RouteSample[] = [];
@@ -271,7 +393,11 @@ export function annotateEnergy(
       const prev = samples[i - 1]!;
       const dKm = Math.max(0, s.km - prev.km);
       const dElev = s.elevM - prev.elevM;
-      const slice = segmentEnergyBreakdown(dKm, dElev, s.speedKmh, ctx, soc);
+      const geo: SegmentGeo = {
+        altitudeM: (prev.elevM + s.elevM) / 2,
+        headingDeg: bearingDeg(prev, s),
+      };
+      const slice = segmentEnergyBreakdown(dKm, dElev, s.speedKmh, energyCtx, soc, geo);
       gross = slice.grossKwh;
       regen = slice.regenKwh;
       net = slice.netKwh;
@@ -314,7 +440,11 @@ export function batteryBudget(
   wltpKm: number;
   wltpKwhPer100: number | null;
 } {
-  const floorPct = Math.max(safetyPct(conditions), vehicle.minSocRecommended, conditions.arrivalSoc);
+  const floorPct = Math.max(
+    safetyPct(conditions),
+    vehicle.minSocRecommended,
+    conditions.arrivalSoc,
+  );
   const usablePct = Math.max(0, conditions.initialSoc - floorPct);
   const packedKwh = (conditions.initialSoc / 100) * vehicle.batteryKwh;
   const usableKwh = (usablePct / 100) * vehicle.batteryKwh;

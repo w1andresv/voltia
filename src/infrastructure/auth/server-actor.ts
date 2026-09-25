@@ -1,6 +1,8 @@
 import "server-only";
-import { createServerSupabase } from "@/infrastructure/supabase/server";
+import { cache } from "react";
 import { getEnv } from "@/infrastructure/config/env";
+import { supabaseIdentity } from "@/infrastructure/auth/supabase-identity";
+import { ensureUser } from "@/infrastructure/users/user-store";
 import type { Actor } from "@/domain/auth/port";
 
 const guest: Actor = { role: "guest", id: null, email: null };
@@ -15,27 +17,22 @@ function adminEmails(): Set<string> {
 }
 
 /**
- * Resolves the current actor from the request's Supabase session cookie.
- * Uses `getUser()`, never `getSession()`: `getSession()` trusts whatever is
- * in the cookie, while `getUser()` revalidates the token against Supabase's
- * auth server, so it can't be spoofed by an edited cookie.
+ * Resuelve al que llama: identidad verificada por el proveedor (ver
+ * supabase-identity.ts) → id interno de public.voltia_users (alta perezosa si aún no
+ * existe, p. ej. una sesión anterior a esta tabla). `actor.id` es SIEMPRE el
+ * id interno, nunca el del proveedor. Con `cache()`, una consulta por request.
  *
- * `role: "admin"` is anyone whose verified email is in ADMIN_EMAILS. That's
- * fine for a short, hand-maintained list; move to a table (or
- * app_metadata.role set server-side) if the list grows.
+ * `role: "admin"` es quien tenga su correo verificado en ADMIN_EMAILS. Para una
+ * lista corta y mantenida a mano basta; pasa a una tabla si crece.
  */
-export async function getActor(): Promise<Actor> {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user) return guest;
+export const getActor = cache(async (): Promise<Actor> => {
+  const identity = await supabaseIdentity.currentIdentity();
+  if (!identity) return guest;
 
-  const email = user.email ?? null;
-  const isAdmin = Boolean(email && adminEmails().has(email.toLowerCase()));
-  return { role: isAdmin ? "admin" : "member", id: user.id, email };
-}
+  const id = await ensureUser(identity);
+  const isAdmin = adminEmails().has(identity.email.toLowerCase());
+  return { role: isAdmin ? "admin" : "member", id, email: identity.email };
+});
 
 export class AuthError extends Error {
   constructor(message: string) {
@@ -44,14 +41,17 @@ export class AuthError extends Error {
   }
 }
 
-/** Throws unless the caller has a session. Returns the member/admin actor. */
-export async function requireMember(): Promise<Actor> {
+/** Lanza si no hay sesión. Devuelve el actor member/admin con el id interno. */
+export async function requireUser(): Promise<Actor> {
   const actor = await getActor();
   if (actor.role === "guest") throw new AuthError("Inicia sesión para continuar.");
   return actor;
 }
 
-/** Throws unless the caller's email is in ADMIN_EMAILS. */
+/** @deprecated alias temporal de requireUser(). */
+export const requireMember = requireUser;
+
+/** Lanza salvo que el correo del que llama esté en ADMIN_EMAILS. */
 export async function requireAdmin(): Promise<Actor> {
   const actor = await getActor();
   if (actor.role !== "admin") throw new AuthError("No autorizado.");

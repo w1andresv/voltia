@@ -3,9 +3,9 @@ import type { Actor } from "@/domain/auth/port";
 import { DEFAULT_CURVE } from "@/domain/charging";
 import type { PlanRequestShape, TripSummaryShape } from "@/domain/schemas";
 
-const { requireMember } = vi.hoisted(() => ({ requireMember: vi.fn<() => Promise<Actor>>() }));
+const { requireUser } = vi.hoisted(() => ({ requireUser: vi.fn<() => Promise<Actor>>() }));
 vi.mock("@/infrastructure/auth/server-actor", () => ({
-  requireMember,
+  requireUser,
   AuthError: class AuthError extends Error {},
 }));
 
@@ -23,7 +23,7 @@ function chain(result: unknown) {
 
 function client(result: unknown) {
   const builder = chain(result);
-  return { schema: vi.fn(() => builder), _builder: builder };
+  return { from: builder.from, _builder: builder };
 }
 
 const MEMBER: Actor = { role: "member", id: "user-1", email: "member@example.com" };
@@ -64,7 +64,7 @@ const REQUEST: PlanRequestShape = {
     customSafetyPct: 15,
     planningMode: "fastest",
     allowBelowSafety: false,
-    regenPct: 20,
+    regenLevel: "medium",
   },
 };
 
@@ -92,13 +92,13 @@ beforeEach(() => {
 
 describe("saveTripFn", () => {
   it("un invitado no puede guardar un viaje", async () => {
-    requireMember.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
+    requireUser.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
     const { saveTripFn } = await import("./trips");
     await expect(saveTripFn({ data: { request: REQUEST, summary: SUMMARY } })).rejects.toThrow();
   });
 
   it("guarda la petición y el resumen, no el plan completo", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     const c = client({ data: ROW, error: null });
     createServerSupabase.mockResolvedValueOnce(c);
     const { saveTripFn } = await import("./trips");
@@ -111,15 +111,50 @@ describe("saveTripFn", () => {
   });
 });
 
+describe("saveTripFn con clientId (idempotencia)", () => {
+  const CLIENT_ID = "00000000-0000-4000-8000-00000000000a";
+
+  it("un reintento con el mismo clientId devuelve la ruta existente sin insertar", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const c = client({ data: ROW, error: null });
+    createServerSupabase.mockResolvedValueOnce(c);
+    const { saveTripFn } = await import("./trips");
+    const saved = await saveTripFn({ data: { request: REQUEST, summary: SUMMARY, clientId: CLIENT_ID } });
+    expect(saved.id).toBe("trip-1");
+    expect(c._builder.eq).toHaveBeenCalledWith("client_id", CLIENT_ID);
+    expect(c._builder.insert).not.toHaveBeenCalled();
+  });
+
+  it("con un clientId nuevo inserta guardando client_id", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const c = client({ data: null, error: null });
+    // 1.ª consulta (maybeSingle): no existe; 2.ª (single del insert): la fila creada.
+    (c._builder.maybeSingle as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: null, error: null });
+    (c._builder.single as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: ROW, error: null });
+    createServerSupabase.mockResolvedValueOnce(c);
+    const { saveTripFn } = await import("./trips");
+    await saveTripFn({ data: { request: REQUEST, summary: SUMMARY, clientId: CLIENT_ID } });
+    expect(c._builder.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ owner_id: "user-1", client_id: CLIENT_ID }),
+    );
+  });
+
+  it("rechaza un clientId que no es uuid", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const { saveTripFn } = await import("./trips");
+    await expect(saveTripFn({ data: { request: REQUEST, summary: SUMMARY, clientId: "abc" } })).rejects.toThrow();
+  });
+});
+
 describe("listMyTripsFn", () => {
   it("un invitado no puede listar su historial", async () => {
-    requireMember.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
+    requireUser.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
     const { listMyTripsFn } = await import("./trips");
     await expect(listMyTripsFn()).rejects.toThrow();
   });
 
   it("devuelve el historial del usuario", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     createServerSupabase.mockResolvedValueOnce(client({ data: [ROW], error: null }));
     const { listMyTripsFn } = await import("./trips");
     const list = await listMyTripsFn();
@@ -130,13 +165,13 @@ describe("listMyTripsFn", () => {
 
 describe("deleteTripFn", () => {
   it("un invitado no puede borrar", async () => {
-    requireMember.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
+    requireUser.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
     const { deleteTripFn } = await import("./trips");
     await expect(deleteTripFn({ data: { id: "trip-1" } })).rejects.toThrow();
   });
 
   it("borra solo dentro del alcance del dueño (filtra por owner_id además del RLS)", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     const c = client({ error: null });
     createServerSupabase.mockResolvedValueOnce(c);
     const { deleteTripFn } = await import("./trips");
@@ -148,13 +183,13 @@ describe("deleteTripFn", () => {
 
 describe("shareTripFn", () => {
   it("un invitado no puede compartir", async () => {
-    requireMember.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
+    requireUser.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
     const { shareTripFn } = await import("./trips");
     await expect(shareTripFn({ data: { id: "trip-1" } })).rejects.toThrow();
   });
 
   it("genera un share_id nuevo si el viaje todavía no se ha compartido", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     createServerSupabase.mockResolvedValueOnce(client({ data: { share_id: null }, error: null }));
     const { shareTripFn } = await import("./trips");
     const result = await shareTripFn({ data: { id: "trip-1" } });
@@ -162,7 +197,7 @@ describe("shareTripFn", () => {
   });
 
   it("reutiliza el share_id si el viaje ya estaba compartido", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     createServerSupabase.mockResolvedValueOnce(client({ data: { share_id: "abc1234567" }, error: null }));
     const { shareTripFn } = await import("./trips");
     const result = await shareTripFn({ data: { id: "trip-1" } });
@@ -175,7 +210,7 @@ describe("getSharedTripFn", () => {
     createServerSupabase.mockResolvedValueOnce(client({ data: { ...ROW, shared: true, share_id: "abc1234567" }, error: null }));
     const { getSharedTripFn } = await import("./trips");
     const trip = await getSharedTripFn({ data: { shareId: "abc1234567" } });
-    expect(requireMember).not.toHaveBeenCalled();
+    expect(requireUser).not.toHaveBeenCalled();
     expect(trip?.summary.distanceKm).toBe(290);
   });
 

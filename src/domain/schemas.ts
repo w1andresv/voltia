@@ -10,10 +10,16 @@
 import { z } from "zod";
 
 export const ConnectorTypeSchema = z.enum(["ccs2", "ccs1", "type2", "chademo", "nacs", "gb_t"]);
+export const ChargeAdapterSchema = z.object({
+  from: ConnectorTypeSchema,
+  to: ConnectorTypeSchema,
+});
 export const DrivingStyleSchema = z.enum(["efficient", "normal", "sport"]);
 export const ClimateControlSchema = z.enum(["off", "eco", "normal", "max"]);
 export const SafetyModeSchema = z.enum(["conservative", "normal", "low", "custom"]);
 export const PlanningModeSchema = z.enum(["fastest", "efficient", "fewer_stops", "safer", "custom"]);
+export const RegenLevelSchema = z.enum(["low", "medium", "high"]);
+export type RegenLevelShape = z.infer<typeof RegenLevelSchema>;
 
 export const ChargeCurvePointSchema = z.object({
   soc: z.number(),
@@ -36,6 +42,7 @@ export const VehicleSchema = z.object({
   dcMaxKw: z.number().positive(),
   chargeCurve: z.array(ChargeCurvePointSchema),
   connectors: z.array(ConnectorTypeSchema),
+  adapters: z.array(ChargeAdapterSchema).optional(),
   minSocRecommended: z.number(),
   maxSocTravel: z.number(),
   isCustom: z.boolean().optional(),
@@ -61,8 +68,27 @@ export const TripConditionsSchema = z.object({
   customSafetyPct: z.number().min(5).max(40),
   planningMode: PlanningModeSchema,
   allowBelowSafety: z.boolean(),
-  regenPct: z.number().min(5).max(80).optional().default(20),
+  regenLevel: RegenLevelSchema.default("medium"),
 });
+
+/**
+ * Antes la regeneración era un porcentaje (`regenPct`, 5–80, por defecto 20).
+ * Se traduce a nivel para leer viajes guardados y preferencias viejas.
+ */
+export function regenLevelFromLegacyPct(pct: unknown): RegenLevelShape {
+  if (typeof pct !== "number" || !Number.isFinite(pct)) return "medium";
+  if (pct <= 10) return "low";
+  if (pct >= 50) return "high";
+  return "medium";
+}
+
+/** Condiciones guardadas con `regenPct` → con `regenLevel`. Lo demás pasa igual. */
+export function upgradeLegacyConditions(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const { regenPct, ...rest } = value as Record<string, unknown>;
+  if (RegenLevelSchema.safeParse(rest.regenLevel).success || regenPct === undefined) return rest;
+  return { ...rest, regenLevel: regenLevelFromLegacyPct(regenPct) };
+}
 
 export type VehicleShape = z.infer<typeof VehicleSchema>;
 export type PlaceShape = z.infer<typeof PlaceSchema>;
@@ -78,7 +104,7 @@ export const PlanRequestSchema = z.object({
   destination: PlaceSchema,
   waypoints: z.array(PlaceSchema).max(5),
   vehicle: VehicleSchema,
-  conditions: TripConditionsSchema,
+  conditions: z.preprocess(upgradeLegacyConditions, TripConditionsSchema),
 });
 export type PlanRequestShape = z.infer<typeof PlanRequestSchema>;
 

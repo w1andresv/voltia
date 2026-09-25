@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Actor } from "@/domain/auth/port";
 import type { Charger } from "@/domain/types";
 
-const { requireMember, requireAdmin } = vi.hoisted(() => ({
-  requireMember: vi.fn<() => Promise<Actor>>(),
+const { requireUser, requireAdmin } = vi.hoisted(() => ({
+  requireUser: vi.fn<() => Promise<Actor>>(),
   requireAdmin: vi.fn<() => Promise<Actor>>(),
 }));
 
@@ -26,7 +26,7 @@ const {
 }));
 
 vi.mock("@/infrastructure/auth/server-actor", () => ({
-  requireMember,
+  requireUser,
   requireAdmin,
   AuthError: class AuthError extends Error {},
 }));
@@ -87,14 +87,14 @@ describe("listStationsFn", () => {
 
 describe("createStationFn", () => {
   it("un invitado no puede crear una estación", async () => {
-    requireMember.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
+    requireUser.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
     const { createStationFn } = await import("./stations");
     await expect(createStationFn({ data: VALID_STATION })).rejects.toThrow();
     expect(insertStation).not.toHaveBeenCalled();
   });
 
   it("un miembro autenticado sí puede crear, y queda como autor", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     const { createStationFn } = await import("./stations");
     await createStationFn({ data: VALID_STATION });
     expect(checkRateLimit).toHaveBeenCalledWith("create-station", MEMBER.id, 10, 600);
@@ -102,7 +102,7 @@ describe("createStationFn", () => {
   });
 
   it("rechaza datos que no pasan la validación (nombre muy corto)", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     const { createStationFn } = await import("./stations");
     await expect(createStationFn({ data: { ...VALID_STATION, name: "x" } })).rejects.toThrow();
     expect(insertStation).not.toHaveBeenCalled();
@@ -113,14 +113,14 @@ describe("updateStationFn", () => {
   const UPDATE = { ...VALID_STATION, id: "station-1" };
 
   it("un invitado no puede editar", async () => {
-    requireMember.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
+    requireUser.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
     const { updateStationFn } = await import("./stations");
     await expect(updateStationFn({ data: UPDATE })).rejects.toThrow();
     expect(patchStation).not.toHaveBeenCalled();
   });
 
   it("el admin puede editar cualquier estación", async () => {
-    requireMember.mockResolvedValueOnce(ADMIN);
+    requireUser.mockResolvedValueOnce(ADMIN);
     const { updateStationFn } = await import("./stations");
     await updateStationFn({ data: UPDATE });
     expect(getStationOwnership).not.toHaveBeenCalled();
@@ -128,7 +128,7 @@ describe("updateStationFn", () => {
   });
 
   it("el autor puede editar su propia estación mientras sigue pendiente", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     getStationOwnership.mockResolvedValueOnce({ createdBy: MEMBER.id, status: "pending" });
     const { updateStationFn } = await import("./stations");
     await updateStationFn({ data: UPDATE });
@@ -136,7 +136,7 @@ describe("updateStationFn", () => {
   });
 
   it("un miembro no puede editar la estación de otro", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     getStationOwnership.mockResolvedValueOnce({ createdBy: "otro-usuario", status: "pending" });
     const { updateStationFn } = await import("./stations");
     await expect(updateStationFn({ data: UPDATE })).rejects.toThrow("No autorizado.");
@@ -144,7 +144,7 @@ describe("updateStationFn", () => {
   });
 
   it("el autor no puede editar su propia estación una vez ya aprobada", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     getStationOwnership.mockResolvedValueOnce({ createdBy: MEMBER.id, status: "approved" });
     const { updateStationFn } = await import("./stations");
     await expect(updateStationFn({ data: UPDATE })).rejects.toThrow("No autorizado.");

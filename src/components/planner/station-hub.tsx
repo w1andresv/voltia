@@ -8,7 +8,7 @@ import { reviewStationFn } from "@/server/actions/stations";
 import { useActor } from "@/infrastructure/auth/use-actor";
 import type { Charger, StationStatus } from "@/domain/types";
 import { CATALOG_CHARGERS } from "@/infrastructure/providers/chargers.catalog";
-import { isPlugshareToken } from "@/lib/plugshare";
+import { usePlugshareEnabled } from "./use-plugshare";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,7 +24,7 @@ export function StationHub() {
   const setSeed = usePlanner((s) => s.setStationSeed);
   const router = useRouter();
   const { data: community = [], isLoading } = useCommunityStations();
-  const plugshareOn = usePlanner((s) => isPlugshareToken(s.plugshareToken));
+  const plugshareOn = usePlugshareEnabled();
   const actor = useActor();
   const isAdmin = actor.role === "admin";
   const pending = community.filter((c) => c.status === "pending");
@@ -87,7 +87,7 @@ export function StationHub() {
             <TabsContent value="network">
               <p className="mb-3 text-xs text-muted">
                 {approved.length} confirmadas por la comunidad · {CATALOG_CHARGERS.length} en catálogo verificado del operador
-                {plugshareOn ? " · PlugShare activo en el mapa" : " · PlugShare opcional en el menú"}.
+                {plugshareOn ? " · PlugShare activo en el mapa" : ""}.
               </p>
               <ul className="max-h-80 space-y-3 overflow-y-auto">
                 {approved.map((c) => (

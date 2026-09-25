@@ -1,14 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { VERIFIED_DC_ADAPTERS } from "@/domain/charging";
 import { CONNECTOR_LABEL, type ConnectorType, type Vehicle } from "@/domain/types";
 import { mixedCycleKwhPer100, wltpKwhPer100 } from "@/domain/energy";
-import {
-  catalogById,
-  emptyCustomVehicle,
-  isCatalogId,
-  isVehicleModified,
-  vehicleLabel,
-} from "@/domain/vehicles";
+import { emptyCustomVehicle, vehicleLabel } from "@/domain/vehicles";
+import { differsFromCatalog } from "@/domain/user/catalog-rules";
+import { useVehicles } from "@/components/user/user-context";
 import { formatKwhPer100 } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -21,12 +18,11 @@ const CONNECTORS: ConnectorType[] = ["ccs2", "ccs1", "type2", "chademo", "nacs",
 export function VehicleEditor() {
   const open = usePlanner((s) => s.vehicleModalOpen);
   const setOpen = usePlanner((s) => s.setVehicleModalOpen);
-  const vehicles = usePlanner((s) => s.vehicles);
+  const { vehicles, catalog, saveVehicle, removeVehicle } = useVehicles();
+  const isCatalogId = (id: string) => catalog.some((c) => c.id === id);
+  const isVehicleModified = (v: Vehicle) => isCatalogId(v.id) && differsFromCatalog(v, catalog);
   const selectedId = usePlanner((s) => s.selectedVehicleId);
   const setVehicleId = usePlanner((s) => s.setVehicleId);
-  const upsert = usePlanner((s) => s.upsertVehicle);
-  const remove = usePlanner((s) => s.removeVehicle);
-  const reset = usePlanner((s) => s.resetVehicle);
 
   const selected = vehicles.find((v) => v.id === selectedId) ?? vehicles[0]!;
   const [draft, setDraft] = useState<Vehicle | null>(null);
@@ -65,8 +61,8 @@ export function VehicleEditor() {
               ? isNew
                 ? "Ficha técnica: batería, consumo, conectores y límites de carga."
                 : isCatalogId(editing.id)
-                  ? "Los cambios se guardan en este dispositivo. Puedes restaurar el modelo de fábrica."
-                  : "Actualiza los datos de tu vehículo. Se guardan en este dispositivo."
+                  ? "Los cambios se guardan en tu cuenta (o en este navegador si no has iniciado sesión). Puedes restaurar el modelo de fábrica."
+                  : "Actualiza los datos de tu vehículo. Se guardan en tu cuenta (o en este navegador si no has iniciado sesión)."
               : "Elige un modelo, edítalo o registra el tuyo con datos reales."}
           </DialogDescription>
         </DialogHeader>
@@ -75,9 +71,10 @@ export function VehicleEditor() {
           <VehicleForm
             value={editing}
             onChange={setDraft}
+            factory={catalog.find((c) => c.id === editing.id)}
             onSave={() => {
               if (!editing.brand.trim() || !editing.model.trim()) return;
-              upsert({
+              void saveVehicle({
                 ...editing,
                 brand: editing.brand.trim(),
                 model: editing.model.trim(),
@@ -91,7 +88,7 @@ export function VehicleEditor() {
                 consumptionManual: Boolean(
                   editing.consumptionManual && editing.consumptionKwhPer100km && editing.consumptionKwhPer100km > 0,
                 ),
-              });
+              }).catch(() => undefined);
               closeForm();
             }}
             onCancel={closeForm}
@@ -150,7 +147,7 @@ export function VehicleEditor() {
                                 variant="ghost"
                                 size="icon-sm"
                                 aria-label={`Restaurar ${vehicleLabel(v)}`}
-                                onClick={() => reset(v.id)}
+                                onClick={() => void removeVehicle(v.id).catch(() => undefined)}
                               >
                                 <RotateCcw className="size-4" />
                               </Button>
@@ -162,7 +159,7 @@ export function VehicleEditor() {
                                 size="icon-sm"
                                 className="text-danger hover:text-danger"
                                 aria-label={`Quitar ${vehicleLabel(v)}`}
-                                onClick={() => remove(v.id)}
+                                onClick={() => void removeVehicle(v.id).catch(() => undefined)}
                               >
                                 <Trash2 className="size-4" />
                               </Button>
@@ -208,18 +205,19 @@ export function VehicleEditor() {
 
 function VehicleForm({
   value,
+  factory,
   onChange,
   onSave,
   onCancel,
 }: {
   value: Vehicle;
+  factory?: Vehicle;
   onChange: (v: Vehicle) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
   const set = (p: Partial<Vehicle>) => onChange({ ...value, ...p });
   const num = (k: keyof Vehicle, v: string) => set({ [k]: Number(v) } as Partial<Vehicle>);
-  const factory = catalogById(value.id);
   const n = (v: number, digits = 1) => (Number.isFinite(v) ? String(Number(v.toFixed(digits))) : "");
   const conditions = usePlanner((s) => s.conditions);
   const estimated = mixedCycleKwhPer100(value, conditions, null);
@@ -321,6 +319,17 @@ function VehicleForm({
           })}
         </div>
       </div>
+      {(() => {
+        const offered = VERIFIED_DC_ADAPTERS.filter((a) => value.connectors.includes(a.to));
+        if (!offered.length) return null;
+        return (
+          <p className="text-xs leading-relaxed text-muted">
+            Adaptadores que la ruta puede proponer, porque están definidos:{" "}
+            {offered.map((a) => `${CONNECTOR_LABEL[a.from]} → ${CONNECTOR_LABEL[a.to]}`).join(", ")}. El resto de
+            combinaciones no se asume.
+          </p>
+        );
+      })()}
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancelar

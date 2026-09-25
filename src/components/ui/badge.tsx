@@ -12,6 +12,7 @@ const badgeVariants = cva(
         warn: "bg-warn/15 text-warn",
         danger: "bg-danger/15 text-danger",
         ok: "bg-ok/15 text-ok",
+        info: "bg-info/15 text-info",
       },
     },
     defaultVariants: { variant: "default" },

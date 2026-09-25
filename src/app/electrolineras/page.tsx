@@ -1,5 +1,5 @@
-import { StationsApp } from "@/components/planner/stations-app";
+import { StationsGate } from "@/components/planner/stations-gate";
 
 export default function StationsPage() {
-  return <StationsApp />;
+  return <StationsGate />;
 }

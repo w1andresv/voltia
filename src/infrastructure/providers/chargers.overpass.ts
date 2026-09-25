@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Charger, ChargerSocket, ConnectorType } from "@/domain/types";
 import { isVerifiedForPlanning } from "@/domain/types";
-import { uniqueByProximity } from "@/domain/geo";
+import { haversineKm, uniqueByProximity } from "@/domain/geo";
 import { fetchJson } from "./http";
 import { CATALOG_CHARGERS } from "./chargers.catalog";
 
@@ -99,12 +99,33 @@ function nodeToCharger(n: OverpassNode): Charger | null {
   };
 }
 
+/** Radio de búsqueda de cada sonda (m); las sondas se separan ~1,5 radios. */
+const PROBE_RADIUS_M = 12000;
+const PROBE_SPACING_KM = 18;
+const MAX_PROBES = 32;
+
+/**
+ * Puntos de consulta a lo largo de una o varias rutas: uno cada ~18 km y nunca
+ * repetido donde las rutas se solapan (así varias alternativas no multiplican
+ * la consulta). Si hay demasiados, se reparten uniformemente.
+ */
+export function pickProbes(samples: { lat: number; lon: number }[]): { lat: number; lon: number }[] {
+  const probes: { lat: number; lon: number }[] = [];
+  for (const s of samples) {
+    if (probes.every((p) => haversineKm(p, s) >= PROBE_SPACING_KM)) probes.push(s);
+  }
+  const last = samples[samples.length - 1];
+  if (last && probes.every((p) => haversineKm(p, last) >= PROBE_SPACING_KM / 2)) probes.push(last);
+  if (probes.length <= MAX_PROBES) return probes;
+  const step = probes.length / MAX_PROBES;
+  return Array.from({ length: MAX_PROBES }, (_, i) => probes[Math.floor(i * step)]!);
+}
+
 async function queryOverpass(samples: { lat: number; lon: number }[]): Promise<Charger[]> {
   if (!samples.length) return [];
-  const step = Math.max(1, Math.floor(samples.length / 8));
-  const probes = samples.filter((_, i) => i % step === 0);
+  const probes = pickProbes(samples);
   const parts = probes
-    .map((p) => `node["amenity"="charging_station"](around:12000,${p.lat},${p.lon});`)
+    .map((p) => `node["amenity"="charging_station"](around:${PROBE_RADIUS_M},${p.lat},${p.lon});`)
     .join("\n");
   const body = `[out:json][timeout:8];(\n${parts}\n);out center tags;`;
   const endpoints = [
@@ -118,7 +139,9 @@ async function queryOverpass(samples: { lat: number; lon: number }[]): Promise<C
         method: "POST",
         timeoutMs: 7000,
         cacheTtlMs: 10 * 60_000,
-        cacheKey: `ov:${probes[0]?.lat.toFixed(2)}:${probes[0]?.lon.toFixed(2)}:${probes.length}`,
+        // Todas las sondas en la clave: con solo la primera, dos rutas que salen del
+        // mismo sitio compartían (por error) el resultado en caché.
+        cacheKey: `ov:${probes.map((p) => `${p.lat.toFixed(2)},${p.lon.toFixed(2)}`).join(";")}`,
         headers: {
           "content-type": "application/x-www-form-urlencoded",
           "user-agent": "Voltia/1.0 (EV trip planner)",
@@ -142,7 +165,6 @@ async function queryOverpass(samples: { lat: number; lon: number }[]): Promise<C
 export async function findChargersAlong(
   samples: { lat: number; lon: number }[],
   community: Charger[] = [],
-  plugshareToken?: string,
 ): Promise<{
   chargers: Charger[];
   warnings: string[];
@@ -158,7 +180,7 @@ export async function findChargersAlong(
   }
 
   const { findPlugshareAlong } = await import("./chargers.plugshare");
-  const plugshare = await findPlugshareAlong(samples, plugshareToken);
+  const plugshare = await findPlugshareAlong(samples);
   if (plugshare.warning) warnings.push(plugshare.warning);
 
   const catalogNear = CATALOG_CHARGERS.filter(

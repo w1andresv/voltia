@@ -40,7 +40,7 @@ function conditions(overrides: Partial<TripConditions> = {}): TripConditions {
     customSafetyPct: 15,
     planningMode: "fastest",
     allowBelowSafety: false,
-    regenPct: 20,
+    regenLevel: "medium",
     ...overrides,
   };
 }
@@ -84,6 +84,170 @@ function chargerAt(km: number, overrides: Partial<Charger> = {}): Charger {
 
 const ORIGIN: Place = { label: "Origen", lat: 4, lon: -74 };
 const DESTINATION_100: Place = { label: "Destino", lat: 4 + 100 / 111, lon: -74 };
+
+describe("buildPlan — cargador por debajo del margen", () => {
+  it("propone ese punto y cuánto cargar cuando es el que permite seguir", () => {
+    const distance = 400;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: vehicle({ batteryKwh: 60, rangeKm: 400 }),
+      conditions: conditions({ initialSoc: 40, arrivalSoc: 20, safetyMode: "normal" }),
+      chargers: [chargerAt(120)],
+      weather: null,
+      origin: ORIGIN,
+      destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+    });
+    expect(plan.stops).toHaveLength(1);
+    const stop = plan.stops[0]!;
+    expect(stop.arriveSoc).toBeLessThan(15);
+    expect(stop.departSoc).toBeGreaterThan(stop.arriveSoc + 5);
+    expect(stop.energyAddedKwh).toBeGreaterThan(0);
+  });
+});
+
+describe("buildPlan — carga lenta cuando hace falta", () => {
+  it("incluye el punto AC si es la única forma de completar, con su potencia y su energía", () => {
+    const distance = 700;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: vehicle({ dcMaxKw: 120, acMaxKw: 7 }),
+      conditions: conditions({ initialSoc: 90, arrivalSoc: 20 }),
+      chargers: [100, 200, 300, 400, 500, 600].map((km) =>
+        chargerAt(km, { sockets: [{ connector: "type2", powerKw: 22, count: 1 }] }),
+      ),
+      weather: null,
+      origin: ORIGIN,
+      destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+    });
+    expect(plan.feasible).toBe(true);
+    expect(plan.stops.length).toBeGreaterThan(0);
+    expect(
+      plan.stops.every(
+        (stop) =>
+          stop.bestSocket.connector === "type2" &&
+          stop.chargeKw === 7 &&
+          stop.energyAddedKwh > 0 &&
+          stop.chargeMinutes > 30 &&
+          stop.departSoc > stop.arriveSoc,
+      ),
+    ).toBe(true);
+  });
+
+  it("usa el lento si el rápido queda fuera de alcance", () => {
+    const distance = 400;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: vehicle({ batteryKwh: 60, rangeKm: 400, dcMaxKw: 120, acMaxKw: 11 }),
+      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      chargers: [
+        chargerAt(80, { sockets: [{ connector: "type2", powerKw: 11, count: 1 }] }),
+        chargerAt(340, { sockets: [{ connector: "ccs2", powerKw: 150, count: 1 }] }),
+      ],
+      weather: null,
+      origin: ORIGIN,
+      destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+    });
+    expect(plan.stops.length).toBeGreaterThan(0);
+    expect(plan.stops[0]!.bestSocket.connector).toBe("type2");
+    expect(plan.stops[0]!.chargeKw).toBe(11);
+  });
+
+  it("si hay AC y DC, la parada usa la potencia rápida limitada por el auto", () => {
+    const distance = 700;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: vehicle({ dcMaxKw: 120, acMaxKw: 7 }),
+      conditions: conditions({ initialSoc: 90, arrivalSoc: 20 }),
+      chargers: [100, 200, 300, 400, 500, 600].map((km) =>
+        chargerAt(km, {
+          sockets: [
+            { connector: "type2", powerKw: 7, count: 2 },
+            { connector: "ccs2", powerKw: 150, count: 1 },
+          ],
+        }),
+      ),
+      weather: null,
+      origin: ORIGIN,
+      destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+    });
+    expect(plan.stops.length).toBeGreaterThan(0);
+    expect(plan.stops.every((stop) => stop.bestSocket.connector === "ccs2" && stop.chargeKw === 120)).toBe(
+      true,
+    );
+  });
+});
+
+describe("buildPlan — adaptadores definidos", () => {
+  it("compara GB/T 50 kW y CCS1 40 kW hacia CCS2 y elige el más rápido", () => {
+    const distance = 400;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: vehicle({
+        batteryKwh: 60,
+        rangeKm: 400,
+        connectors: ["ccs2", "type2"],
+        dcMaxKw: 120,
+        acMaxKw: 11,
+      }),
+      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      chargers: [
+        chargerAt(100, {
+          sockets: [
+            { connector: "gb_t", powerKw: 50, count: 1 },
+            { connector: "ccs1", powerKw: 40, count: 1 },
+            { connector: "type2", powerKw: 11, count: 1 },
+          ],
+        }),
+      ],
+      weather: null,
+      origin: ORIGIN,
+      destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+    });
+    expect(plan.stops).toHaveLength(1);
+    const stop = plan.stops[0]!;
+    expect(stop.bestSocket.connector).toBe("gb_t");
+    expect(stop.adapter).toEqual({ from: "gb_t", to: "ccs2" });
+    expect(stop.chargeKw).toBe(50);
+    expect(stop.options?.map((o) => [o.mode, o.socket.connector, o.nominalKw, o.chargeKw])).toEqual([
+      ["adapter", "gb_t", 50, 50],
+      ["adapter", "ccs1", 40, 40],
+      ["ac", "type2", 11, 11],
+    ]);
+    expect(stop.options?.every((o) => o.energyAddedKwh > 0 && o.chargeMinutes > 0 && o.rangeGainKm > 0)).toBe(
+      true,
+    );
+    expect(stop.options?.[0]?.chargeMinutes).toBeLessThan(stop.options?.[2]?.chargeMinutes ?? 0);
+  });
+
+  it("un CHAdeMO sin adaptador definido no se usa", () => {
+    const distance = 400;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: vehicle({
+        batteryKwh: 60,
+        rangeKm: 400,
+        connectors: ["ccs2", "type2"],
+        dcMaxKw: 120,
+        acMaxKw: 11,
+      }),
+      conditions: conditions({ initialSoc: 35, arrivalSoc: 20 }),
+      chargers: [
+        chargerAt(100, {
+          sockets: [
+            { connector: "chademo", powerKw: 50, count: 1 },
+            { connector: "type2", powerKw: 11, count: 1 },
+          ],
+        }),
+      ],
+      weather: null,
+      origin: ORIGIN,
+      destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+    });
+    expect(plan.stops).toHaveLength(1);
+    expect(plan.stops[0]!.bestSocket.connector).toBe("type2");
+    expect(plan.stops[0]!.options?.some((o) => o.socket.connector === "chademo")).toBe(false);
+  });
+});
 
 describe("buildPlan — viaje corto sin paradas", () => {
   it("un viaje de 100 km con batería de sobra no necesita paradas", () => {
@@ -204,5 +368,87 @@ describe("rankPlans", () => {
     const b = { ...planFor("fastest"), id: "b", minSoc: 25 };
     const ranked = rankPlans([a, b], "safer");
     expect(ranked.map((p) => p.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("rankPlans con jerarquía vial", () => {
+  type P = Parameters<typeof rankPlans>[0][number];
+  const base = { feasible: true, stops: [], energyKwh: 30, minSoc: 20, arrivalSoc: 20 };
+  const shortcut = { ...base, id: "atajo", totalMinutes: 190, driveMinutes: 190, hierarchyFactor: 1.2, withinTolerance: true } as unknown as P;
+  const trunk = { ...base, id: "troncal", totalMinutes: 205, driveMinutes: 205, hierarchyFactor: 1.0, withinTolerance: true } as unknown as P;
+
+  it("en modo rápido no elige un atajo por vías menores solo porque ahorra minutos", () => {
+    expect(rankPlans([shortcut, trunk], "fastest")[0]?.id).toBe("troncal");
+  });
+
+  it("una ruta fuera de la tolerancia solo gana si no hay otra", () => {
+    const far = { ...trunk, id: "lejana", withinTolerance: false } as P;
+    expect(rankPlans([far, shortcut], "fastest")[0]?.id).toBe("atajo");
+  });
+
+  it("sin clasificación (OSRM) se comporta como antes: gana la más rápida", () => {
+    const a = { ...shortcut, hierarchyFactor: undefined } as P;
+    const b = { ...trunk, hierarchyFactor: undefined } as P;
+    expect(rankPlans([b, a], "fastest")[0]?.id).toBe("atajo");
+  });
+});
+
+describe("rankPlans: menos vías menores antes que minutos", () => {
+  type P = Parameters<typeof rankPlans>[0][number];
+  const base = { feasible: true, stops: [], energyKwh: 30, minSoc: 20, arrivalSoc: 20, withinTolerance: true };
+  it("gana la troncal aunque el atajo sea 30 min más rápido (ambas dentro de la tolerancia)", () => {
+    const shortcut = { ...base, id: "atajo", totalMinutes: 310, driveMinutes: 310, hierarchyFactor: 1.05, minorRoadScore: 40 } as unknown as P;
+    const trunk = { ...base, id: "troncal", totalMinutes: 340, driveMinutes: 340, hierarchyFactor: 1, minorRoadScore: 0 } as unknown as P;
+    expect(rankPlans([shortcut, trunk], "fastest")[0]?.id).toBe("troncal");
+  });
+  it("con puntajes parecidos (< 2) decide el tiempo", () => {
+    const a = { ...base, id: "a", totalMinutes: 300, driveMinutes: 300, minorRoadScore: 1 } as unknown as P;
+    const b = { ...base, id: "b", totalMinutes: 320, driveMinutes: 320, minorRoadScore: 0 } as unknown as P;
+    expect(rankPlans([b, a], "fastest")[0]?.id).toBe("a");
+  });
+});
+
+describe("estilo de conducción: energía y tiempo", () => {
+  const plan = (drivingStyle: "efficient" | "normal" | "sport", avgSpeedKmh: number | null = null) =>
+    buildPlan({
+      raw: straightRoute(100),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 90, arrivalSoc: 20, drivingStyle, avgSpeedKmh }),
+      chargers: [],
+      weather: null,
+      origin: ORIGIN,
+      destination: DESTINATION_100,
+    });
+
+  it("deportiva gasta más y llega antes; eficiente gasta menos y tarda más", () => {
+    const eff = plan("efficient");
+    const nor = plan("normal");
+    const spo = plan("sport");
+    expect(eff.energyKwh).toBeLessThan(nor.energyKwh);
+    expect(spo.energyKwh).toBeGreaterThan(nor.energyKwh);
+    expect(eff.driveMinutes).toBeGreaterThan(nor.driveMinutes);
+    expect(spo.driveMinutes).toBeLessThan(nor.driveMinutes);
+    // Rangos del modelo: ≈ −10 % / +15 % de energía.
+    expect(eff.energyKwh / nor.energyKwh).toBeGreaterThan(0.85);
+    expect(eff.energyKwh / nor.energyKwh).toBeLessThan(0.97);
+    expect(spo.energyKwh / nor.energyKwh).toBeGreaterThan(1.08);
+    expect(spo.energyKwh / nor.energyKwh).toBeLessThan(1.22);
+  });
+
+  it("con velocidad media fija, el estilo no cambia el tiempo (sí la energía)", () => {
+    const nor = plan("normal", 90);
+    const spo = plan("sport", 90);
+    expect(spo.driveMinutes).toBeCloseTo(nor.driveMinutes, 5);
+    expect(spo.energyKwh).toBeGreaterThan(nor.energyKwh);
+  });
+});
+
+describe("rankPlans: 'Más eficiente' también respeta la jerarquía vial", () => {
+  type P = Parameters<typeof rankPlans>[0][number];
+  const base = { feasible: true, stops: [], minSoc: 20, arrivalSoc: 20, withinTolerance: true, totalMinutes: 300, driveMinutes: 300 };
+  it("no elige el atajo por vías menores solo porque gasta 1 kWh menos", () => {
+    const shortcut = { ...base, id: "atajo", energyKwh: 39, minorRoadScore: 40 } as unknown as P;
+    const trunk = { ...base, id: "troncal", energyKwh: 40, minorRoadScore: 0 } as unknown as P;
+    expect(rankPlans([shortcut, trunk], "efficient")[0]?.id).toBe("troncal");
   });
 });

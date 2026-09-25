@@ -1,5 +1,5 @@
 import "leaflet/dist/leaflet.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleMarker,
   MapContainer,
@@ -7,6 +7,7 @@ import {
   Polyline,
   Popup,
   TileLayer,
+  Tooltip,
   ZoomControl,
   useMap,
   useMapEvents,
@@ -15,21 +16,23 @@ import L from "leaflet";
 import { Flag, MapPin, Zap } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
-import type { Charger, LatLon, RouteSample } from "@/domain/types";
-import { MAP_COLORS, socColor } from "@/lib/map-colors";
+import { isDc } from "@/domain/charging";
+import { CONNECTOR_LABEL, type Charger, type LatLon, type RouteSample } from "@/domain/types";
+import { mapPalette, socColor, type MapPalette } from "@/lib/map-colors";
+import { useColorScheme } from "@/components/shell/theme";
 import { formatKm, formatKwh, formatKw, formatMinutes, formatPct } from "@/lib/format";
 import { ChargerFacts } from "@/components/planner/charger-facts";
 import { suppressMapClicks } from "@/components/planner/map-click";
-import { MAPBOX_ATTRIBUTION, mapboxTileUrl } from "@/lib/mapbox";
+import { MAPBOX_ATTRIBUTION, envMapboxToken, mapboxTileUrl } from "@/lib/mapbox";
 import { usePlanner } from "@/lib/store";
 import type { ChargerAction, LeafletMapProps, MapBounds } from "./map-types";
 
 export type { LeafletMapProps };
 
-function pinIcon(kind: "origin" | "dest" | "charger" | "pending") {
+function pinIcon(kind: "origin" | "dest" | "charger" | "pending", colors: MapPalette) {
   const bg =
-    kind === "origin" ? MAP_COLORS.origin : kind === "pending" ? MAP_COLORS.socMid : MAP_COLORS.dest;
-  const fg = kind === "origin" ? "#0b0e12" : kind === "pending" ? "#2a2114" : "#06221d";
+    kind === "origin" ? colors.origin : kind === "pending" ? colors.socMid : colors.dest;
+  const fg = kind === "origin" ? colors.ink : kind === "pending" ? colors.inkWarn : colors.ink;
   const node =
     kind === "origin" ? (
       <MapPin size={14} color={fg} strokeWidth={2.4} />
@@ -51,34 +54,37 @@ function pinIcon(kind: "origin" | "dest" | "charger" | "pending") {
   });
 }
 
-function stopIcon(n: number) {
+function stopIcon(n: number, colors: MapPalette, kind: "direct" | "adapter" | "slow" = "direct") {
+  const bg = kind === "adapter" ? colors.adapter : kind === "slow" ? colors.slow : colors.dest;
+  const fg = kind === "slow" ? colors.ink : kind === "adapter" ? colors.inkWarn : colors.ink;
   const html = renderToStaticMarkup(
     <div
       className="voltia-pin"
       style={{
-        background: MAP_COLORS.dest,
-        width: 32,
-        height: 32,
-        boxShadow: "0 0 0 3px rgb(61 222 200 / 0.35), 0 8px 16px -10px rgb(0 0 0 / 0.7)",
+        background: bg,
+        width: 30,
+        height: 30,
       }}
     >
-      <span style={{ color: "#06221d", fontWeight: 700, fontSize: 13, lineHeight: 1 }}>{n}</span>
+      <span style={{ color: fg, fontWeight: 700, fontSize: 13, lineHeight: 1 }}>{n}</span>
     </div>,
   );
   return L.divIcon({
     className: "voltia-marker",
     html,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
   });
 }
 
-const ICONS = {
-  origin: pinIcon("origin"),
-  dest: pinIcon("dest"),
-  charger: pinIcon("charger"),
-  pending: pinIcon("pending"),
-};
+function markerIcons(colors: MapPalette) {
+  return {
+    origin: pinIcon("origin", colors),
+    dest: pinIcon("dest", colors),
+    charger: pinIcon("charger", colors),
+    pending: pinIcon("pending", colors),
+  };
+}
 
 function Fit({ points }: { points: LatLon[] }) {
   const map = useMap();
@@ -229,14 +235,17 @@ function sampleAt(samples: RouteSample[], km: number): RouteSample | null {
   return best;
 }
 
-function coloredSegments(samples: RouteSample[]): { positions: [number, number][]; color: string }[] {
+function coloredSegments(
+  samples: RouteSample[],
+  colors: MapPalette,
+): { positions: [number, number][]; color: string }[] {
   const segs: { positions: [number, number][]; color: string }[] = [];
   if (samples.length < 2) return segs;
   let current: [number, number][] = [[samples[0]!.lat, samples[0]!.lon]];
-  let color = socColor(samples[0]!.soc);
+  let color = socColor(samples[0]!.soc, colors);
   for (let i = 1; i < samples.length; i++) {
     const s = samples[i]!;
-    const c = socColor(s.soc);
+    const c = socColor(s.soc, colors);
     current.push([s.lat, s.lon]);
     if (c !== color) {
       segs.push({ positions: current, color });
@@ -315,9 +324,11 @@ function cullChargers(chargers: Charger[], bounds: L.LatLngBounds, zoom: number)
 function ChargerDots({
   chargers,
   action,
+  icons,
 }: {
   chargers: Charger[];
   action: ChargerAction;
+  icons: ReturnType<typeof markerIcons>;
 }) {
   const map = useMap();
   const [view, setView] = useState(() => ({ bounds: map.getBounds(), zoom: map.getZoom() }));
@@ -347,7 +358,7 @@ function ChargerDots({
         <Marker
           key={c.id}
           position={[c.lat, c.lon]}
-          icon={c.status === "pending" ? ICONS.pending : ICONS.charger}
+          icon={c.status === "pending" ? icons.pending : icons.charger}
           eventHandlers={{ click: () => setPicked(c) }}
         />
       ))}
@@ -398,8 +409,10 @@ function BoundsReporter({ onChange }: { onChange?: (b: MapBounds) => void }) {
   return null;
 }
 
-function MapboxTiles({ token }: { token: string }) {
-  const setToken = usePlanner((s) => s.setMapboxToken);
+/** El token sale solo de NEXT_PUBLIC_MAPBOX_TOKEN; la app nunca se lo pide al usuario. */
+const MAPBOX_TOKEN = envMapboxToken();
+
+function MapboxTiles({ token, scheme }: { token: string; scheme: "light" | "dark" }) {
   const fails = useRef(0);
   useEffect(() => {
     fails.current = 0;
@@ -408,15 +421,18 @@ function MapboxTiles({ token }: { token: string }) {
     tileerror() {
       fails.current += 1;
       if (fails.current === 6) {
-        toast.error("Mapbox rechazó el token. Pégalo de nuevo.");
-        setToken("");
+        console.error(
+          "[mapa] Mapbox rechaza las teselas: revisa NEXT_PUBLIC_MAPBOX_TOKEN (vigente, pk. y con este dominio en sus URLs permitidas).",
+        );
+        toast.error("No se pudo cargar el fondo del mapa.");
       }
     },
   });
   return (
     <TileLayer
       attribution={MAPBOX_ATTRIBUTION}
-      url={mapboxTileUrl(token)}
+      key={scheme}
+      url={mapboxTileUrl(token, scheme)}
       tileSize={256}
       maxZoom={22}
       keepBuffer={2}
@@ -430,6 +446,8 @@ export function LeafletMap({
   origin,
   destination,
   plan,
+  alternatives = [],
+  onSelectRoute,
   chargers,
   showAllChargers,
   hoverKm,
@@ -440,16 +458,20 @@ export function LeafletMap({
   chargerAction = "browse",
   onViewChange,
 }: LeafletMapProps) {
-  const mapboxToken = usePlanner((s) => s.mapboxToken);
+  const mapboxToken = MAPBOX_TOKEN;
+  const scheme = useColorScheme();
+  const colors = mapPalette(scheme);
+  const icons = useMemo(() => markerIcons(colors), [colors]);
   const fitPoints = useMemo(() => {
-    if (plan?.geometry.length) return plan.geometry;
+    // Encuadra todas las rutas encontradas, así elegir otra no mueve el mapa.
+    if (plan?.geometry.length) return [...plan.geometry, ...alternatives.flatMap((a) => a.geometry)];
     const pts: LatLon[] = [];
     if (origin) pts.push(origin);
     if (destination) pts.push(destination);
     return pts;
-  }, [plan, origin, destination]);
+  }, [plan, alternatives, origin, destination]);
 
-  const segs = useMemo(() => (plan ? coloredSegments(plan.samples) : []), [plan]);
+  const segs = useMemo(() => (plan ? coloredSegments(plan.samples, colors) : []), [plan, colors]);
   const hover = plan && hoverKm != null ? sampleAt(plan.samples, hoverKm) : null;
   const extras = useMemo(() => {
     if (!showAllChargers) return [];
@@ -471,11 +493,45 @@ export function LeafletMap({
       <Ready />
       {onViewChange ? <BoundsReporter onChange={onViewChange} /> : null}
       <ZoomControl position="topright" />
-      {mapboxToken ? <MapboxTiles token={mapboxToken} /> : null}
+      {mapboxToken ? (
+        <MapboxTiles token={mapboxToken} scheme={scheme} />
+      ) : process.env.NODE_ENV !== "production" ? (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-[1000] -translate-x-1/2 rounded-lg bg-surface/95 px-3 py-2 text-xs text-warn shadow-float">
+          Mapa sin fondo: falta NEXT_PUBLIC_MAPBOX_TOKEN (pk.) en .env.local
+        </div>
+      ) : null}
       <InteractionLock locked={mapLocked} />
       <ClickTrap enabled={mapClickEnabled && !mapLocked} onMapClick={onMapClick} />
       {plan ? <HoverTrap samples={plan.samples} onHoverKm={onHoverKm} /> : null}
       {fitPoints.length > 0 ? <Fit points={fitPoints} /> : null}
+
+      {alternatives.map((alt) => {
+        const positions = alt.geometry.map((p) => [p.lat, p.lon] as [number, number]);
+        const select = (e: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(e);
+          suppressMapClicks(600);
+          onSelectRoute?.(alt.id);
+        };
+        return (
+          <Fragment key={`alt-${alt.id}`}>
+            <Polyline
+              positions={positions}
+              pathOptions={{ color: colors.alternative, weight: 5, opacity: 0.55, lineCap: "round", lineJoin: "round" }}
+              interactive={false}
+            />
+            {/* Línea ancha e invisible: más fácil de tocar en el celular. */}
+            <Polyline
+              positions={positions}
+              pathOptions={{ color: colors.alternative, weight: 18, opacity: 0.01 }}
+              eventHandlers={{ click: select }}
+            >
+              <Tooltip sticky>
+                {alt.label} · {formatKm(alt.distanceKm)} · {formatMinutes(alt.totalMinutes)} — toca para elegirla
+              </Tooltip>
+            </Polyline>
+          </Fragment>
+        );
+      })}
 
       {segs.map((seg, i) => (
         <Polyline
@@ -486,12 +542,12 @@ export function LeafletMap({
       ))}
 
       {origin ? (
-        <Marker position={[origin.lat, origin.lon]} icon={ICONS.origin}>
+        <Marker position={[origin.lat, origin.lon]} icon={icons.origin}>
           <Popup>{origin.label}</Popup>
         </Marker>
       ) : null}
       {destination ? (
-        <Marker position={[destination.lat, destination.lon]} icon={ICONS.dest}>
+        <Marker position={[destination.lat, destination.lon]} icon={icons.dest}>
           <Popup>{destination.label}</Popup>
         </Marker>
       ) : null}
@@ -500,7 +556,11 @@ export function LeafletMap({
         <Marker
           key={`stop-${st.charger.id}`}
           position={[st.charger.lat, st.charger.lon]}
-          icon={stopIcon(i + 1)}
+          icon={stopIcon(
+            i + 1,
+            colors,
+            st.adapter ? "adapter" : !isDc(st.bestSocket.connector) ? "slow" : "direct",
+          )}
           zIndexOffset={600}
         >
           <Popup>
@@ -508,9 +568,24 @@ export function LeafletMap({
               <div className="font-medium text-fg">
                 Parada {i + 1} — {st.charger.name}
               </div>
+              {st.adapter ? (
+                <div className="mt-1 text-xs font-medium text-warn">
+                  Necesario adaptador para carga rápida · {CONNECTOR_LABEL[st.adapter.from]} →{" "}
+                  {CONNECTOR_LABEL[st.adapter.to]}
+                </div>
+              ) : !isDc(st.bestSocket.connector) ? (
+                <div className="mt-1 text-xs font-medium text-warn">Carga lenta — sin adaptador</div>
+              ) : null}
               <div className="mt-1 text-xs text-accent">
-                Cargar {formatPct(st.arriveSoc)} → {formatPct(st.departSoc)}
+                Llegas al {formatPct(st.arriveSoc)} · mínimo {formatPct(st.minDepartSoc)} · sales al{" "}
+                {formatPct(st.departSoc)}
               </div>
+              {st.alternative ? (
+                <div className="text-xs text-warn">
+                  Carga lenta — sin adaptador · {formatKw(st.alternative.chargeKw)} ·{" "}
+                  {formatMinutes(st.alternative.chargeMinutes)} · alcance {formatKm(st.alternative.rangeGainKm)}
+                </div>
+              ) : null}
               <div className="text-xs text-muted">
                 {formatKwh(st.energyAddedKwh)} · {formatMinutes(st.chargeMinutes)} · {formatKw(st.chargeKw)}
               </div>
@@ -535,13 +610,13 @@ export function LeafletMap({
         </Marker>
       ))}
 
-      {extras.length ? <ChargerDots chargers={extras} action={chargerAction} /> : null}
+      {extras.length ? <ChargerDots chargers={extras} action={chargerAction} icons={icons} /> : null}
 
       {hover ? (
         <CircleMarker
           center={[hover.lat, hover.lon]}
           radius={8}
-          pathOptions={{ color: socColor(hover.soc), fillColor: socColor(hover.soc), fillOpacity: 1, weight: 2 }}
+          pathOptions={{ color: socColor(hover.soc, colors), fillColor: socColor(hover.soc, colors), fillOpacity: 1, weight: 2 }}
         />
       ) : null}
     </MapContainer>

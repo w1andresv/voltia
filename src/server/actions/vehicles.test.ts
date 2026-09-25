@@ -3,9 +3,9 @@ import type { Actor } from "@/domain/auth/port";
 import { DEFAULT_CURVE } from "@/domain/charging";
 import type { Vehicle } from "@/domain/types";
 
-const { requireMember } = vi.hoisted(() => ({ requireMember: vi.fn<() => Promise<Actor>>() }));
+const { requireUser } = vi.hoisted(() => ({ requireUser: vi.fn<() => Promise<Actor>>() }));
 vi.mock("@/infrastructure/auth/server-actor", () => ({
-  requireMember,
+  requireUser,
   AuthError: class AuthError extends Error {},
 }));
 
@@ -29,7 +29,7 @@ function chain(result: unknown) {
 
 function client(result: unknown) {
   const builder = chain(result);
-  return { schema: vi.fn(() => builder), _builder: builder };
+  return { from: builder.from, _builder: builder };
 }
 
 const MEMBER: Actor = { role: "member", id: "user-1", email: "member@example.com" };
@@ -64,13 +64,13 @@ beforeEach(() => {
 
 describe("saveVehicleFn", () => {
   it("un invitado no puede guardar", async () => {
-    requireMember.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
+    requireUser.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
     const { saveVehicleFn } = await import("./vehicles");
     await expect(saveVehicleFn({ data: vehicle() })).rejects.toThrow();
   });
 
   it("guarda con un id de fila que combina owner_id y el id local, no choca entre usuarios", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     const c = client({ error: null });
     createServerSupabase.mockResolvedValueOnce(c);
     const { saveVehicleFn } = await import("./vehicles");
@@ -78,12 +78,12 @@ describe("saveVehicleFn", () => {
     const result = await saveVehicleFn({ data: v });
     expect(result.id).toBe("custom-1"); // el id local del vehículo no cambia
     expect(c._builder.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "user-1:custom-1", owner_id: "user-1" }),
+      expect.objectContaining({ id: "user-1:custom-1", owner_id: "user-1", local_id: "custom-1" }),
     );
   });
 
   it("rechaza un vehículo que no pasa la validación", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     const { saveVehicleFn } = await import("./vehicles");
     await expect(saveVehicleFn({ data: { ...vehicle(), batteryKwh: -5 } })).rejects.toThrow();
   });
@@ -91,18 +91,44 @@ describe("saveVehicleFn", () => {
 
 describe("listMyVehiclesFn", () => {
   it("un invitado no puede listar", async () => {
-    requireMember.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
+    requireUser.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
     const { listMyVehiclesFn } = await import("./vehicles");
     await expect(listMyVehiclesFn()).rejects.toThrow();
   });
 
   it("devuelve los vehículos guardados, con su id local intacto", async () => {
-    requireMember.mockResolvedValueOnce(MEMBER);
+    requireUser.mockResolvedValueOnce(MEMBER);
     const v = vehicle({ id: "custom-2" });
     createServerSupabase.mockResolvedValueOnce(client({ data: [{ payload: v }], error: null }));
     const { listMyVehiclesFn } = await import("./vehicles");
     const list = await listMyVehiclesFn();
     expect(list).toHaveLength(1);
     expect(list[0]!.id).toBe("custom-2");
+  });
+});
+
+describe("deleteVehicleFn", () => {
+  it("un invitado no puede borrar", async () => {
+    requireUser.mockRejectedValueOnce(new AuthError("Inicia sesión para continuar."));
+    const { deleteVehicleFn } = await import("./vehicles");
+    await expect(deleteVehicleFn({ data: { id: "custom-1" } })).rejects.toThrow();
+  });
+
+  it("borra solo por dueño Y id local (nunca el vehículo de otro usuario)", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const c = client({ error: null });
+    createServerSupabase.mockResolvedValueOnce(c);
+    const { deleteVehicleFn } = await import("./vehicles");
+    await deleteVehicleFn({ data: { id: "custom-1" } });
+    expect(c._builder.delete).toHaveBeenCalled();
+    expect(c._builder.eq).toHaveBeenCalledWith("owner_id", "user-1");
+    expect(c._builder.eq).toHaveBeenCalledWith("local_id", "custom-1");
+  });
+
+  it("propaga el error de la base", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    createServerSupabase.mockResolvedValueOnce(client({ error: { message: "rls" } }));
+    const { deleteVehicleFn } = await import("./vehicles");
+    await expect(deleteVehicleFn({ data: { id: "custom-1" } })).rejects.toThrow(/rls/);
   });
 });

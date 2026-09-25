@@ -1,67 +1,112 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0b0e12;
-  --color-bg-elevated: #12171d;
-  --color-surface: #161c23;
-  --color-surface-2: #1c242d;
-  --color-fg: #eef2f6;
-  --color-muted: #8b98a8;
-  --color-subtle: #647181;
-  --color-accent: #3ddec8;
-  --color-accent-fg: #06221d;
-  --color-accent-dim: #1a4a44;
-  --color-border: rgb(238 242 246 / 0.1);
-  --color-border-strong: rgb(238 242 246 / 0.18);
-  --color-ring: #3ddec8;
-  --color-danger: #d4776a;
-  --color-warn: #d6b07e;
-  --color-ok: #5ecf9c;
-  --color-soc-high: #3ddec8;
-  --color-soc-mid: #d6b07e;
-  --color-soc-low: #d4776a;
-  --color-map-water: #10161c;
+  --color-bg: #0c0f12;
+  --color-bg-elevated: #14181d;
+  --color-surface: #181d23;
+  --color-surface-2: #222830;
+  --color-fg: #f3f6f7;
+  --color-muted: #9aa6b2;
+  --color-subtle: #6d7a88;
+  --color-accent: #2fcebb;
+  --color-accent-fg: #04221c;
+  --color-accent-dim: #163f39;
+  --color-border: rgb(243 246 247 / 0.08);
+  --color-border-strong: rgb(243 246 247 / 0.16);
+  --color-ring: #2fcebb;
+  --color-danger: #e15d5d;
+  --color-warn: #e2b340;
+  --color-ok: #3dcb86;
+  --color-info: #6cb6ff;
+  --color-soc-high: #2fcebb;
+  --color-soc-mid: #e2b340;
+  --color-soc-low: #e15d5d;
+  --color-map-water: #101418;
 
-  --color-background: #0b0e12;
-  --color-foreground: #eef2f6;
-  --color-card: #161c23;
-  --color-card-foreground: #eef2f6;
-  --color-primary: #3ddec8;
-  --color-primary-foreground: #06221d;
-  --color-secondary: #1c242d;
-  --color-secondary-foreground: #eef2f6;
-  --color-muted-foreground: #8b98a8;
-  --color-accent-foreground: #06221d;
-  --color-destructive: #d4776a;
-  --color-input: rgb(238 242 246 / 0.1);
-  --color-popover: #161c23;
-  --color-popover-foreground: #eef2f6;
+  --color-background: #0c0f12;
+  --color-foreground: #f3f6f7;
+  --color-card: #181d23;
+  --color-card-foreground: #f3f6f7;
+  --color-primary: #2fcebb;
+  --color-primary-foreground: #04221c;
+  --color-secondary: #222830;
+  --color-secondary-foreground: #f3f6f7;
+  --color-muted-foreground: #9aa6b2;
+  --color-accent-foreground: #04221c;
+  --color-destructive: #e15d5d;
+  --color-input: rgb(243 246 247 / 0.1);
+  --color-popover: #181d23;
+  --color-popover-foreground: #f3f6f7;
 
-  --font-sans: "Outfit", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Outfit", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Manrope", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --radius-2xl: 28px;
-  --radius: 12px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 22px;
+  --radius: 10px;
 
-  --shadow-panel:
-    0 0 0 1px rgb(238 242 246 / 0.08),
-    0 18px 40px -20px rgb(0 0 0 / 0.55);
+  --shadow-panel: 0 0 0 1px rgb(243 246 247 / 0.06);
   --shadow-float:
-    0 0 0 1px rgb(238 242 246 / 0.1),
-    0 10px 28px -16px rgb(0 0 0 / 0.6);
+    0 0 0 1px rgb(243 246 247 / 0.08),
+    0 12px 28px -18px rgb(0 0 0 / 0.65);
 }
 
 @layer base {
   html {
-    color-scheme: dark;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  html.light {
+    color-scheme: light;
+    --color-bg: #f4f6f8;
+    --color-bg-elevated: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-2: #e7edf2;
+    --color-fg: #12181d;
+    --color-muted: #52606d;
+    --color-subtle: #7b8794;
+    --color-accent: #0f8f82;
+    --color-accent-fg: #f4fffc;
+    --color-accent-dim: #d7f4ef;
+    --color-border: rgb(18 24 29 / 0.1);
+    --color-border-strong: rgb(18 24 29 / 0.18);
+    --color-ring: #0f8f82;
+    --color-danger: #c24141;
+    --color-warn: #8a5a00;
+    --color-ok: #0f7a4a;
+    --color-info: #1d6fbf;
+    --color-soc-high: #0f8f82;
+    --color-soc-mid: #8a5a00;
+    --color-soc-low: #c24141;
+    --color-map-water: #d5e3ea;
+    --color-background: #f4f6f8;
+    --color-foreground: #12181d;
+    --color-card: #ffffff;
+    --color-card-foreground: #12181d;
+    --color-primary: #0f8f82;
+    --color-primary-foreground: #f4fffc;
+    --color-secondary: #e7edf2;
+    --color-secondary-foreground: #12181d;
+    --color-muted-foreground: #52606d;
+    --color-accent-foreground: #f4fffc;
+    --color-destructive: #c24141;
+    --color-input: rgb(18 24 29 / 0.12);
+    --color-popover: #ffffff;
+    --color-popover-foreground: #12181d;
+    --shadow-panel: 0 0 0 1px rgb(18 24 29 / 0.06);
+    --shadow-float:
+      0 0 0 1px rgb(18 24 29 / 0.08),
+      0 12px 28px -18px rgb(18 24 29 / 0.28);
   }
 
   html,
@@ -124,7 +169,7 @@
 }
 
 .leaflet-control-attribution {
-  background: rgb(11 14 18 / 0.72) !important;
+  background: color-mix(in oklab, var(--color-bg) 82%, transparent) !important;
   color: var(--color-subtle) !important;
   font-size: 10px !important;
   border-radius: 8px 0 0 0;
@@ -184,10 +229,10 @@
 .voltia-pin {
   width: 28px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 16px -10px rgb(0 0 0 / 0.7);
+  box-shadow: 0 0 0 2px rgb(12 15 18 / 0.85);
 }
 
 .recharts-cartesian-grid-horizontal line,

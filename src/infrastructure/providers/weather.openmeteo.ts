@@ -2,6 +2,7 @@ import type { LatLon, WeatherSnapshot } from "@/domain/types";
 import { fetchJson } from "./http";
 
 interface WeatherResponse {
+  elevation?: number;
   current?: {
     temperature_2m?: number;
     wind_speed_10m?: number;
@@ -22,6 +23,7 @@ export async function fetchWeather(point: LatLon): Promise<WeatherSnapshot | nul
       temperatureC: c.temperature_2m ?? 20,
       windKmh: c.wind_speed_10m ?? 0,
       windDirDeg: c.wind_direction_10m ?? 0,
+      elevationM: Number.isFinite(data.elevation) ? data.elevation : undefined,
       source: "Open-Meteo",
     };
   } catch {

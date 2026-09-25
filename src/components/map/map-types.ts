@@ -14,6 +14,9 @@ export interface LeafletMapProps {
   origin: Place | null;
   destination: Place | null;
   plan: RoutePlan | null;
+  /** Otras rutas encontradas: se dibujan en gris y al tocarlas se seleccionan. */
+  alternatives?: RoutePlan[];
+  onSelectRoute?: (id: string) => void;
   chargers: Charger[];
   showAllChargers: boolean;
   hoverKm: number | null;

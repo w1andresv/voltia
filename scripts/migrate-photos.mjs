@@ -19,6 +19,7 @@
  * in that row uploaded successfully. A row that fails to upload is logged
  * and left untouched — safe to re-run.
  */
+import "./load-env.mjs";
 import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
 

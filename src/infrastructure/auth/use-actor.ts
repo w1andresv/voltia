@@ -16,6 +16,11 @@ const guest: Actor = { role: "guest", id: null, email: null };
  * hide or show a button, never grant access.
  */
 export function useActor(): Actor {
+  return useActorState().actor;
+}
+
+/** Igual que useActor, pero dice si la primera resolución de la sesión sigue pendiente. */
+export function useActorState(): { actor: Actor; isLoading: boolean } {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["actor"],
@@ -34,5 +39,5 @@ export function useActor(): Actor {
     return () => subscription.unsubscribe();
   }, [queryClient]);
 
-  return query.data ?? guest;
+  return { actor: query.data ?? guest, isLoading: query.isPending };
 }

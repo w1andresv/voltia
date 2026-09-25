@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  REGEN_RECOVERY,
   acPowerKw,
+  airDensity,
+  airSpeedSq,
+  annotateEnergy,
   batteryBudget,
   climateMultiplier,
   effectiveRegen,
   energyMode,
   hasManualConsumption,
+  manualSpeedFactor,
   mixedCycleKwhPer100,
   segmentEnergyBreakdown,
+  segmentTempC,
   wltpKwhPer100,
 } from "./energy";
 import { DEFAULT_CURVE } from "./charging";
@@ -49,7 +55,7 @@ function conditions(overrides: Partial<TripConditions> = {}): TripConditions {
     customSafetyPct: 15,
     planningMode: "fastest",
     allowBelowSafety: false,
-    regenPct: 20,
+    regenLevel: "medium",
     ...overrides,
   };
 }
@@ -105,11 +111,22 @@ describe("acPowerKw", () => {
 
 describe("effectiveRegen", () => {
   it("es 0 cuando el SOC está casi lleno (>=98%)", () => {
-    expect(effectiveRegen(vehicle(), conditions(), 99)).toBe(0);
+    expect(effectiveRegen(conditions(), 99)).toBe(0);
   });
 
-  it("es positivo a SOC medio", () => {
-    expect(effectiveRegen(vehicle(), conditions(), 50)).toBeGreaterThan(0);
+  it("a SOC medio vale la recuperación del nivel elegido", () => {
+    expect(effectiveRegen(conditions({ regenLevel: "low" }), 50)).toBe(REGEN_RECOVERY.low);
+    expect(effectiveRegen(conditions({ regenLevel: "medium" }), 50)).toBe(REGEN_RECOVERY.medium);
+    expect(effectiveRegen(conditions({ regenLevel: "high" }), 50)).toBe(REGEN_RECOVERY.high);
+  });
+
+  it("entre 80 % y 98 % baja en línea: a 89 % vale la mitad", () => {
+    expect(effectiveRegen(conditions(), 89)).toBeCloseTo(REGEN_RECOVERY.medium / 2, 6);
+  });
+
+  it("los niveles van de menor a mayor", () => {
+    expect(REGEN_RECOVERY.low).toBeLessThan(REGEN_RECOVERY.medium);
+    expect(REGEN_RECOVERY.medium).toBeLessThan(REGEN_RECOVERY.high);
   });
 });
 
@@ -154,6 +171,125 @@ describe("segmentEnergyBreakdown", () => {
     const estimated = segmentEnergyBreakdown(100, 0, 90, ctxEstimated);
     // Un consumo manual muy alto (40 kWh/100km) se nota lejos del estimado físico.
     expect(Math.abs(manual.netKwh - estimated.netKwh)).toBeGreaterThan(5);
+  });
+});
+
+describe("bajadas: la gravedad paga primero rodadura y aire", () => {
+  const ctx = (overrides: Partial<TripConditions> = {}) => ({
+    vehicle: vehicle(),
+    conditions: conditions(overrides),
+    weather: null,
+  });
+
+  it("una bajada suave (−2 %) gasta mucho menos que el llano y no regenera", () => {
+    const flat = segmentEnergyBreakdown(1, 0, 80, ctx());
+    const gentle = segmentEnergyBreakdown(1, -20, 80, ctx());
+    expect(gentle.regenKwh).toBe(0);
+    expect(gentle.netKwh).toBeLessThan(flat.netKwh * 0.5);
+  });
+
+  it("una bajada fuerte deja el neto negativo: la batería gana carga", () => {
+    const steep = segmentEnergyBreakdown(1, -80, 60, ctx());
+    expect(steep.regenKwh).toBeGreaterThan(0);
+    expect(steep.grossKwh).toBeGreaterThanOrEqual(0);
+    expect(steep.netKwh).toBeLessThan(0);
+  });
+
+  it("más nivel de regeneración, más recuperado en la misma bajada", () => {
+    const low = segmentEnergyBreakdown(1, -80, 60, ctx({ regenLevel: "low" }));
+    const medium = segmentEnergyBreakdown(1, -80, 60, ctx({ regenLevel: "medium" }));
+    const high = segmentEnergyBreakdown(1, -80, 60, ctx({ regenLevel: "high" }));
+    expect(low.regenKwh).toBeLessThan(medium.regenKwh);
+    expect(medium.regenKwh).toBeLessThan(high.regenKwh);
+  });
+
+  it("subir y bajar lo mismo cuesta más que el llano, pero menos que subir y volver por llano", () => {
+    const up = segmentEnergyBreakdown(20, 800, 60, ctx()).netKwh;
+    const down = segmentEnergyBreakdown(20, -800, 60, ctx()).netKwh;
+    const flat = segmentEnergyBreakdown(20, 0, 60, ctx()).netKwh;
+    expect(up + down).toBeGreaterThan(2 * flat);
+    expect(up + down).toBeLessThan(up + flat);
+  });
+
+  it("el estilo no encarece la energía de la pendiente, solo rodadura y aire", () => {
+    const climbCost = (style: TripConditions["drivingStyle"]) =>
+      segmentEnergyBreakdown(10, 500, 80, ctx({ drivingStyle: style })).netKwh -
+      segmentEnergyBreakdown(10, 0, 80, ctx({ drivingStyle: style })).netKwh;
+    expect(climbCost("sport")).toBeCloseTo(climbCost("normal"), 6);
+  });
+});
+
+describe("altitud y temperatura por tramo", () => {
+  it("la densidad del aire es 1,225 a nivel del mar y 15 °C, y baja con la altura", () => {
+    expect(airDensity(15, 0)).toBeCloseTo(1.225, 3);
+    expect(airDensity(15, 2600)).toBeLessThan(0.97);
+  });
+
+  it("el mismo tramo llano gasta menos a 2600 m que a nivel del mar", () => {
+    const c = { vehicle: vehicle(), conditions: conditions(), weather: null };
+    const sea = segmentEnergyBreakdown(10, 0, 100, c, 50, { altitudeM: 0 });
+    const high = segmentEnergyBreakdown(10, 0, 100, c, 50, { altitudeM: 2600 });
+    expect(high.netKwh).toBeLessThan(sea.netKwh);
+  });
+
+  it("la temperatura del usuario se asume en el origen y baja 6,5 °C por km", () => {
+    const c = { vehicle: vehicle(), conditions: conditions({ temperatureC: 20 }), weather: null, originAltitudeM: 1000 };
+    expect(segmentTempC(c, 2000)).toBeCloseTo(13.5, 6);
+    expect(segmentTempC(c)).toBe(20);
+  });
+
+  it("la del clima se corrige desde la altura de su celda; sin esa altura no se corrige", () => {
+    const withElev = { temperatureC: 25, windKmh: 0, windDirDeg: 0, elevationM: 500 };
+    const noElev = { temperatureC: 25, windKmh: 0, windDirDeg: 0 };
+    const c = conditions({ temperatureC: null });
+    expect(segmentTempC({ vehicle: vehicle(), conditions: c, weather: withElev }, 2500)).toBeCloseTo(12, 6);
+    expect(segmentTempC({ vehicle: vehicle(), conditions: c, weather: noElev }, 2500)).toBe(25);
+  });
+
+  it("climateMultiplier no salta entre 14,9 °C y 15 °C", () => {
+    expect(Math.abs(climateMultiplier(14.9) - climateMultiplier(15))).toBeLessThan(0.01);
+  });
+});
+
+describe("viento", () => {
+  const wind = { temperatureC: 20, windKmh: 40, windDirDeg: 0 };
+
+  it("de frente gasta más que de cola; sin rumbo queda en medio", () => {
+    const head = airSpeedSq(90, wind, 0); // va al norte, el viento viene del norte
+    const tail = airSpeedSq(90, wind, 180);
+    const unknown = airSpeedSq(90, wind);
+    expect(head).toBeGreaterThan(unknown);
+    expect(unknown).toBeGreaterThan(tail);
+  });
+
+  it("sin viento es v²", () => {
+    expect(airSpeedSq(72, null)).toBeCloseTo(400, 6);
+  });
+});
+
+describe("manualSpeedFactor", () => {
+  const ctx = { vehicle: vehicle(), conditions: conditions(), weather: null };
+
+  it("vale 1 a 70 km/h y sigue subiendo por encima de 110 km/h", () => {
+    expect(manualSpeedFactor(70, ctx)).toBeCloseTo(1, 6);
+    expect(manualSpeedFactor(120, ctx)).toBeGreaterThan(manualSpeedFactor(110, ctx));
+    expect(manualSpeedFactor(120, ctx)).toBeGreaterThan(1.7);
+  });
+});
+
+describe("annotateEnergy", () => {
+  it("acumula el neto, puede bajar en bajada y sube el SOC al regenerar", () => {
+    const base = { lat: 7, lon: -73, slopePct: 0, speedKmh: 60 };
+    const samples = [
+      { ...base, km: 0, elevM: 1500 },
+      { ...base, km: 1, lat: 7.009, elevM: 1420 },
+      { ...base, km: 2, lat: 7.018, elevM: 1340 },
+    ];
+    const ctx = { vehicle: vehicle(), conditions: conditions(), weather: null };
+    const out = annotateEnergy(samples, ctx, 50);
+    expect(out[0]!.energyKwh).toBe(0);
+    expect(out[2]!.cumulativeKwh).toBeLessThan(0);
+    expect(out[2]!.soc).toBeGreaterThan(50);
   });
 });
 

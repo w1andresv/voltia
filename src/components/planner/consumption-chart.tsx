@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { RoutePlan, RouteSample } from "@/domain/types";
+import { REGEN_LEVEL_LABEL, type RoutePlan, type RouteSample } from "@/domain/types";
 import { formatKm, formatKwhPer100 } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 
@@ -26,7 +26,7 @@ function seriesFrom(samples: RouteSample[]) {
 export function ConsumptionChart({ plan }: { plan: RoutePlan }) {
   const setHover = usePlanner((s) => s.setHoverKm);
   const hoverKm = usePlanner((s) => s.hoverKm);
-  const regenPct = usePlanner((s) => s.conditions.regenPct);
+  const regenLevel = usePlanner((s) => s.conditions.regenLevel);
 
   const data = useMemo(() => seriesFrom(plan.samples), [plan.samples]);
   const rates = data.map((d) => d.avg).filter((n): n is number => n != null && n > 0);
@@ -46,7 +46,7 @@ export function ConsumptionChart({ plan }: { plan: RoutePlan }) {
       </div>
       <p className="mb-1.5 text-xs text-muted">
         Energía neta / distancia hasta cada km. Subidas lo suben; la regeneración en bajadas lo baja.
-        Regen {regenPct}%.
+        Regeneración {REGEN_LEVEL_LABEL[regenLevel].toLowerCase()}.
       </p>
       <div className="h-36">
         <ResponsiveContainer width="100%" height="100%">

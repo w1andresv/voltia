@@ -13,21 +13,159 @@ const OSRM_ENDPOINTS = [
  * para que un cambio de forma en su API se note como un error claro acá, en
  * vez de romper el planificador en silencio con `undefined`s más adelante.
  */
-const OsrmRouteSchema = z.object({
+export const OsrmRouteSchema = z.object({
   distance: z.number(),
   duration: z.number(),
   geometry: z.object({ coordinates: z.array(z.tuple([z.number(), z.number()])) }),
+  legs: z
+    .array(
+      z
+        .object({
+          summary: z.string().optional(),
+          distance: z.number().optional(),
+          // Con annotations=distance,duration: metros y segundos entre cada par de
+          // puntos de la geometría. De ahí sale la velocidad de cada tramo.
+          annotation: z
+            .object({
+              distance: z.array(z.number()).optional(),
+              duration: z.array(z.number()).optional(),
+            })
+            .passthrough()
+            .optional(),
+          // Solo con steps=true (Mapbox): cada paso con su geometría y sus intersecciones,
+          // que traen la clase vial del proveedor (mapbox_streets_v8.class).
+          steps: z
+            .array(
+              z
+                .object({
+                  distance: z.number(),
+                  duration: z.number(),
+                  geometry: z
+                    .object({ coordinates: z.array(z.tuple([z.number(), z.number()])) })
+                    .optional(),
+                  intersections: z
+                    .array(
+                      z
+                        .object({
+                          location: z.tuple([z.number(), z.number()]),
+                          mapbox_streets_v8: z
+                            .object({ class: z.string().optional() })
+                            .passthrough()
+                            .optional(),
+                        })
+                        .passthrough(),
+                    )
+                    .optional(),
+                })
+                .passthrough(),
+            )
+            .optional(),
+        })
+        .passthrough(),
+    )
+    .optional(),
 });
 
-const OsrmResponseSchema = z.object({
+export const OsrmResponseSchema = z.object({
   code: z.string(),
   routes: z.array(OsrmRouteSchema).optional(),
+  /** Punto de la vía donde el motor "pegó" cada coordenada; `distance` = metros hasta ella. */
+  waypoints: z
+    .array(z.object({ distance: z.number().optional(), name: z.string().optional() }).passthrough())
+    .optional(),
 });
 
-type OsrmRoute = z.infer<typeof OsrmRouteSchema>;
+export type OsrmRoute = z.infer<typeof OsrmRouteSchema>;
 type OsrmResponse = z.infer<typeof OsrmResponseSchema>;
 
-function buildSamples(coords: [number, number][], distanceKm: number, durationMin: number): RawRoute["samples"] {
+/** Distancia (km) y tiempo (s) acumulados a lo largo de la ruta, según el motor. */
+export interface SpeedProfile {
+  cumKm: number[];
+  cumS: number[];
+}
+
+/**
+ * Perfil de tiempo de la ruta: primero las anotaciones por par de puntos
+ * (annotations=distance,duration); si no vienen, los pasos (steps=true de
+ * Mapbox). Sin ninguno de los dos, null y se usa la velocidad media.
+ */
+export function speedProfile(route: OsrmRoute): SpeedProfile | null {
+  const pieces: [number, number][] = [];
+  for (const leg of route.legs ?? []) {
+    const d = leg.annotation?.distance;
+    const t = leg.annotation?.duration;
+    if (d?.length && t?.length === d.length) {
+      d.forEach((m, i) => pieces.push([m, t[i]!]));
+    } else if (leg.steps?.length) {
+      for (const st of leg.steps) pieces.push([st.distance, st.duration]);
+    } else {
+      return null;
+    }
+  }
+  if (!pieces.length) return null;
+  const cumKm = [0];
+  const cumS = [0];
+  for (const [m, sec] of pieces) {
+    if (!(m >= 0) || !(sec >= 0)) continue;
+    cumKm.push(cumKm[cumKm.length - 1]! + m / 1000);
+    cumS.push(cumS[cumS.length - 1]! + sec);
+  }
+  const totalKm = cumKm[cumKm.length - 1]!;
+  const totalS = cumS[cumS.length - 1]!;
+  return totalKm > 0 && totalS > 0 ? { cumKm, cumS } : null;
+}
+
+function timeAtKm(profile: SpeedProfile, km: number): number {
+  const { cumKm, cumS } = profile;
+  if (km <= 0) return 0;
+  // Búsqueda binaria del tramo que contiene `km`.
+  let lo = 0;
+  let hi = cumKm.length - 1;
+  if (km >= cumKm[hi]!) return cumS[hi]!;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (cumKm[mid]! <= km) lo = mid;
+    else hi = mid;
+  }
+  const span = cumKm[hi]! - cumKm[lo]!;
+  const t = span > 0 ? (km - cumKm[lo]!) / span : 0;
+  return cumS[lo]! + t * (cumS[hi]! - cumS[lo]!);
+}
+
+/** Límites de la velocidad de un tramo tomada del motor de rutas, km/h. */
+const SEGMENT_SPEED_MIN = 8;
+const SEGMENT_SPEED_MAX = 130;
+
+/**
+ * Velocidad de cada muestra = distancia / tiempo del motor entre la muestra
+ * anterior y esta. Las muestras van en km de la ruta; el perfil se escala a esa
+ * misma distancia. La primera muestra toma la velocidad del primer tramo.
+ */
+export function applySegmentSpeeds(
+  samples: RawRoute["samples"],
+  profile: SpeedProfile | null,
+  distanceKm: number,
+): RawRoute["samples"] {
+  if (!profile || samples.length < 2 || !(distanceKm > 0)) return samples;
+  const scale = profile.cumKm[profile.cumKm.length - 1]! / distanceKm;
+  const out = samples.map((s) => ({ ...s }));
+  for (let i = 1; i < out.length; i++) {
+    const a = out[i - 1]!.km;
+    const b = out[i]!.km;
+    const dt = timeAtKm(profile, b * scale) - timeAtKm(profile, a * scale);
+    if (!(b > a) || !(dt > 0)) continue;
+    const kmh = ((b - a) * scale) / (dt / 3600);
+    out[i]!.speedKmh = Math.max(SEGMENT_SPEED_MIN, Math.min(SEGMENT_SPEED_MAX, kmh));
+  }
+  out[0]!.speedKmh = out[1]!.speedKmh;
+  return out;
+}
+
+function buildSamples(
+  coords: [number, number][],
+  distanceKm: number,
+  durationMin: number,
+): RawRoute["samples"] {
   const points: LatLon[] = coords.map(([lon, lat]) => ({ lat, lon }));
   const geomLen = polylineLengthKm(points) || distanceKm;
   const everyKm = Math.max(0.8, distanceKm / 220);
@@ -82,31 +220,50 @@ function buildSamples(coords: [number, number][], distanceKm: number, durationMi
   return samples;
 }
 
-function toRaw(route: OsrmRoute, index: number, total: number): RawRoute {
+/** Vías principales según el resumen de cada tramo ("Ruta 45A, Ruta 66"). */
+function viaOf(route: OsrmRoute): string | undefined {
+  const names = (route.legs ?? [])
+    .flatMap((l) => (l.summary ?? "").split(","))
+    .map((n) => n.trim())
+    .filter(Boolean);
+  const unique = [...new Set(names)];
+  return unique.length ? unique.slice(0, 3).join(", ") : undefined;
+}
+
+/** Una ruta en formato OSRM (también lo usa Mapbox Directions) → RawRoute. */
+export function toRawRoute(
+  route: OsrmRoute,
+  meta: { id: string; label: string; noTolls?: boolean },
+): RawRoute {
   const coords = route.geometry.coordinates;
   const distanceKm = route.distance / 1000;
   const driveMinutes = route.duration / 60;
-  const samples = buildSamples(coords, distanceKm, driveMinutes);
-  const geometry = downsample(
-    coords.map(([lon, lat]) => ({ lat, lon })),
-    420,
-  );
-  const labels = ["Ruta A", "Ruta B", "Ruta C"];
   return {
-    id: `route-${index}`,
-    label: total > 1 ? (labels[index] ?? `Ruta ${index + 1}`) : "Ruta recomendada",
-    geometry,
-    samples,
+    id: meta.id,
+    label: meta.label,
+    via: viaOf(route),
+    noTolls: meta.noTolls || undefined,
+    geometry: downsample(
+      coords.map(([lon, lat]) => ({ lat, lon })),
+      420,
+    ),
+    samples: applySegmentSpeeds(
+      buildSamples(coords, distanceKm, driveMinutes),
+      speedProfile(route),
+      distanceKm,
+    ),
     distanceKm,
     driveMinutes,
     elevation: { gainM: 0, lossM: 0, minM: 0, maxM: 0 },
   };
 }
 
-export async function fetchRoutes(waypoints: LatLon[]): Promise<RawRoute[]> {
+/** Servidores públicos de OSRM: sin llave, pero con datos y tiempos menos precisos que Mapbox. */
+export async function fetchOsrmCandidates(waypoints: LatLon[]): Promise<OsrmRoute[]> {
   if (waypoints.length < 2) throw new Error("Se necesitan origen y destino.");
   const path = waypoints.map((w) => `${w.lon},${w.lat}`).join(";");
-  const qs = "overview=full&geometries=geojson&alternatives=true&steps=false";
+  // alternatives=3: hasta 3 alternativas además de la principal (solo con 2 puntos).
+  const qs = `overview=full&geometries=geojson&alternatives=${waypoints.length === 2 ? 3 : "false"}&steps=false&annotations=distance,duration`;
   // Si algún endpoint SÍ respondió pero sin ruta (código != "Ok"), ese es el
   // mensaje más útil para el usuario; un timeout/red caída da un mensaje
   // técnico en inglés que nunca debe llegarle así, así que solo se usa
@@ -125,7 +282,7 @@ export async function fetchRoutes(waypoints: LatLon[]): Promise<RawRoute[]> {
         noRouteFound = true;
         continue;
       }
-      return data.routes.slice(0, 3).map((r, i) => toRaw(r, i, data.routes!.length));
+      return data.routes;
     } catch {
       // red o timeout — se intenta el siguiente endpoint
     }

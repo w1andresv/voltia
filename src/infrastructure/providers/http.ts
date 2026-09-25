@@ -8,8 +8,21 @@ import { unstable_cache } from "next/cache";
  * un valor por defecto que igual identifica la app, aunque sin forma de
  * contactar al operador — hay que rellenarlo antes de producción real.
  */
-const CONTACT = process.env.PROVIDER_CONTACT?.trim() || "sin contacto configurado — ver PROVIDER_CONTACT";
-const USER_AGENT = `Voltia/1.0 (EV trip planner; ${CONTACT})`;
+/**
+ * Las cabeceras HTTP solo admiten caracteres de 1 byte (ByteString): una raya
+ * "—" o una tilde hacen que fetch lance "Cannot convert argument to a ByteString"
+ * ANTES de salir la petición. Se quitan acentos y se reemplaza lo demás.
+ */
+export function asciiHeader(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u2012-\u2015]/g, "-")
+    .replace(/[^\x20-\x7e]/g, "?");
+}
+
+const CONTACT = process.env.PROVIDER_CONTACT?.trim() || "sin contacto configurado - ver PROVIDER_CONTACT";
+export const USER_AGENT = asciiHeader(`Voltia/1.0 (EV trip planner; ${CONTACT})`);
 
 /**
  * Caché de proveedores externos, en dos capas:
@@ -57,9 +70,32 @@ async function fetchWithRetry(url: string, init: RequestInit, timeoutMs: number)
   return attempt();
 }
 
+const SECRET_PARAMS = ["access_token", "api_key", "apikey", "key", "token"];
+
+/** La URL sin llaves/tokens en la query, para mensajes de error y logs. */
+export function safeUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    for (const k of SECRET_PARAMS) if (u.searchParams.has(k)) u.searchParams.set(k, "***");
+    return u.toString();
+  } catch {
+    return url.split("?")[0] ?? "";
+  }
+}
+
+async function httpError(res: Response, url: string): Promise<Error> {
+  let body = "";
+  try {
+    body = (await res.text()).replace(/\s+/g, " ").slice(0, 200);
+  } catch {
+    /* sin cuerpo */
+  }
+  return new Error(`HTTP ${res.status} ${safeUrl(url)}${body ? ` — ${body}` : ""}`);
+}
+
 async function rawJson<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
   const res = await fetchWithRetry(url, init, timeoutMs);
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+  if (!res.ok) throw await httpError(res, url);
   return (await res.json()) as T;
 }
 
@@ -87,6 +123,6 @@ export async function fetchText(
 ): Promise<string> {
   const { timeoutMs = 20000, ...rest } = init;
   const res = await fetchWithRetry(url, rest, timeoutMs);
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+  if (!res.ok) throw await httpError(res, url);
   return res.text();
 }

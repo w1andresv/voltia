@@ -8,13 +8,15 @@
     "build": "next build",
     "start": "next start",
     "db:migrate": "node scripts/migrate.mjs",
+    "db:seed": "node scripts/seed.mjs",
     "migrate:photos": "node scripts/migrate-photos.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run && npm run test:scripts",
     "test:scripts": "node --test 'scripts/**/*.test.mjs'",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "diagnose:route": "node scripts/diagnose-route.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.0",

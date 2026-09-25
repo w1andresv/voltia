@@ -3,16 +3,18 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Car, History, MapPinned, Menu, PlugZap, Route as RouteIcon, Settings2, X, Zap } from "lucide-react";
+import { History, LogIn, MapPinned, Menu, Route as RouteIcon, Trash2, X, Zap } from "lucide-react";
 import { useActor } from "@/infrastructure/auth/use-actor";
-import { createSupabaseAuth } from "@/infrastructure/auth/supabase-auth";
-import { SignInForm } from "@/components/auth/sign-in-form";
+import { useUserContext } from "@/components/user/user-context";
+import { AccountMenu, useSignOut } from "@/components/auth/account-menu";
+import { useAuthDialog } from "@/components/auth/auth-dialog";
 import { BatteryDialog } from "@/components/planner/battery-panel";
 import { ConditionsDialog } from "@/components/planner/conditions-form";
-import { PlugshareSettings } from "@/components/planner/plugshare-settings";
 import { MyTripsDialog } from "@/components/trips/my-trips-dialog";
 import { VehicleEditor } from "@/components/planner/vehicle-editor";
+import { ThemeToggle } from "@/components/shell/theme";
 import { Button } from "@/components/ui/button";
+import { canSeeStationsMenu } from "@/lib/stations-access";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -34,13 +36,7 @@ const LINKS: { to: "/planificar" | "/electrolineras"; label: string; hint: strin
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [plugshareOpen, setPlugshareOpen] = useState(false);
-  const setVehicle = usePlanner((s) => s.setVehicleModalOpen);
-  const setSettings = usePlanner((s) => s.setSettingsOpen);
   const setMyTripsOpen = usePlanner((s) => s.setMyTripsOpen);
-  const setToken = usePlanner((s) => s.setMapboxToken);
-  const hasMapbox = usePlanner((s) => Boolean(s.mapboxToken));
-  const hasPlugshare = usePlanner((s) => Boolean(s.plugshareToken));
 
   useEffect(() => {
     setOpen(false);
@@ -55,11 +51,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const actor = useActor();
+  const links = canSeeStationsMenu(actor.email) ? LINKS : LINKS.filter((item) => item.to !== "/electrolineras");
   const title = pathname.startsWith("/electrolineras") ? "Electrolineras" : "Planificar ruta";
 
   return (
     <>
-      <header className="pointer-events-auto fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-bg/90 px-2 backdrop-blur md:px-4">
+      <header className="pointer-events-auto fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-bg/95 px-2 backdrop-blur-md md:px-4">
         <Button
           type="button"
           variant="ghost"
@@ -80,6 +78,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="truncate text-xs text-muted">Voltia</div>
           </div>
         </div>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <ThemeToggle />
+          <AccountMenu />
+        </div>
       </header>
 
       <Drawer open={open} onClose={() => setOpen(false)}>
@@ -99,24 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="mt-6 grid gap-1 px-3" aria-label="Principal">
-          <button
-            type="button"
-            className="flex min-h-14 items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-2"
-            onClick={() => {
-              setOpen(false);
-              setVehicle(true);
-            }}
-          >
-            <span className="grid size-11 place-items-center rounded-md bg-accent/15 text-accent">
-              <Car className="size-5" />
-            </span>
-            <span>
-              <span className="block text-sm font-medium text-fg">Vehículos</span>
-              <span className="block text-xs text-muted">Catálogo y ficha técnica</span>
-            </span>
-          </button>
-
-          {LINKS.map((item) => {
+          {links.map((item) => {
             const active =
               item.to === "/planificar"
                 ? pathname === "/" || pathname.startsWith("/planificar")
@@ -141,72 +126,22 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <MyTripsLink onOpen={() => { setOpen(false); setMyTripsOpen(true); }} />
 
-          <button
-            type="button"
-            className="flex min-h-14 items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-2"
-            onClick={() => {
-              setOpen(false);
-              setSettings(true);
-            }}
-          >
-            <span className="grid size-11 place-items-center rounded-md bg-accent/15 text-accent">
-              <Settings2 className="size-5" />
-            </span>
-            <span>
-              <span className="block text-sm font-medium text-fg">Configuración</span>
-              <span className="block text-xs text-muted">Estrategia, margen y conducción</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            className="flex min-h-14 items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-2"
-            onClick={() => {
-              setOpen(false);
-              setPlugshareOpen(true);
-            }}
-          >
-            <span className="grid size-11 place-items-center rounded-md bg-accent/15 text-accent">
-              <PlugZap className="size-5" />
-            </span>
-            <span>
-              <span className="block text-sm font-medium text-fg">PlugShare</span>
-              <span className="block text-xs text-muted">
-                {hasPlugshare ? "Red conectada" : "Clave opcional de electrolineras"}
-              </span>
-            </span>
-          </button>
         </nav>
 
-        {hasMapbox ? (
-          <button
-            type="button"
-            className="mt-auto min-h-11 px-6 pb-2 text-left text-sm text-subtle hover:text-muted"
-            onClick={() => {
-              setOpen(false);
-              setToken("");
-            }}
-          >
-            Cambiar token de Mapbox
-          </button>
-        ) : (
-          <div className="mt-auto" />
-        )}
-        <AccountNote />
+        <div className="mt-auto" />
+        <AccountNote onNavigate={() => setOpen(false)} />
       </Drawer>
 
       {children}
       <VehicleEditor />
       <BatteryDialog />
       <ConditionsDialog />
-      <PlugshareSettings open={plugshareOpen} onOpenChange={setPlugshareOpen} />
       <MyTripsDialog />
     </>
   );
 }
 
 function MyTripsLink({ onOpen }: { onOpen: () => void }) {
-  const actor = useActor();
-  if (actor.role === "guest") return null;
   return (
     <button
       type="button"
@@ -218,29 +153,65 @@ function MyTripsLink({ onOpen }: { onOpen: () => void }) {
       </span>
       <span>
         <span className="block text-sm font-medium text-fg">Mis viajes</span>
-        <span className="block text-xs text-muted">Historial guardado y links para compartir</span>
+        <span className="block text-xs text-muted">Rutas guardadas; compartir por link con sesión</span>
       </span>
     </button>
   );
 }
 
-function AccountNote() {
-  const actor = useActor();
-  const [busy, setBusy] = useState(false);
-
-  async function signOut() {
-    setBusy(true);
-    try {
-      await createSupabaseAuth().signOut();
-    } finally {
-      setBusy(false);
-    }
+function ClearGuestData() {
+  const { discardGuestData } = useUserContext();
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        className="mt-3 flex min-h-11 w-full items-center gap-2 px-3 text-left text-xs text-subtle hover:text-muted"
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 className="size-4 shrink-0" />
+        Borrar mis datos de este navegador
+      </button>
+    );
   }
+  return (
+    <div className="mt-3 rounded-lg bg-bg-elevated p-3 text-xs text-muted">
+      <p>Se borrarán tus vehículos y rutas guardados en este navegador. No se puede deshacer.</p>
+      <div className="mt-2 flex gap-2">
+        <Button size="sm" variant="danger" className="h-11" onClick={() => { discardGuestData(); setConfirming(false); }}>
+          Borrar
+        </Button>
+        <Button size="sm" variant="ghost" className="h-11" onClick={() => setConfirming(false)}>
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AccountNote({ onNavigate }: { onNavigate: () => void }) {
+  const actor = useActor();
+  const { openSignIn } = useAuthDialog();
+  const { signOut, busy } = useSignOut();
 
   if (actor.role === "guest") {
     return (
       <div className="px-3 pb-6">
-        <SignInForm />
+        <p className="px-3 text-xs text-muted">
+          Opcional: con una cuenta tus rutas y vehículos te siguen a otros dispositivos.
+        </p>
+        <Button
+          variant="outline"
+          className="mt-2 h-11 w-full"
+          onClick={() => {
+            onNavigate();
+            openSignIn();
+          }}
+        >
+          <LogIn className="size-4" />
+          Iniciar sesión
+        </Button>
+        <ClearGuestData />
       </div>
     );
   }
@@ -255,7 +226,7 @@ function AccountNote() {
         type="button"
         className="shrink-0 text-xs text-muted hover:text-fg disabled:opacity-50"
         disabled={busy}
-        onClick={signOut}
+        onClick={() => void signOut()}
       >
         Cerrar sesión
       </button>
@@ -276,12 +247,16 @@ function Drawer({
   const [drag, setDrag] = useState(0);
 
   function onPointerDown(e: React.PointerEvent) {
+    if (e.button !== 0) return;
     startX.current = e.clientX;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
   function onPointerMove(e: React.PointerEvent) {
     if (startX.current == null) return;
-    setDrag(Math.min(0, e.clientX - startX.current));
+    const dx = Math.min(0, e.clientX - startX.current);
+    if (dx > -10) return;
+    const el = e.currentTarget as HTMLElement;
+    if (!el.hasPointerCapture(e.pointerId)) el.setPointerCapture(e.pointerId);
+    setDrag(dx);
   }
   function onPointerUp() {
     if (startX.current == null) return;
