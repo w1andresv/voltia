@@ -28,7 +28,8 @@ export function MapPane({ mode }: { mode: ChargerAction }) {
   const setMapBounds = usePlanner((s) => s.setMapBounds);
   const isPlan = mode === "plan";
   const isStations = mode === "stations";
-  const planClickOpen = Boolean(armed) && armed !== "station" ? true : !origin || !destination;
+  // El mapa solo permite elegir un punto cuando el usuario pulsó "En el mapa".
+  const planClickOpen = armed === "origin" || armed === "destination" || armed === "waypoint";
 
   return (
     <MapView

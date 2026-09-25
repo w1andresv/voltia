@@ -73,7 +73,7 @@ export function PlannerApp() {
         </div>
       ) : null}
 
-      <div className="border-border bg-surface md:flex md:h-full md:w-[420px] md:shrink-0 md:flex-col md:overflow-y-auto md:border-r">
+      <div className="border-border bg-surface md:flex md:h-full md:w-[580px] md:shrink-0 md:flex-col md:overflow-y-auto md:border-r">
         <div
           id="voltia-map-slot"
           className="relative h-[46vh] min-h-64 shrink-0 overflow-hidden bg-bg md:hidden"
