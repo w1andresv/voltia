@@ -5,6 +5,7 @@ import { isVerifiedForPlanning } from "@/domain/types";
 import { uniqueByProximity } from "@/domain/geo";
 import { pickProbes, overpassProvider } from "./chargers.overpass";
 import { plugshareProvider } from "./chargers.plugshare";
+import { siveeicProvider } from "./chargers.siveeic";
 import { CATALOG_CHARGERS } from "./chargers.catalog";
 
 interface CorridorCacheRow {
@@ -55,27 +56,32 @@ async function writeCache(key: string, chargers: Charger[]): Promise<void> {
 }
 
 /**
- * OSM + PlugShare, cacheados 24h por corredor: son las fuentes lentas y con
- * cuota. `community` (electrolineras aprobadas por usuarios) y el catálogo del
- * operador se consultan siempre en vivo en `findCachedChargersAlong` — si
- * entraran aquí, una estación nueva o un cambio de disponibilidad tardaría
- * hasta un día en verse.
+ * OSM + PlugShare + SIVEEIC, cacheados 24h por corredor: son las fuentes
+ * lentas (llamadas externas). `community` (electrolineras aprobadas por
+ * usuarios) y el catálogo del operador se consultan siempre en vivo en
+ * `findCachedChargersAlong` — si entraran aquí, una estación nueva o un
+ * cambio de disponibilidad tardaría hasta un día en verse.
  */
 async function findSlowProviders(samples: LatLon[]): Promise<{ chargers: Charger[]; warnings: string[] }> {
   const key = corridorKey(samples);
   const cached = await readCache(key);
   if (cached) return { chargers: cached, warnings: [] };
 
-  const [plugshare, osm] = await Promise.all([
+  const [plugshare, siveeic, osm] = await Promise.all([
     plugshareProvider.findAlong(samples),
+    siveeicProvider.findAlong(samples),
     overpassProvider.findAlong(samples),
   ]);
   const merged = uniqueByProximity(
-    [...plugshare.chargers.filter(isVerifiedForPlanning), ...osm.chargers],
+    [
+      ...plugshare.chargers.filter(isVerifiedForPlanning),
+      ...siveeic.chargers.filter(isVerifiedForPlanning),
+      ...osm.chargers,
+    ],
     0.12,
   );
   void writeCache(key, merged);
-  return { chargers: merged, warnings: [...plugshare.warnings, ...osm.warnings] };
+  return { chargers: merged, warnings: [...plugshare.warnings, ...siveeic.warnings, ...osm.warnings] };
 }
 
 export async function findCachedChargersAlong(

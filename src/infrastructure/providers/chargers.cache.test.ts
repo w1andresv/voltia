@@ -4,9 +4,10 @@ import type { Charger } from "@/domain/types";
 const { query } = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock("@/infrastructure/db", () => ({ getSql: async () => ({ query }) }));
 
-const { overpassFindAlong, plugshareFindAlong } = vi.hoisted(() => ({
+const { overpassFindAlong, plugshareFindAlong, siveeicFindAlong } = vi.hoisted(() => ({
   overpassFindAlong: vi.fn(),
   plugshareFindAlong: vi.fn(),
+  siveeicFindAlong: vi.fn(),
 }));
 vi.mock("./chargers.overpass", () => ({
   pickProbes: (samples: { lat: number; lon: number }[]) => samples,
@@ -14,6 +15,9 @@ vi.mock("./chargers.overpass", () => ({
 }));
 vi.mock("./chargers.plugshare", () => ({
   plugshareProvider: { id: "plugshare", name: "PlugShare", findAlong: plugshareFindAlong },
+}));
+vi.mock("./chargers.siveeic", () => ({
+  siveeicProvider: { id: "siveeic", name: "SIVEEIC", findAlong: siveeicFindAlong },
 }));
 
 import { findCachedChargersAlong } from "./chargers.cache";
@@ -35,10 +39,12 @@ beforeEach(() => {
   query.mockReset();
   overpassFindAlong.mockReset();
   plugshareFindAlong.mockReset();
+  siveeicFindAlong.mockReset();
+  siveeicFindAlong.mockResolvedValue({ chargers: [], warnings: [] });
 });
 
 describe("findCachedChargersAlong", () => {
-  it("sin caché: consulta OSM y PlugShare, y guarda el resultado", async () => {
+  it("sin caché: consulta OSM, PlugShare y SIVEEIC, y guarda el resultado", async () => {
     query.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     overpassFindAlong.mockResolvedValue({ chargers: [charger({ id: "osm-1" })], warnings: [] });
     plugshareFindAlong.mockResolvedValue({ chargers: [], warnings: [] });
@@ -48,10 +54,11 @@ describe("findCachedChargersAlong", () => {
     expect(res.chargers.map((c) => c.id)).toContain("osm-1");
     expect(overpassFindAlong).toHaveBeenCalledTimes(1);
     expect(plugshareFindAlong).toHaveBeenCalledTimes(1);
+    expect(siveeicFindAlong).toHaveBeenCalledTimes(1);
     expect(String(query.mock.calls[1]![0])).toMatch(/insert into charger_corridor_cache/i);
   });
 
-  it("con caché vigente: no vuelve a llamar a OSM/PlugShare", async () => {
+  it("con caché vigente: no vuelve a llamar a OSM/PlugShare/SIVEEIC", async () => {
     query.mockResolvedValueOnce([{ chargers_json: JSON.stringify([charger({ id: "cached-1" })]) }]);
 
     const res = await findCachedChargersAlong([{ lat: 4.7, lon: -74.1 }], []);
@@ -59,6 +66,7 @@ describe("findCachedChargersAlong", () => {
     expect(res.chargers.map((c) => c.id)).toContain("cached-1");
     expect(overpassFindAlong).not.toHaveBeenCalled();
     expect(plugshareFindAlong).not.toHaveBeenCalled();
+    expect(siveeicFindAlong).not.toHaveBeenCalled();
   });
 
   it("community siempre se mezcla en vivo, aunque haya caché", async () => {
