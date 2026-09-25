@@ -11,6 +11,7 @@ import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/f
 import { Button } from "@/components/ui/button";
 import { ConsumptionChart } from "./consumption-chart";
 import { ElevationChart } from "./elevation-chart";
+import { ExportGpsButton } from "./export-gps-button";
 import { Itinerary } from "./itinerary";
 import { PlaceSearch } from "./place-search";
 import { RouteCompare } from "./route-compare";
@@ -316,7 +317,10 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
           <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">
             {plans.length > 1 ? `Resumen · ${plan.label}` : "Resumen de la ruta"}
           </h2>
-          <SaveTripButton plan={plan} />
+          <div className="flex shrink-0 gap-2">
+            <ExportGpsButton plan={plan} />
+            <SaveTripButton plan={plan} />
+          </div>
         </div>
         {plan.via || engineLabel ? (
           <p className="-mt-1 text-xs text-muted">

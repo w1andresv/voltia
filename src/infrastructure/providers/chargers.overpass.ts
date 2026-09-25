@@ -3,7 +3,7 @@ import type { Charger, ChargerSocket, ConnectorType } from "@/domain/types";
 import { isVerifiedForPlanning } from "@/domain/types";
 import { haversineKm, uniqueByProximity } from "@/domain/geo";
 import { fetchJson } from "./http";
-import { CATALOG_CHARGERS } from "./chargers.catalog";
+import type { ChargerProvider } from "./chargers/types";
 
 /**
  * Igual que con OSRM: se valida con Zod para que un cambio de forma en la
@@ -162,39 +162,21 @@ async function queryOverpass(samples: { lat: number; lon: number }[]): Promise<C
   throw lastErr instanceof Error ? lastErr : new Error("Overpass failed");
 }
 
-export async function findChargersAlong(
-  samples: { lat: number; lon: number }[],
-  community: Charger[] = [],
-): Promise<{
-  chargers: Charger[];
-  warnings: string[];
-}> {
-  const warnings: string[] = [];
-  let osm: Charger[] = [];
-  try {
-    osm = await queryOverpass(samples);
-  } catch {
-    warnings.push(
-      "No se pudo consultar OpenStreetMap. Solo se usarán electrolineras verificadas de PlugShare, comunidad confirmada y catálogo del operador.",
-    );
-  }
+/** Solo OSM/Overpass, sin merge con las demás fuentes — eso lo hace chargers.cache.ts. */
+export const overpassProvider: ChargerProvider = {
+  id: "osm",
+  name: "OpenStreetMap",
+  async findAlong(samples) {
+    try {
+      return { chargers: await queryOverpass(samples), warnings: [] };
+    } catch {
+      return {
+        chargers: [],
+        warnings: [
+          "No se pudo consultar OpenStreetMap. Solo se usarán electrolineras verificadas de PlugShare, comunidad confirmada y catálogo del operador.",
+        ],
+      };
+    }
+  },
+};
 
-  const { findPlugshareAlong } = await import("./chargers.plugshare");
-  const plugshare = await findPlugshareAlong(samples);
-  if (plugshare.warning) warnings.push(plugshare.warning);
-
-  const catalogNear = CATALOG_CHARGERS.filter(
-    (c) => isVerifiedForPlanning(c) && samples.some((s) => Math.abs(s.lat - c.lat) + Math.abs(s.lon - c.lon) < 1.6),
-  );
-
-  const merged = uniqueByProximity(
-    [
-      ...community.filter(isVerifiedForPlanning),
-      ...plugshare.chargers.filter(isVerifiedForPlanning),
-      ...osm,
-      ...catalogNear,
-    ],
-    0.18,
-  );
-  return { chargers: merged, warnings };
-}

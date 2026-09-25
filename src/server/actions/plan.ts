@@ -29,7 +29,7 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
     const { fetchRoutes } = await import("@/infrastructure/providers/routing");
     const { applyElevationAll } = await import("@/infrastructure/providers/elevation.openmeteo");
     const { fetchWeather } = await import("@/infrastructure/providers/weather.openmeteo");
-    const { findChargersAlong } = await import("@/infrastructure/providers/chargers.overpass");
+    const { findCachedChargersAlong } = await import("@/infrastructure/providers/chargers.cache");
     const { loadCommunityChargers } = await import("@/server/actions/stations-db");
     const { buildPlan, rankPlans } = await import("@/domain/planner");
     const { isVerifiedForPlanning } = await import("@/domain/types");
@@ -47,7 +47,7 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
     const [routes, weather, chargerRes] = await Promise.all([
       applyElevationAll(rawRoutes),
       mid ? fetchWeather(mid) : Promise.resolve(null),
-      findChargersAlong(chargerQuery, community),
+      findCachedChargersAlong(chargerQuery, community),
     ]);
     if (routes.some((r) => r.elevation.maxM === 0 && r.elevation.minM === 0 && r.distanceKm > 5)) {
       warnings.push("No se obtuvo el perfil de elevación. El consumo puede estar subestimado en montaña.");

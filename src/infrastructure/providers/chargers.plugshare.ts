@@ -7,6 +7,7 @@ import type {
 import { uniqueByProximity } from "@/domain/geo";
 import { isPlugshareToken, plugshareAuthHeader, plugshareLocationUrl } from "@/lib/plugshare";
 import { fetchJson } from "./http";
+import type { ChargerProvider } from "./chargers/types";
 
 const API = "https://api.plugshare.com/v3";
 
@@ -352,3 +353,12 @@ export async function findPlugshareAlong(
   for (const r of rest) chargers.push(...r.chargers);
   return { chargers: uniqueByProximity(chargers, 0.12) };
 }
+
+export const plugshareProvider: ChargerProvider = {
+  id: "plugshare",
+  name: "PlugShare",
+  async findAlong(samples, options) {
+    const res = await findPlugshareAlong(samples, options?.token);
+    return { chargers: res.chargers, warnings: res.warning ? [res.warning] : [] };
+  },
+};
