@@ -18,9 +18,8 @@ export function useBindMapClick() {
   return async (lat: number, lon: number) => {
     if (Date.now() < ignoreUntil) return;
     const s = usePlanner.getState();
-    const armed = s.mapClickArmed;
-    const canFillEnds = !s.origin || !s.destination;
-    if (!armed && !canFillEnds) return;
+    // Solo actúa si el usuario armó el mapa desde "En el mapa"; nunca por defecto.
+    if (!s.mapClickArmed) return;
 
     let place: Place;
     try {
@@ -47,13 +46,13 @@ export function useBindMapClick() {
       toast.success("Parada añadida desde el mapa");
       return;
     }
-    if (slot === "origin" || !now.origin) {
+    if (slot === "origin") {
       now.setOrigin(place);
-      now.setMapClickArmed(now.destination ? null : slot === "origin" ? "destination" : null);
+      now.setMapClickArmed(now.destination ? null : "destination");
       toast.success(now.destination ? "Origen fijado desde el mapa" : "Origen fijado. Toca el mapa para el destino.");
       return;
     }
-    if (slot === "destination" || !now.destination) {
+    if (slot === "destination") {
       now.setDestination(place);
       now.setMapClickArmed(null);
       toast.success("Destino fijado desde el mapa");

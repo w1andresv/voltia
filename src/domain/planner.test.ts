@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildPlan, rankPlans } from "./planner";
+import { annotateEnergy, energyBetween } from "./energy";
+import { buildPlan, classifyFirstChargerCharge, rankPlans } from "./planner";
 import { DEFAULT_CURVE } from "./charging";
-import { NO_VERIFIED_STOP_REASON } from "./types";
+import {
+  departureChargeAdvice,
+  FIRST_CHARGER_UNREACHABLE_REASON,
+  NO_VERIFIED_STOP_REASON,
+  safetyPct,
+} from "./types";
 import type { Charger, Place, RawRoute, TripConditions, Vehicle } from "./types";
 
 function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
@@ -86,7 +92,9 @@ const ORIGIN: Place = { label: "Origen", lat: 4, lon: -74 };
 const DESTINATION_100: Place = { label: "Destino", lat: 4 + 100 / 111, lon: -74 };
 
 describe("buildPlan — cargador por debajo del margen", () => {
-  it("propone ese punto y cuánto cargar cuando es el que permite seguir", () => {
+  // Si cargando antes de salir se puede respetar el margen, se pide esa carga
+  // en vez de aceptar una llegada por debajo del margen.
+  it("pide cargar antes de salir para no llegar por debajo del margen", () => {
     const distance = 400;
     const plan = buildPlan({
       raw: straightRoute(distance),
@@ -97,9 +105,10 @@ describe("buildPlan — cargador por debajo del margen", () => {
       origin: ORIGIN,
       destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
     });
+    expect(plan.departureCharge).toBeDefined();
     expect(plan.stops).toHaveLength(1);
     const stop = plan.stops[0]!;
-    expect(stop.arriveSoc).toBeLessThan(15);
+    expect(stop.arriveSoc).toBeGreaterThanOrEqual(15);
     expect(stop.departSoc).toBeGreaterThan(stop.arriveSoc + 5);
     expect(stop.energyAddedKwh).toBeGreaterThan(0);
   });
@@ -440,6 +449,226 @@ describe("estilo de conducción: energía y tiempo", () => {
     const spo = plan("sport", 90);
     expect(spo.driveMinutes).toBeCloseTo(nor.driveMinutes, 5);
     expect(spo.energyKwh).toBeGreaterThan(nor.energyKwh);
+  });
+});
+
+function manualVehicle(kwhPer100: number, batteryKwh = 100): Vehicle {
+  return vehicle({
+    batteryKwh,
+    rangeKm: (batteryKwh / kwhPer100) * 100,
+    consumptionManual: true,
+    consumptionKwhPer100km: kwhPer100,
+    weightKg: 1800,
+  });
+}
+
+function departureConditions(initialSoc: number): TripConditions {
+  return conditions({
+    initialSoc,
+    passengers: 0,
+    luggageKg: 0,
+    ac: "off",
+    temperatureC: 20,
+    drivingStyle: "normal",
+    avgSpeedKmh: 70,
+    arrivalSoc: 10,
+    safetyMode: "low",
+  });
+}
+
+/** SOC que consume el tramo hasta `chargerKm`, con el mismo modelo que el plan. */
+function legSocPct(raw: RawRoute, ev: Vehicle, cond: TripConditions, chargerKm: number): number {
+  const speed = cond.avgSpeedKmh && cond.avgSpeedKmh > 10 ? cond.avgSpeedKmh : 70;
+  const samples = raw.samples.map((s) => ({ ...s, speedKmh: speed }));
+  const annotated = annotateEnergy(
+    samples,
+    { vehicle: ev, conditions: cond, weather: null, originAltitudeM: samples[0]?.elevM },
+    100,
+  );
+  const idx = samples.findIndex((s) => Math.abs(s.km - chargerKm) < 0.05);
+  return (energyBetween(annotated, 0, idx) / ev.batteryKwh) * 100;
+}
+
+describe("primera electrolinera verificada", () => {
+  const destinationOf = (km: number): Place => ({ label: "Destino", lat: 4 + km / 111, lon: -74 });
+
+  it("traduce el ejemplo: 35 % + 20 % llega; 35 % + 75 % no cabe en el 100 %", () => {
+    expect(classifyFirstChargerCharge(35, 55)).toEqual({
+      kind: "precharge",
+      additionalPct: 20,
+      requiredStartSoc: 55,
+    });
+    expect(classifyFirstChargerCharge(35, 110)).toEqual({ kind: "impossible" });
+    expect(classifyFirstChargerCharge(35, 100)).toEqual({
+      kind: "precharge",
+      additionalPct: 65,
+      requiredStartSoc: 100,
+    });
+    expect(classifyFirstChargerCharge(80, 40)).toEqual({ kind: "enough" });
+  });
+
+  it("redacta la recomendación con el porcentaje adicional", () => {
+    expect(departureChargeAdvice(20)).toBe(
+      "Antes de iniciar la ruta debes cargar al menos un 20% adicional para poder llegar al primer punto de carga.",
+    );
+    expect(departureChargeAdvice(12)).toBe(
+      "Antes de iniciar la ruta debes cargar al menos un 12% adicional para poder llegar al primer punto de carga.",
+    );
+  });
+
+  it("pide la carga adicional que falta según el consumo del tramo y sigue planificando", () => {
+    const distance = 400;
+    const chargerKm = 220;
+    const ev = manualVehicle(20);
+    const cond = departureConditions(15);
+    const raw = straightRoute(distance);
+    const plan = buildPlan({
+      raw,
+      vehicle: ev,
+      conditions: cond,
+      chargers: [chargerAt(chargerKm, { id: "real", name: "Electrolinera real" })],
+      weather: null,
+      origin: ORIGIN,
+      destination: destinationOf(distance),
+    });
+
+    // El punto de llegada debe respetar el margen de seguridad, no solo evitar quedarse en 0 %.
+    const needed = legSocPct(raw, ev, cond, chargerKm) + safetyPct(cond);
+    const additional = Math.ceil(needed - cond.initialSoc - 1e-6);
+    expect(additional).toBeGreaterThan(0);
+    expect(cond.initialSoc + additional).toBeLessThanOrEqual(100);
+    expect(plan.departureCharge).toEqual({
+      currentSoc: 15,
+      additionalPct: additional,
+      requiredStartSoc: 15 + additional,
+      chargerId: "real",
+      chargerName: "Electrolinera real",
+    });
+    expect(plan.firstChargerUnreachable).toBeFalsy();
+    expect(plan.feasible).toBe(true);
+    expect(plan.stops.length).toBeGreaterThan(0);
+    expect(plan.stops.every((stop) => stop.charger.id === "real")).toBe(true);
+    expect(plan.stops[0]!.arriveSoc).toBeGreaterThanOrEqual(safetyPct(cond) - 1);
+    expect(plan.initialSoc).toBe(15 + additional);
+    expect(plan.geometry.length).toBeGreaterThan(1);
+  });
+
+  it("usa el consumo del vehículo, no una distancia fija", () => {
+    const distance = 450;
+    const chargerKm = 200;
+    const raw = straightRoute(distance);
+    const cond = departureConditions(10);
+    const low = buildPlan({
+      raw,
+      vehicle: manualVehicle(15),
+      conditions: cond,
+      chargers: [chargerAt(chargerKm)],
+      weather: null,
+      origin: ORIGIN,
+      destination: destinationOf(distance),
+    });
+    const high = buildPlan({
+      raw,
+      vehicle: manualVehicle(28),
+      conditions: cond,
+      chargers: [chargerAt(chargerKm)],
+      weather: null,
+      origin: ORIGIN,
+      destination: destinationOf(distance),
+    });
+    expect(low.departureCharge?.additionalPct).toBeGreaterThan(0);
+    expect(high.departureCharge!.additionalPct).toBeGreaterThan(low.departureCharge!.additionalPct);
+  });
+
+  it("una subida en el tramo exige más batería que el mismo kilometraje en llano", () => {
+    const distance = 450;
+    const chargerKm = 200;
+    const ev = manualVehicle(18);
+    const cond = departureConditions(10);
+    const flat = straightRoute(distance);
+    const climb = straightRoute(distance);
+    climb.samples = climb.samples.map((s, i) => ({ ...s, elevM: i * 40 }));
+    const args = {
+      vehicle: ev,
+      conditions: cond,
+      chargers: [chargerAt(chargerKm)],
+      weather: null,
+      origin: ORIGIN,
+      destination: destinationOf(distance),
+    };
+    const flatPlan = buildPlan({ ...args, raw: flat });
+    const climbPlan = buildPlan({ ...args, raw: climb });
+    expect(climbPlan.departureCharge!.additionalPct).toBeGreaterThan(flatPlan.departureCharge!.additionalPct);
+  });
+
+  it("ignora electrolineras no verificadas y no inventa un punto de carga", () => {
+    const distance = 400;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: manualVehicle(20),
+      conditions: departureConditions(15),
+      chargers: [
+        chargerAt(30, { id: "pending", source: "community", status: "pending" }),
+        chargerAt(40, { id: "catalog", source: "catalog", verified: false }),
+        chargerAt(220, { id: "real", name: "Verificada" }),
+      ],
+      weather: null,
+      origin: ORIGIN,
+      destination: destinationOf(distance),
+    });
+    expect(plan.departureCharge?.chargerId).toBe("real");
+    expect(plan.stops.every((stop) => stop.charger.id === "real")).toBe(true);
+  });
+
+  it("sin electrolineras verificadas mantiene el aviso de que no hay punto real", () => {
+    const distance = 500;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: manualVehicle(20),
+      conditions: departureConditions(20),
+      chargers: [chargerAt(120, { source: "community", status: "pending" })],
+      weather: null,
+      origin: ORIGIN,
+      destination: destinationOf(distance),
+    });
+    expect(plan.firstChargerUnreachable).toBeFalsy();
+    expect(plan.stops).toHaveLength(0);
+    expect(plan.infeasibleReason).toBe(NO_VERIFIED_STOP_REASON);
+  });
+
+  it("no marca recarga previa si la batería actual ya llega a la primera electrolinera", () => {
+    const distance = 400;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: manualVehicle(20),
+      conditions: departureConditions(90),
+      chargers: [chargerAt(40, { id: "cerca" })],
+      weather: null,
+      origin: ORIGIN,
+      destination: destinationOf(distance),
+    });
+    expect(plan.departureCharge).toBeUndefined();
+    expect(plan.firstChargerUnreachable).toBeFalsy();
+    expect(plan.stops.length).toBeGreaterThan(0);
+    expect(plan.feasible).toBe(true);
+  });
+
+  it("declara la ruta imposible si ni al 100 % se alcanza la primera electrolinera verificada", () => {
+    const distance = 360;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: manualVehicle(25, 60),
+      conditions: departureConditions(35),
+      chargers: [chargerAt(280, { id: "lejos", name: "Lejos" })],
+      weather: null,
+      origin: ORIGIN,
+      destination: destinationOf(distance),
+    });
+    expect(plan.firstChargerUnreachable).toBe(true);
+    expect(plan.feasible).toBe(false);
+    expect(plan.stops).toEqual([]);
+    expect(plan.departureCharge).toBeUndefined();
+    expect(plan.infeasibleReason).toBe(FIRST_CHARGER_UNREACHABLE_REASON);
   });
 });
 

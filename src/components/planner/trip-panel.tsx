@@ -19,7 +19,13 @@ import { PlanStats } from "./stats";
 import { SaveTripButton } from "@/components/trips/save-trip-button";
 import { TripParams } from "./trip-params";
 import { VehicleBar } from "./vehicle-bar";
-import { CONNECTOR_LABEL, ROUTING_ENGINE_LABEL, type RoutePlan } from "@/domain/types";
+import {
+  CONNECTOR_LABEL,
+  departureChargeAdvice,
+  FIRST_CHARGER_UNREACHABLE_REASON,
+  ROUTING_ENGINE_LABEL,
+  type RoutePlan,
+} from "@/domain/types";
 
 export function TripSetup() {
   const origin = usePlanner((s) => s.origin);
@@ -282,8 +288,23 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
   const weather = usePlanner((s) => s.geo?.weather);
   const engineLabel = plan.engine ? ROUTING_ENGINE_LABEL[plan.engine] : null;
 
+  if (plan.firstChargerUnreachable) {
+    return (
+      <div className="px-4 pb-24 pt-2">
+        <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-danger">
+          {plan.infeasibleReason ?? FIRST_CHARGER_UNREACHABLE_REASON}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 px-4 pb-24 pt-2">
+      {plan.departureCharge ? (
+        <p role="alert" className="rounded-lg bg-warn/15 px-3 py-2.5 text-sm leading-relaxed text-warn">
+          {departureChargeAdvice(plan.departureCharge.additionalPct)}
+        </p>
+      ) : null}
       {plans.length > 1 ? (
         <section>
           <RouteCompare plans={plans} />

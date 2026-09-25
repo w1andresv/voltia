@@ -226,13 +226,105 @@
   color: var(--color-fg) !important;
 }
 
-.voltia-pin {
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
+.voltia-pin-wrap {
+  position: relative;
+  width: 40px;
+  height: 50px;
+  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.5));
+  transition: transform 0.15s ease;
+}
+
+.voltia-marker-pin:hover .voltia-pin-wrap {
+  transform: translateY(-4px) scale(1.08);
+}
+
+.voltia-pin-svg {
+  position: absolute;
+  inset: 0;
+}
+
+.voltia-pin-icon {
+  position: absolute;
+  top: 19px;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: grid;
   place-items: center;
-  box-shadow: 0 0 0 2px rgb(12 15 18 / 0.85);
+}
+
+.voltia-pin-pulse {
+  position: absolute;
+  top: 19px;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: voltia-pulse 2.2s ease-out infinite;
+}
+
+@keyframes voltia-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.55);
+    opacity: 0.6;
+  }
+  75% {
+    transform: translate(-50%, -50%) scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.2);
+    opacity: 0;
+  }
+}
+
+.voltia-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 2px 5px rgb(0 0 0 / 0.4),
+    0 0 0 2px rgb(12 15 18 / 0.85);
+  transition: transform 0.12s ease;
+}
+
+.voltia-marker:hover .voltia-dot {
+  transform: scale(1.15);
+}
+
+.voltia-stop {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--stop-bg) 65%, white), var(--stop-bg));
+  box-shadow:
+    0 3px 8px rgb(0 0 0 / 0.45),
+    inset 0 0 0 2px rgb(255 255 255 / 0.35);
+  transition: transform 0.12s ease;
+}
+
+.voltia-marker:hover .voltia-stop {
+  transform: scale(1.08);
+}
+
+.voltia-stop-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--stop-bg) 55%, transparent);
+}
+
+.voltia-stop-badge {
+  color: var(--stop-fg);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .recharts-cartesian-grid-horizontal line,

@@ -1,6 +1,6 @@
 import { chargeCurveSeries, chargeTimeMinutes } from "@/domain/charging";
 import { batteryBudget } from "@/domain/energy";
-import { safetyPct } from "@/domain/types";
+import { departureChargeAdvice, safetyPct } from "@/domain/types";
 import { vehicleLabel } from "@/domain/vehicles";
 import { formatKm, formatKw, formatKwh, formatKwhPer100, formatMinutes, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
@@ -123,7 +123,11 @@ export function BatteryDialog() {
           </p>
         </section>
 
-        {plan ? (
+        {plan?.firstChargerUnreachable ? (
+          <p className="mt-5 text-xs leading-relaxed text-danger">
+            {plan.infeasibleReason ?? "No es posible alcanzar el primer punto de carga."}
+          </p>
+        ) : plan ? (
           <section className="mt-5">
             <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">En este viaje</h3>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -141,6 +145,11 @@ export function BatteryDialog() {
               <Metric label="Paradas" value={String(plan.stops.length)} />
               <Metric label="SOC mínimo" value={formatPct(plan.minSoc)} />
             </div>
+            {plan.departureCharge ? (
+              <p className="mt-2 text-xs leading-relaxed text-warn">
+                {departureChargeAdvice(plan.departureCharge.additionalPct)}
+              </p>
+            ) : null}
             {plan.canArriveWithoutCharge ? (
               <p className="mt-2 text-xs text-ok">Llegas sin recargar. Margen {formatPct(plan.safetyMarginPct)}.</p>
             ) : plan.feasible ? (
