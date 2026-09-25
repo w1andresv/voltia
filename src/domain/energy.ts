@@ -464,3 +464,79 @@ export function batteryBudget(
     wltpKwhPer100: wltpKwhPer100(vehicle),
   };
 }
+
+export interface ConsumptionBlock {
+  fromKm: number;
+  toKm: number;
+  /** kWh netos del tramo (negativo si baja mucho y regenera más de lo que gasta). */
+  kwh: number;
+  kwhPer100: number;
+  gainM: number;
+  lossM: number;
+}
+
+/** Valor de una serie acumulada en `km`, interpolando entre muestras. */
+function valueAtKm<T extends { km: number }>(samples: T[], km: number, pick: (s: T) => number): number {
+  if (km <= samples[0]!.km) return pick(samples[0]!);
+  for (let i = 1; i < samples.length; i++) {
+    const b = samples[i]!;
+    if (km <= b.km) {
+      const a = samples[i - 1]!;
+      const span = b.km - a.km;
+      const t = span > 0 ? (km - a.km) / span : 1;
+      return pick(a) + (pick(b) - pick(a)) * t;
+    }
+  }
+  return pick(samples[samples.length - 1]!);
+}
+
+/**
+ * Consumo neto por tramos de `blockKm` (100 km por defecto), a partir del
+ * acumulado de la ruta. Un resto final menor que `minTailKm` se suma al tramo
+ * anterior para no mostrar un promedio ruidoso de pocos km.
+ */
+export function consumptionBlocks(
+  samples: RouteSample[],
+  blockKm = 100,
+  minTailKm = 25,
+): ConsumptionBlock[] {
+  if (samples.length < 2 || !(blockKm > 0)) return [];
+  const total = samples[samples.length - 1]!.km;
+  if (!(total > 0)) return [];
+  const edges: number[] = [0];
+  for (let km = blockKm; km < total; km += blockKm) edges.push(km);
+  if (edges.length > 1 && total - edges[edges.length - 1]! < minTailKm) edges.pop();
+  edges.push(total);
+
+  // Desnivel acumulado (subida y bajada por separado) en cada muestra.
+  let gain = 0;
+  let loss = 0;
+  const climb = samples.map((s, i) => {
+    if (i > 0) {
+      const d = s.elevM - samples[i - 1]!.elevM;
+      if (d > 0) gain += d;
+      else loss -= d;
+    }
+    return { km: s.km, gain, loss };
+  });
+  const climbAt = (km: number, key: "gain" | "loss") => valueAtKm(climb, km, (p) => p[key]);
+
+  const out: ConsumptionBlock[] = [];
+  for (let i = 1; i < edges.length; i++) {
+    const fromKm = edges[i - 1]!;
+    const toKm = edges[i]!;
+    const kwh =
+      valueAtKm(samples, toKm, (s) => s.cumulativeKwh) -
+      valueAtKm(samples, fromKm, (s) => s.cumulativeKwh);
+    const km = toKm - fromKm;
+    out.push({
+      fromKm,
+      toKm,
+      kwh,
+      kwhPer100: km > 0 ? (kwh / km) * 100 : 0,
+      gainM: climbAt(toKm, "gain") - climbAt(fromKm, "gain"),
+      lossM: climbAt(toKm, "loss") - climbAt(fromKm, "loss"),
+    });
+  }
+  return out;
+}
