@@ -23,7 +23,7 @@ import { useColorScheme } from "@/components/shell/theme";
 import { formatKm, formatKwh, formatKw, formatMinutes, formatPct } from "@/lib/format";
 import { ChargerFacts } from "@/components/planner/charger-facts";
 import { suppressMapClicks } from "@/components/planner/map-click";
-import { MAPBOX_ATTRIBUTION, mapboxTileUrl } from "@/lib/mapbox";
+import { MAPBOX_ATTRIBUTION, envMapboxToken, mapboxTileUrl } from "@/lib/mapbox";
 import { usePlanner } from "@/lib/store";
 import type { ChargerAction, LeafletMapProps, MapBounds } from "./map-types";
 
@@ -409,8 +409,10 @@ function BoundsReporter({ onChange }: { onChange?: (b: MapBounds) => void }) {
   return null;
 }
 
+/** El token sale solo de NEXT_PUBLIC_MAPBOX_TOKEN; la app nunca se lo pide al usuario. */
+const MAPBOX_TOKEN = envMapboxToken();
+
 function MapboxTiles({ token, scheme }: { token: string; scheme: "light" | "dark" }) {
-  const setToken = usePlanner((s) => s.setMapboxToken);
   const fails = useRef(0);
   useEffect(() => {
     fails.current = 0;
@@ -419,8 +421,10 @@ function MapboxTiles({ token, scheme }: { token: string; scheme: "light" | "dark
     tileerror() {
       fails.current += 1;
       if (fails.current === 6) {
-        toast.error("Mapbox rechazó el token. Pégalo de nuevo.");
-        setToken("");
+        console.error(
+          "[mapa] Mapbox rechaza las teselas: revisa NEXT_PUBLIC_MAPBOX_TOKEN (vigente, pk. y con este dominio en sus URLs permitidas).",
+        );
+        toast.error("No se pudo cargar el fondo del mapa.");
       }
     },
   });
@@ -454,7 +458,7 @@ export function LeafletMap({
   chargerAction = "browse",
   onViewChange,
 }: LeafletMapProps) {
-  const mapboxToken = usePlanner((s) => s.mapboxToken);
+  const mapboxToken = MAPBOX_TOKEN;
   const scheme = useColorScheme();
   const colors = mapPalette(scheme);
   const icons = useMemo(() => markerIcons(colors), [colors]);
@@ -489,7 +493,13 @@ export function LeafletMap({
       <Ready />
       {onViewChange ? <BoundsReporter onChange={onViewChange} /> : null}
       <ZoomControl position="topright" />
-      {mapboxToken ? <MapboxTiles token={mapboxToken} scheme={scheme} /> : null}
+      {mapboxToken ? (
+        <MapboxTiles token={mapboxToken} scheme={scheme} />
+      ) : process.env.NODE_ENV !== "production" ? (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-[1000] -translate-x-1/2 rounded-lg bg-surface/95 px-3 py-2 text-xs text-warn shadow-float">
+          Mapa sin fondo: falta NEXT_PUBLIC_MAPBOX_TOKEN (pk.) en .env.local
+        </div>
+      ) : null}
       <InteractionLock locked={mapLocked} />
       <ClickTrap enabled={mapClickEnabled && !mapLocked} onMapClick={onMapClick} />
       {plan ? <HoverTrap samples={plan.samples} onHoverKm={onHoverKm} /> : null}

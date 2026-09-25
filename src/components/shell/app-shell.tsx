@@ -37,8 +37,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const setMyTripsOpen = usePlanner((s) => s.setMyTripsOpen);
-  const setToken = usePlanner((s) => s.setMapboxToken);
-  const hasMapbox = usePlanner((s) => Boolean(s.mapboxToken));
 
   useEffect(() => {
     setOpen(false);
@@ -130,20 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         </nav>
 
-        {hasMapbox ? (
-          <button
-            type="button"
-            className="mt-auto min-h-11 px-6 pb-2 text-left text-sm text-subtle hover:text-muted"
-            onClick={() => {
-              setOpen(false);
-              setToken("");
-            }}
-          >
-            Cambiar token de Mapbox
-          </button>
-        ) : (
-          <div className="mt-auto" />
-        )}
+        <div className="mt-auto" />
         <AccountNote onNavigate={() => setOpen(false)} />
       </Drawer>
 

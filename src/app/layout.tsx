@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { AppProviders } from "@/components/providers";
 import { MapHost } from "@/components/map/map-host";
-import { MapboxTokenGate } from "@/components/map/mapbox-token-gate";
 import { AppShell } from "@/components/shell/app-shell";
 import "@/styles.css";
 
@@ -32,7 +31,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="h-full bg-bg text-fg">
         <AppProviders>
           <MapHost />
-          <MapboxTokenGate />
           <AppShell>{children}</AppShell>
         </AppProviders>
       </body>

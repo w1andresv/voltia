@@ -16,7 +16,6 @@ import { LEGACY_V2_CATALOG } from "@/domain/legacy-catalog";
 import { RegenLevelSchema, regenLevelFromLegacyPct } from "@/domain/schemas";
 import { extractOwnVehicles } from "@/domain/user/catalog-rules";
 import { createGuestStorage, MAX_GUEST_VEHICLES } from "@/infrastructure/user-data/guest-storage";
-import { envMapboxToken, isMapboxPublicToken } from "@/lib/mapbox";
 
 export const DEMO_TRIPS: { label: string; origin: Place; destination: Place }[] = [
   {
@@ -68,7 +67,6 @@ interface PlannerState {
   stationSeed: { lat: number; lon: number; address?: string; editId?: string } | null;
   mapClickArmed: "origin" | "destination" | "waypoint" | "station" | null;
   placeSearchOpen: boolean;
-  mapboxToken: string;
   mapBounds: {
     minLat: number;
     maxLat: number;
@@ -106,7 +104,6 @@ interface PlannerState {
   injectCharger: (c: Charger) => void;
   setMapClickArmed: (v: PlannerState["mapClickArmed"]) => void;
   setPlaceSearchOpen: (v: boolean) => void;
-  setMapboxToken: (token: string) => void;
   setMapBounds: (b: PlannerState["mapBounds"]) => void;
   clearTrip: () => void;
   selectedVehicle: () => Vehicle;
@@ -190,7 +187,6 @@ export const usePlanner = create<PlannerState>()(
       stationSeed: null,
       mapClickArmed: null,
       placeSearchOpen: false,
-      mapboxToken: envMapboxToken(),
       mapBounds: null,
       setVehicleId: (id) =>
         set((s) => {
@@ -313,7 +309,6 @@ export const usePlanner = create<PlannerState>()(
         }),
       setMapClickArmed: (v) => set({ mapClickArmed: v }),
       setPlaceSearchOpen: (v) => set({ placeSearchOpen: v }),
-      setMapboxToken: (token) => set({ mapboxToken: token.trim() }),
       setMapBounds: (b) =>
         set((s) => {
           if (!b) return { mapBounds: null };
@@ -358,13 +353,11 @@ export const usePlanner = create<PlannerState>()(
       partialize: (s) => ({
         selectedVehicleId: s.selectedVehicleId,
         conditions: s.conditions,
-        mapboxToken: s.mapboxToken,
         tripRegenV: 3,
       }),
       migrate: (persisted) => migratePlannerState(persisted),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<PlannerState> & { tripRegenV?: number };
-        const storedToken = (p.mapboxToken ?? "").trim();
         const storedConditions = p.conditions;
         const regenLevel = storedRegenLevel(storedConditions, p.tripRegenV);
         const { regenPct: _legacyRegen, ...restConditions } = (storedConditions ??
@@ -377,7 +370,6 @@ export const usePlanner = create<PlannerState>()(
               ? p.selectedVehicleId
               : current.selectedVehicleId,
           conditions: { ...DEFAULT_CONDITIONS, ...restConditions, regenLevel },
-          mapboxToken: isMapboxPublicToken(storedToken) ? storedToken : current.mapboxToken,
           mapBounds: null,
         };
       },

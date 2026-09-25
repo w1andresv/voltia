@@ -34,7 +34,7 @@ export const MAP_COLORS_LIGHT = {
   inkWarn: "#2a2114",
 } as const;
 
-export type MapPalette = typeof MAP_COLORS_DARK;
+export type MapPalette = { readonly [K in keyof typeof MAP_COLORS_DARK]: string };
 
 export const MAP_COLORS = MAP_COLORS_DARK;
 
