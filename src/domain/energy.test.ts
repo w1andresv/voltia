@@ -7,6 +7,7 @@ import {
   annotateEnergy,
   batteryBudget,
   climateMultiplier,
+  consumptionBlocks,
   effectiveRegen,
   energyMode,
   hasManualConsumption,
@@ -322,5 +323,54 @@ describe("batteryBudget", () => {
     const budget = batteryBudget(v, c, null);
     expect(budget.usablePct).toBe(0);
     expect(budget.rangeKm).toBe(0);
+  });
+});
+
+describe("consumptionBlocks", () => {
+  const sample = (km: number, cumulativeKwh: number, elevM = 0) => ({
+    km,
+    lat: 7,
+    lon: -73,
+    elevM,
+    slopePct: 0,
+    speedKmh: 80,
+    energyKwh: 0,
+    energyGrossKwh: 0,
+    energyRegenKwh: 0,
+    cumulativeKwh,
+    avgKwhPer100: 0,
+    soc: 50,
+  });
+
+  it("parte la ruta cada 100 km e interpola en los bordes", () => {
+    const samples = [sample(0, 0), sample(150, 30), sample(250, 40)];
+    const blocks = consumptionBlocks(samples);
+    expect(blocks.map((b) => [b.fromKm, b.toKm])).toEqual([
+      [0, 100],
+      [100, 200],
+      [200, 250],
+    ]);
+    expect(blocks[0]!.kwh).toBeCloseTo(20, 6);
+    expect(blocks[1]!.kwh).toBeCloseTo(15, 6);
+    expect(blocks[2]!.kwhPer100).toBeCloseTo(10, 6);
+    expect(blocks.reduce((a, b) => a + b.kwh, 0)).toBeCloseTo(40, 6);
+  });
+
+  it("un resto final corto se suma al tramo anterior", () => {
+    const blocks = consumptionBlocks([sample(0, 0), sample(409, 58.7)]);
+    expect(blocks.map((b) => b.toKm)).toEqual([100, 200, 300, 409]);
+    expect(blocks[3]!.fromKm).toBe(300);
+  });
+
+  it("separa subida y bajada de cada tramo", () => {
+    const samples = [sample(0, 0, 1000), sample(50, 10, 1500), sample(100, 12, 1200)];
+    const [b] = consumptionBlocks(samples);
+    expect(b!.gainM).toBeCloseTo(500, 6);
+    expect(b!.lossM).toBeCloseTo(300, 6);
+  });
+
+  it("sin ruta no hay tramos", () => {
+    expect(consumptionBlocks([])).toEqual([]);
+    expect(consumptionBlocks([sample(0, 0)])).toEqual([]);
   });
 });
