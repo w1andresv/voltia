@@ -1,9 +1,9 @@
 import { formatRoadMix } from "@/domain/road-hierarchy";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowDownUp, Flag, LoaderCircle, MapPin, Plus } from "lucide-react";
-import { useRef } from "react";
+import { ArrowDownUp, Flag, LoaderCircle, LocateFixed, MapPin, Plus } from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { planTripFn } from "@/server/actions/plan";
+import { planTripFn, reversePlaceFn } from "@/server/actions/plan";
 import { ChargerFacts } from "./charger-facts";
 import { DEMO_TRIPS, usePlanner } from "@/lib/store";
 import { isDc } from "@/domain/charging";
@@ -37,6 +37,39 @@ export function TripSetup() {
   const armed = usePlanner((s) => s.mapClickArmed);
   const setArmed = usePlanner((s) => s.setMapClickArmed);
   const destInput = useRef<HTMLInputElement>(null);
+  const [locating, setLocating] = useState(false);
+
+  function armMap(slot: "origin" | "destination") {
+    const next = armed === slot ? null : slot;
+    setArmed(next);
+    if (next) {
+      document.getElementById("voltia-map-slot")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      toast.error("Este dispositivo no puede leer la ubicación");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        void reversePlaceFn({ data: { lat: pos.coords.latitude, lon: pos.coords.longitude } })
+          .then((place) => {
+            setOrigin(place);
+            toast.success("Origen: tu ubicación actual");
+          })
+          .catch(() => toast.error("No se pudo leer esa ubicación"))
+          .finally(() => setLocating(false));
+      },
+      () => {
+        setLocating(false);
+        toast.error("No se permitió usar la ubicación del dispositivo");
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 },
+    );
+  }
 
   const planMut = useMutation({
     mutationFn: () => {
@@ -81,24 +114,61 @@ export function TripSetup() {
       <VehicleBar />
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1 space-y-2">
-          <PlaceSearch
-            value={origin}
-            onChange={(p) => {
-              setOrigin(p);
-              if (p && !destination) {
-                requestAnimationFrame(() => destInput.current?.focus());
-              }
-            }}
-            placeholder="Origen"
-            icon={<MapPin className="size-4" />}
-          />
-          <PlaceSearch
-            value={destination}
-            onChange={setDestination}
-            placeholder="Destino"
-            icon={<Flag className="size-4" />}
-            inputRef={destInput}
-          />
+          <div className="space-y-1.5">
+            <PlaceSearch
+              value={origin}
+              onChange={(p) => {
+                setOrigin(p);
+                if (p && !destination) {
+                  requestAnimationFrame(() => destInput.current?.focus());
+                }
+              }}
+              placeholder="Origen"
+              icon={<MapPin className="size-4" />}
+            />
+            <div className="flex gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 flex-1"
+                disabled={locating}
+                onClick={useMyLocation}
+              >
+                {locating ? <LoaderCircle className="size-3.5 animate-spin" /> : <LocateFixed className="size-3.5" />}
+                Mi ubicación
+              </Button>
+              <Button
+                type="button"
+                variant={armed === "origin" ? "default" : "outline"}
+                size="sm"
+                className="h-9 flex-1"
+                aria-pressed={armed === "origin"}
+                onClick={() => armMap("origin")}
+              >
+                En el mapa
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <PlaceSearch
+              value={destination}
+              onChange={setDestination}
+              placeholder="Destino"
+              icon={<Flag className="size-4" />}
+              inputRef={destInput}
+            />
+            <Button
+              type="button"
+              variant={armed === "destination" ? "default" : "outline"}
+              size="sm"
+              className="h-9 w-full"
+              aria-pressed={armed === "destination"}
+              onClick={() => armMap("destination")}
+            >
+              En el mapa
+            </Button>
+          </div>
         </div>
         <Button
           variant="secondary"
@@ -141,14 +211,6 @@ export function TripSetup() {
         >
           <Plus className="size-4" />
           Parada
-        </Button>
-        <Button
-          variant={armed ? "default" : "outline"}
-          size="sm"
-          className="h-11"
-          onClick={() => setArmed(armed ? null : origin ? "destination" : "origin")}
-        >
-          Tocar mapa
         </Button>
       </div>
       <TripParams />
