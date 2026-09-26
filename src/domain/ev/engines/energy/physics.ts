@@ -199,7 +199,7 @@ export function calibrateToManual(
     d;
   const resistKwh = resistJ / J_PER_KWH / vp.drivetrainEfficiency.value;
   const k = Math.min(2, Math.max(0.5, (manualKwhPer100 - aux) / resistKwh));
-  const note = `Ajustado al consumo manual (${manualKwhPer100} kWh/100 km a ${referenceKmh} km/h): × ${k.toFixed(3)}.`;
+  const note = `Ajustado al consumo manual (${manualKwhPer100} kWh/100 km a ${referenceKmh} km/h): × ${k}.`;
   return {
     ...vp,
     dragAreaM2: sourced(vp.dragAreaM2.value * k, "calculated", { notes: note }),

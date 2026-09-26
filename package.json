@@ -20,7 +20,8 @@
     "format": "prettier --write .",
     "diagnose:route": "node scripts/diagnose-route.mjs",
     "snapshot:record": "vitest run --config vitest.record.config.ts src/test-support/record-snapshot.record.ts",
-    "elevation:compare": "vitest run --config vitest.record.config.ts src/test-support/compare-elevation.record.ts"
+    "elevation:compare": "vitest run --config vitest.record.config.ts src/test-support/compare-elevation.record.ts",
+    "report": "vitest run --config vitest.record.config.ts src/test-support/report.record.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.0",

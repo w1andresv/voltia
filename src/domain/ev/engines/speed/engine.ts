@@ -51,24 +51,37 @@ export function speedMesh(
   const samples = route.samples;
   if (line.length < 2 || samples.length < 2) return [];
   const step = spacingM / 1000;
-  const kms = new Set<number>();
-  for (let km = 0; km < route.distanceKm - 1e-9; km += step) kms.add(Number(km.toFixed(6)));
-  for (const s of samples) kms.add(Number(s.km.toFixed(6)));
-  // Paradas estrictamente dentro de la ruta (origen y destino ya son 0 km/h).
-  const stops = new Set(
-    (route.legBoundariesKm ?? [])
-      .filter((km) => km > 1e-3 && km < route.distanceKm - 1e-3)
-      .map((km) => Number(km.toFixed(6))),
-  );
-  for (const km of stops) kms.add(km);
-  kms.add(Number(route.distanceKm.toFixed(6)));
-  const sorted = [...kms]
-    .sort((a, b) => a - b)
-    .filter((km, i, arr) => i === 0 || km - arr[i - 1]! > 1e-6);
+  const EPS = 1e-6;
+  // Puntos exactos (muestras, paradas, fin) primero: al fusionar puntos a menos
+  // de EPS se conserva el km exacto, sin redondear (especificación §8.4).
+  const exact: { km: number; stop: boolean }[] = samples.map((s) => ({ km: s.km, stop: false }));
+  for (const km of route.legBoundariesKm ?? []) {
+    // Paradas estrictamente dentro de la ruta (origen y destino ya son 0 km/h).
+    if (km > 1e-3 && km < route.distanceKm - 1e-3) exact.push({ km, stop: true });
+  }
+  exact.push({ km: route.distanceKm, stop: false });
+  const grid: { km: number; stop: boolean }[] = [];
+  for (let i = 0; i * step < route.distanceKm - 1e-9; i++) grid.push({ km: i * step, stop: false });
+  const merged: { km: number; stop: boolean; exact: boolean }[] = [];
+  for (const p of [
+    ...exact.map((e) => ({ ...e, exact: true })),
+    ...grid.map((g) => ({ ...g, exact: false })),
+  ].sort((x, y) => x.km - y.km || Number(y.exact) - Number(x.exact))) {
+    const last = merged[merged.length - 1];
+    if (last && p.km - last.km <= EPS) {
+      last.stop ||= p.stop;
+      if (!last.exact && p.exact) {
+        last.km = p.km;
+        last.exact = true;
+      }
+      continue;
+    }
+    merged.push({ ...p });
+  }
 
   let lineIndex = 1;
   let sampleIndex = 1;
-  const pts = sorted.map((km) => {
+  const pts = merged.map(({ km, stop }) => {
     const hit = pointAtKm(line, km, lineIndex);
     lineIndex = hit.index;
     sampleIndex = intervalIndex(samples, km, sampleIndex);
@@ -79,7 +92,7 @@ export function speedMesh(
       limitKmh: s.speedLimitKmh,
       ...(s.roadTier ? { roadTier: s.roadTier } : {}),
       headingDeg: 0,
-      ...(stops.has(km) ? { stop: true } : {}),
+      ...(stop ? { stop: true } : {}),
     };
   });
   for (let i = 0; i < pts.length; i++) {

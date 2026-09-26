@@ -108,6 +108,7 @@ Un valor inválido en `PLANNER_ENGINE`, `ENERGY_ENGINE` o `ELEVATION_SOURCE` cae
 | `npm run test:coverage` | Cobertura con umbrales 80/80/80/70 (CI) | No |
 | `npm run build` | Build de producción | No |
 | `npm run elevation:compare` | Compara las tres fuentes de elevación sobre una ruta real (`ORIGIN=lat,lon DESTINATION=lat,lon` opcionales) | Mapbox y Open-Meteo |
+| `npm run report` | Informe del plan (§8.5) en `docs/arquitectura-ev/informes/`; sintético por defecto, `REAL=1` con Mapbox | Sin red (sintético) o Mapbox |
 | `npm run snapshot:record` | Graba la cassette real (opcional, P1 omitido; `STATIONS_URL` evita la base) | Mapbox, Open-Meteo y base o API |
 
 **Antes de cada commit:** `npm run typecheck && npm run lint && npm test`. CI además corre la cobertura y el build.
@@ -462,7 +463,12 @@ Rutas, elevación, clima, geocodificación y vehículos siguen con los proveedor
 
 ---
 
-### 5.9 Invariantes e informe de la especificación (§8.4 y §8.5)
+### 5.9 Invariantes e informe de la especificación (§8.4 y §8.5) — ✅ hecho (sesión C)
+
+> **Sesión C (2026-09-26):**
+> - **Invariantes:** `src/test-support/invariants.test.ts` comprueba, con el planificador y la energía v2 sobre la ruta sintética: energía (con recorte de regeneración real), balance de SOC (con cargas), masa (1852 kg), determinismo, sanidad sport ≥ normal ≥ eficiente, y que `src/domain/ev` no usa `Math.round` ni `toFixed`. La malla del perfil de velocidad dejó de redondear km.
+> - **Informe:** `buildPlanReport` (`src/application/plan-trip/plan-report.ts`) y `npm run report`, que genera `docs/arquitectura-ev/informes/informe-sintetico.md`. Con `REAL=1` (y opcionalmente `ORIGIN`, `DESTINATION`, `STATIONS_URL`) usa Mapbox real. Probado en `src/test-support/report.test.ts`.
+
 
 Sin la cassette real (P1 omitido), se prueban sobre la ruta **sintética** (`src/test-support/synthetic-providers.ts`).
 
@@ -540,7 +546,7 @@ O3 activar sombra en Vercel          Dueño decide ─► ENERGY v2 (D3) ─► 
 
    Mejoran la energía v2 mientras corre la sombra.
 3. ~~**Sesión B (sin red, con fixtures):** 5.1.1–5.1.4 y 5.6.1, más la caché sin vencimiento (D12).~~ ✅ Hecha (2026-09-26).
-4. **Sesión C:** 5.9 (invariantes e informe).
+4. ~~**Sesión C:** 5.9 (invariantes e informe).~~ ✅ Hecha (2026-09-26).
 5. **Al cerrar la sombra (D2):** `PLANNER_ENGINE=v2`. **Cuando lo decidas (D3):** `ENERGY_ENGINE=v2` y luego F6.
 6. **FB** cuando lleguen los dos endpoints de Blaze (O5); puede ir en paralelo desde el paso 3.
 7. **F9** y el PR a `main` con merge commit.
