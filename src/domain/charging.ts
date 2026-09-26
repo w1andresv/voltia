@@ -46,7 +46,8 @@ export function chargeTimeMinutes(
   const span = socTo - socFrom;
   for (let i = 0; i < steps; i++) {
     const soc = socFrom + (span * (i + 0.5)) / steps;
-    const power = Math.min(vehiclePeakKw, chargerKw) * lerpFactor(curve, soc);
+    // La curva limita al vehículo; el cargador entrega hasta su potencia (C3).
+    const power = Math.min(vehiclePeakKw * lerpFactor(curve, soc), chargerKw);
     const energy = (capacityKwh * span) / 100 / steps;
     hours += energy / Math.max(power, 1.5);
   }

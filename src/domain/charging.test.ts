@@ -90,6 +90,19 @@ describe("chargeTimeMinutes", () => {
     expect(acMinutes).toBeGreaterThan(dcMinutes);
   });
 
+  it("un cargador más lento que la curva del auto entrega su potencia completa (C3)", () => {
+    // MG S5: 47,1 kWh, 120 kW. De 20 a 80 % la curva no baja de 0,42 × 120 = 50,4 kW,
+    // así que en un cargador de 50 kW todo el tramo va a 50 kW: 47,1 × 0,6 / 50 h.
+    const minutes = chargeTimeMinutes(47.1, 20, 80, 120, 50, DEFAULT_CURVE);
+    expect(minutes).toBeCloseTo(((47.1 * 0.6) / 50) * 60, 6);
+  });
+
+  it("con un cargador más potente que el auto manda la curva del auto", () => {
+    const fast = chargeTimeMinutes(60, 10, 80, 120, 350, DEFAULT_CURVE);
+    const exact = chargeTimeMinutes(60, 10, 80, 120, 120, DEFAULT_CURVE);
+    expect(fast).toBeCloseTo(exact, 6);
+  });
+
   it("cargar del 10 al 80% toma un tiempo positivo y finito", () => {
     const minutes = chargeTimeMinutes(60, 10, 80, 120, 150, DEFAULT_CURVE);
     expect(minutes).toBeGreaterThan(0);
