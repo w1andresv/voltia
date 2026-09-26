@@ -22,6 +22,18 @@ export interface ModelParameters {
     smoothingWindow: number;
     /** Desnivel mínimo entre muestras para contar como subida o bajada, m. */
     gainThresholdM: number;
+    /** Malla por distancia (ELEVATION_SOURCE=mapbox-terrain): un punto cada `spacingM`. */
+    mesh: { spacingM: number };
+    /**
+     * Malla adaptativa (ELEVATION_SOURCE=open-meteo-adaptive): primero un punto
+     * cada `coarseSpacingM`; donde la altura cambia más de `refineDeltaM` entre
+     * dos puntos, se densifica a `fineSpacingM`. Tope de `maxProbes` por ruta.
+     */
+    adaptive: { coarseSpacingM: number; fineSpacingM: number; refineDeltaM: number; maxProbes: number };
+    /** Perfil denso (malla o adaptativa): suavizado por distancia y umbral de histéresis del desnivel. */
+    dense: { smoothingM: number; hysteresisM: number };
+    /** Teselas de terreno de Mapbox: zoom (12 ≈ 38 m por píxel en el ecuador) y tileset. */
+    terrain: { zoom: number; tileset: string };
   };
   soc: {
     /** Regeneración que acepta la batería según su SOC: completa hasta 80 %, cero desde 98 %. */
@@ -87,6 +99,10 @@ export const MODEL_PARAMETERS: ModelParameters = {
     probesPerRoute: 96,
     smoothingWindow: 5,
     gainThresholdM: 2,
+    mesh: { spacingM: 100 },
+    adaptive: { coarseSpacingM: 1000, fineSpacingM: 200, refineDeltaM: 15, maxProbes: 1500 },
+    dense: { smoothingM: 300, hysteresisM: 5 },
+    terrain: { zoom: 12, tileset: "mapbox.terrain-rgb" },
   },
   soc: {
     regenAcceptance: { fullBelowPct: 80, zeroFromPct: 98 },

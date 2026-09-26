@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { catalogVehicle } from "@/test-support/scenarios";
-import { SYNTHETIC_A, SYNTHETIC_B, syntheticFetch, syntheticStations } from "@/test-support/synthetic-providers";
+import {
+  SYNTHETIC_A,
+  SYNTHETIC_B,
+  syntheticFetch,
+  syntheticStations,
+} from "@/test-support/synthetic-providers";
 import type { PlanRequest } from "@/domain/types";
 
 vi.mock("next/cache", () => ({ unstable_cache: (fn: () => Promise<unknown>) => fn }));
@@ -42,7 +47,9 @@ describe("createPlanningService", () => {
   it("con token de Mapbox usa Mapbox", async () => {
     vi.stubEnv("MAPBOX_ACCESS_TOKEN", "pk.synthetic.token");
     const { createPlanningService } = await import("./container");
-    const { engine } = await createPlanningService({ stations: { getDataset: async () => syntheticStations() } }).plan(request);
+    const { engine } = await createPlanningService({
+      stations: { getDataset: async () => syntheticStations() },
+    }).plan(request);
     expect(engine).toBe("mapbox");
   });
 
@@ -55,7 +62,9 @@ describe("createPlanningService", () => {
     const { createPlanningService } = await import("./container");
     // El fetch simulado no responde a OSRM: falla, pero la petición confirma que fue a OSRM y no a Mapbox.
     await expect(
-      createPlanningService({ stations: { getDataset: async () => syntheticStations() } }).plan(request),
+      createPlanningService({ stations: { getDataset: async () => syntheticStations() } }).plan(
+        request,
+      ),
     ).rejects.toThrow();
     const urls = fetchMock.mock.calls.map(([url]) => String(url));
     expect(urls.some((u) => u.includes("router.project-osrm.org"))).toBe(true);
@@ -66,7 +75,9 @@ describe("createPlanningService", () => {
     vi.stubEnv("MAPBOX_ACCESS_TOKEN", "pk.synthetic.token");
     vi.stubEnv("PLANNER_ENGINE", "v2");
     const { createPlanningService } = await import("./container");
-    const { response } = await createPlanningService({ stations: { getDataset: async () => syntheticStations() } }).plan(request);
+    const { response } = await createPlanningService({
+      stations: { getDataset: async () => syntheticStations() },
+    }).plan(request);
     expect(response.geo.plannerEngine).toBe("v2");
     expect(response.plans.every((p) => p.planner === "v2")).toBe(true);
   });
@@ -76,5 +87,81 @@ describe("createPlanningService", () => {
     const geocoder = createGeocoder();
     expect(typeof geocoder.search).toBe("function");
     expect(typeof geocoder.reverse).toBe("function");
+  });
+});
+
+describe("elevationDeps (ELEVATION_SOURCE)", () => {
+  it("por defecto, Open-Meteo con la estrategia fija y sin respaldo", async () => {
+    const { elevationDeps } = await import("./container");
+    const d = elevationDeps("open-meteo", "pk.a.b");
+    expect(d.elevation.id).toBe("open-meteo");
+    expect(d.elevationSampling).toBe("fixed");
+    expect(d.elevationFallback).toBeUndefined();
+  });
+
+  it("adaptativa sobre Open-Meteo, con respaldo fijo", async () => {
+    const { elevationDeps } = await import("./container");
+    const d = elevationDeps("open-meteo-adaptive", "");
+    expect([d.elevation.id, d.elevationSampling, d.elevationFallback?.id]).toEqual([
+      "open-meteo",
+      "adaptive",
+      "open-meteo",
+    ]);
+  });
+
+  it("teselas de Mapbox con malla y respaldo en Open-Meteo; sin token, la de siempre", async () => {
+    const { elevationDeps } = await import("./container");
+    const d = elevationDeps("mapbox-terrain", "pk.a.b");
+    expect([d.elevation.id, d.elevationSampling, d.elevationFallback?.id]).toEqual([
+      "mapbox-terrain",
+      "mesh",
+      "open-meteo",
+    ]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(elevationDeps("mapbox-terrain", "").elevationSampling).toBe("fixed");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe("ELEVATION_SOURCE de extremo a extremo (proveedores sintéticos)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("MAPBOX_ACCESS_TOKEN", "pk.synthetic.token");
+    vi.stubGlobal("fetch", syntheticFetch());
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("open-meteo-adaptive: más puntos y el snapshot lo dice", async () => {
+    vi.stubEnv("ELEVATION_SOURCE", "open-meteo-adaptive");
+    const { createPlanningService } = await import("./container");
+    const { response } = await createPlanningService({
+      stations: { getDataset: async () => syntheticStations() },
+    }).plan(request);
+    expect((response.geo as { providers: { elevation: string } }).providers.elevation).toBe(
+      "open-meteo/adaptive",
+    );
+    expect(response.geo.routes[0]!.elevation.maxM).toBeGreaterThan(0);
+  });
+
+  it("mapbox-terrain que falla cae a open-meteo, y el snapshot guarda la usada", async () => {
+    vi.stubEnv("ELEVATION_SOURCE", "mapbox-terrain");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { createPlanningService } = await import("./container");
+    // El fetch sintético no sirve teselas: el principal falla.
+    const { response } = await createPlanningService({
+      stations: { getDataset: async () => syntheticStations() },
+    }).plan(request);
+    expect((response.geo as { providers: { elevation: string } }).providers.elevation).toBe(
+      "open-meteo",
+    );
+    expect(response.geo.routes[0]!.elevation.maxM).toBeGreaterThan(0);
+    const line = log.mock.calls.map((c) => String(c[0])).find((l) => l.startsWith("[elevation]"));
+    expect(line).toMatch(/falló el principal/);
   });
 });

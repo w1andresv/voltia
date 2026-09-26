@@ -126,3 +126,26 @@ export async function fetchText(
   if (!res.ok) throw await httpError(res, url);
   return res.text();
 }
+
+/**
+ * Bytes de una respuesta binaria (p. ej. una tesela PNG). Con `cacheTtlMs` se
+ * guarda en la Data Cache de Next como base64, con la clave `cacheKey` (que no
+ * debe llevar el token). Sin caché en memoria: quien llama decide qué retener.
+ */
+export async function fetchBytes(
+  url: string,
+  init: RequestInit & { timeoutMs?: number; cacheTtlMs?: number; cacheKey?: string } = {},
+): Promise<Uint8Array> {
+  const { timeoutMs = 15000, cacheTtlMs, cacheKey, ...rest } = init;
+  const raw = async () => {
+    const res = await fetchWithRetry(url, { ...rest, headers: { accept: "*/*", ...(rest.headers ?? {}) } }, timeoutMs);
+    if (!res.ok) throw await httpError(res, url);
+    return new Uint8Array(await res.arrayBuffer());
+  };
+  if (!cacheTtlMs) return raw();
+  const revalidate = Math.max(1, Math.round(cacheTtlMs / 1000));
+  const cached = unstable_cache(async () => Buffer.from(await raw()).toString("base64"), [cacheKey ?? safeUrl(url)], {
+    revalidate,
+  });
+  return new Uint8Array(Buffer.from(await cached(), "base64"));
+}

@@ -41,10 +41,30 @@ async function elevationsFor(lats: number[], lons: number[]): Promise<number[]> 
   }
 }
 
-/** Alturas (m) para los puntos pedidos, en el mismo orden. Hasta 100 puntos por consulta. */
+/** Open-Meteo acepta hasta 100 puntos por consulta. */
+export const OPEN_METEO_MAX_POINTS = 100;
+const PARALLEL_QUERIES = 4;
+
+/**
+ * Alturas (m) para los puntos pedidos, en el mismo orden. Más de 100 puntos se
+ * piden en lotes de 100, hasta 4 a la vez; si un lote falla, falla todo.
+ */
 export async function fetchElevations(points: LatLon[]): Promise<number[]> {
-  return elevationsFor(
-    points.map((p) => p.lat),
-    points.map((p) => p.lon),
-  );
+  const batches: LatLon[][] = [];
+  for (let i = 0; i < points.length; i += OPEN_METEO_MAX_POINTS) {
+    batches.push(points.slice(i, i + OPEN_METEO_MAX_POINTS));
+  }
+  const out: number[][] = [];
+  for (let i = 0; i < batches.length; i += PARALLEL_QUERIES) {
+    const part = await Promise.all(
+      batches.slice(i, i + PARALLEL_QUERIES).map((b) =>
+        elevationsFor(
+          b.map((p) => p.lat),
+          b.map((p) => p.lon),
+        ),
+      ),
+    );
+    out.push(...part);
+  }
+  return out.flat();
 }

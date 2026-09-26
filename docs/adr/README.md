@@ -14,6 +14,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0008](./0008-blaze-fuente-unica-detras-de-puertos.md) | Blaze (Muvatec) como fuente única, detrás de los puertos | Propuesta |
 | [0009](./0009-pasada-2-solo-plan-recomendado.md) | Pasada 2: solo el plan recomendado, solo con el planificador v2 | Aceptada |
 | [0010](./0010-snapshot-con-rutas-muestreadas.md) | PlanningSnapshot con rutas ya muestreadas, guardado solo en la cuenta | Aceptada |
+| [0011](./0011-fuente-de-elevacion-configurable.md) | Fuente de elevación configurable (B6) | Aceptada |
 
 ## Plantilla
 

@@ -3,13 +3,13 @@ import type { RoutingProvider } from "@/domain/ports/routing";
 import type { StationCatalog } from "@/domain/ports/station-catalog";
 import type { WeatherProvider } from "@/domain/ports/weather";
 import type { ModelParameters } from "@/domain/ev/core/params";
-import { applyElevationProfile, elevationProbes } from "@/domain/ev/engines/elevation/engine";
 import { buildPlans, computePlans, type PlanInputs, type PlannerEngine } from "@/domain/ev/compute-plan";
 import { rankPlans } from "@/domain/planner";
 import { stationsNearRoutes } from "@/domain/ev/engines/corridor/engine";
 import { toPlanningCharger } from "@/domain/stations/to-charger";
 import type { PlanRequest, PlanResponse, RawRoute, RoutePlan, RoutingEngine, TripConditions, Vehicle } from "@/domain/types";
 import { SNAPSHOT_SCHEMA_VERSION, type PlanningSnapshot } from "@/domain/ev/contracts/snapshot";
+import { elevationSourceLabel, profileRoute, type ElevationReport, type ElevationSampling } from "./elevation-profile";
 import { selectRoutes } from "./route-selection";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
 import { verifyPlan } from "./verify-plan";
@@ -23,6 +23,10 @@ export type PlannerEngineMode = "legacy" | "shadow" | "v2";
 export interface PlanningDeps {
   routing: RoutingProvider;
   elevation: ElevationProvider;
+  /** Cómo muestrear la elevación (ELEVATION_SOURCE); por defecto la fija de siempre. */
+  elevationSampling?: ElevationSampling;
+  /** Respaldo si `elevation` falla (con la estrategia fija). */
+  elevationFallback?: ElevationProvider;
   weather: WeatherProvider | null;
   stations: StationCatalog;
   params: ModelParameters;
@@ -66,6 +70,17 @@ function logShadow(
   }
 }
 
+/** Una línea por planificación: fuente, puntos, tiempo y desnivel de cada ruta (para comparar fuentes). */
+function logElevation(reports: ElevationReport[], routes: RawRoute[]): void {
+  if (!reports.length) return;
+  const parts = reports.map((r, i) => {
+    const e = routes[i]?.elevation;
+    const stats = e ? ` ↑${Math.round(e.gainM)} ↓${Math.round(e.lossM)} m` : "";
+    return `${r.source ?? "sin elevación"} ${r.points} pts ${r.ms} ms${stats}${r.error ? ` (falló el principal: ${r.error})` : ""}`;
+  });
+  console.log(`[elevation] ${parts.join(" | ")}`);
+}
+
 /**
  * Caso de uso "planificar un viaje": reúne los datos por los puertos y compone
  * el plan. No conoce a Mapbox, Open-Meteo ni Postgres (eso lo arma container.ts).
@@ -77,15 +92,17 @@ export class EVRoutePlanningService {
     const { routing, weather, stations, params } = this.deps;
     const waypoints = [data.origin, ...data.waypoints, data.destination];
     const warnings: string[] = [];
+    const elevationReports: ElevationReport[] = [];
     const routed = await selectRoutes(routing, waypoints);
     const rawRoutes = routed.routes;
     warnings.push(...routed.warnings);
     const mid = rawRoutes[0]?.samples[Math.floor((rawRoutes[0].samples.length || 1) / 2)];
     const [routes, snapshot, dataset] = await Promise.all([
-      Promise.all(rawRoutes.map((route) => this.withElevation(route))),
+      Promise.all(rawRoutes.map((route) => this.withElevation(route, elevationReports))),
       mid && weather ? weather.current(mid) : Promise.resolve(null),
       stations.getDataset(),
     ]);
+    logElevation(elevationReports, routes);
     if (routes.some((r) => r.elevation.maxM === 0 && r.elevation.minM === 0 && r.distanceKm > 5)) {
       warnings.push("No se obtuvo el perfil de elevación. El consumo puede estar subestimado en montaña.");
     }
@@ -147,7 +164,10 @@ export class EVRoutePlanningService {
           plannerEngine: responding,
           providers: {
             routing: routed.engine,
-            elevation: this.deps.elevation.id,
+            // La fuente que de verdad dio el perfil (con respaldo puede no ser la configurada).
+            elevation:
+              [...new Set(elevationReports.map((r) => r.source ?? "ninguna"))].join(",") ||
+              elevationSourceLabel(this.deps.elevation, this.deps.elevationSampling ?? "fixed"),
             weather: weather?.id ?? null,
             stations: "dataset",
           },
@@ -165,16 +185,16 @@ export class EVRoutePlanningService {
     };
   }
 
-  /** Elevación de una ruta. Si el proveedor no responde, la ruta sigue plana y el plan lo avisa. */
-  private async withElevation(route: RawRoute): Promise<RawRoute> {
-    const { elevation, params } = this.deps;
-    const probes = elevationProbes(route, params.elevation);
-    if (!probes) return route;
-    try {
-      const heights = await elevation.getElevations(probes);
-      return applyElevationProfile(route, probes, heights, params.elevation);
-    } catch {
-      return route;
-    }
+  /** Elevación de una ruta. Si ningún proveedor responde, la ruta sigue plana y el plan lo avisa. */
+  private async withElevation(route: RawRoute, reports?: ElevationReport[]): Promise<RawRoute> {
+    const { elevation, elevationSampling, elevationFallback, params } = this.deps;
+    const out = await profileRoute(
+      route,
+      { provider: elevation, sampling: elevationSampling ?? "fixed", fallback: elevationFallback },
+      params.elevation,
+    );
+    reports?.push(out.report);
+    return out.route;
   }
+
 }

@@ -79,9 +79,12 @@ Dividida en dos (ADR-0006).
 - [x] Proveedores reducidos a clientes HTTP; adaptadores traducen Directions → `ProviderRoute`. Se borraron `routing.ts` y `routing.classify.ts`.
 - **Cierre cumplido:** snapshot de caracterización sin cambios.
 
-**F2b · Malla y limpieza de elevación — pendiente de B6**
-- **Decisión previa (B6):** presupuesto de elevación. Teselas de terreno de Mapbox con caché, o malla adaptativa en Open-Meteo. Va en un ADR.
-- [ ] Malla por distancia (100 m) en `engines/elevation`, limpieza de túneles y puentes, pendiente máxima, conteo de puntos corregidos.
+**F2b · Malla y limpieza de elevación**
+- **B6 resuelta como configurable (ADR-0011):** `ELEVATION_SOURCE = open-meteo | open-meteo-adaptive | mapbox-terrain`, por defecto la de siempre. La fuente definitiva se elige con `npm run elevation:compare` y el modo sombra.
+- [x] Malla por distancia (100 m) y malla adaptativa en `engines/elevation`; perfil denso con suavizado por distancia y desnivel con histéresis.
+- [x] `MapboxTerrainElevationProvider` (terrain-RGB con caché) y Open-Meteo en lotes de 100; respaldo a Open-Meteo si la fuente elegida falla.
+- [ ] Elegir la fuente por defecto con los datos de `elevation:compare` (rutas de montaña).
+- [ ] Limpieza de túneles y puentes, pendiente máxima, conteo de puntos corregidos.
 - [ ] Error tipado `ELEVATION_UNAVAILABLE` en vez de ruta plana.
 - [ ] Túneles y puentes en `ProviderRoute` (desde los pasos de Mapbox).
 - **Tests:** limpieza (túnel, puente, pendiente máxima); sin elevación → error, no ruta plana.
@@ -223,7 +226,7 @@ Dividida en dos (ADR-0006).
 |---|---|---|
 | F0 | ✅ Hecha salvo la cassette (P1) | commits en `engine-v2` |
 | F1 | ✅ Hecha (igualdad con proveedores sintéticos; con la cassette real al grabarla) | ver `git log --grep "^F1:"` |
-| F2 | F2a ✅ hecha (sin cambio de resultados). F2b pendiente de B6 | ver `git log --grep "^F2"` |
+| F2 | F2a ✅ hecha (sin cambio de resultados). F2b: fuente configurable ✅ (ADR-0011); falta elegir la fuente, limpieza y error tipado | ver `git log --grep "^F2"` |
 | F3 | ✅ Hecha | ver `git log --grep "^F3:"` |
 | F4 | ✅ Hecha (desvío por matriz pendiente) | ver `git log --grep "^F4:"` |
 | F5 | Pendiente | — |

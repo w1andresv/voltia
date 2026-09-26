@@ -10,6 +10,15 @@ const EnvSchema = z.object({
   ADMIN_EMAILS: z.string().default(""),
   /** Motor de planificación: legacy (actual), shadow (ambos, responde el actual) o v2 (plan §6). */
   PLANNER_ENGINE: z.enum(["legacy", "shadow", "v2"]).default("legacy").catch("legacy"),
+  /**
+   * Fuente de elevación (ADR-0011): open-meteo (96 puntos por ruta, la de siempre),
+   * open-meteo-adaptive (malla gruesa y densa donde cambia la altura) o
+   * mapbox-terrain (teselas cada 100 m, con caché; necesita el token de Mapbox).
+   */
+  ELEVATION_SOURCE: z
+    .enum(["open-meteo", "open-meteo-adaptive", "mapbox-terrain"])
+    .default("open-meteo")
+    .catch("open-meteo"),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;
@@ -28,6 +37,7 @@ export function getEnv(): AppEnv {
     PLUGSHARE_TOKEN: process.env.PLUGSHARE_TOKEN ?? "",
     ADMIN_EMAILS: process.env.ADMIN_EMAILS ?? "",
     PLANNER_ENGINE: process.env.PLANNER_ENGINE?.trim() || undefined,
+    ELEVATION_SOURCE: process.env.ELEVATION_SOURCE?.trim() || undefined,
   });
   return cached;
 }

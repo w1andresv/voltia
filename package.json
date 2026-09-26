@@ -19,7 +19,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "diagnose:route": "node scripts/diagnose-route.mjs",
-    "snapshot:record": "vitest run --config vitest.record.config.ts"
+    "snapshot:record": "vitest run --config vitest.record.config.ts src/test-support/record-snapshot.record.ts",
+    "elevation:compare": "vitest run --config vitest.record.config.ts src/test-support/compare-elevation.record.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.0",

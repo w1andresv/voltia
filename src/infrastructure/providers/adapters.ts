@@ -9,6 +9,7 @@ import type { GeocodingProvider } from "@/domain/ports/geocoding";
 import type { RoutingProvider } from "@/domain/ports/routing";
 import type { WeatherProvider } from "@/domain/ports/weather";
 import type { LatLon } from "@/domain/types";
+import { mapboxTileFetcher, terrainElevations, type TileFetcher } from "./elevation.mapbox-terrain";
 import { fetchElevations } from "./elevation.openmeteo";
 import { reversePlace, searchPlaces } from "./geocode.photon";
 import { MapboxRoutingError, fetchMapboxCandidates, mapboxProfileFor, redact } from "./routing.mapbox";
@@ -93,6 +94,19 @@ export class OpenMeteoElevationProvider implements ElevationProvider {
   readonly id = "open-meteo";
   getElevations(points: LatLon[]) {
     return fetchElevations(points);
+  }
+}
+
+/** Teselas de terreno de Mapbox (ELEVATION_SOURCE=mapbox-terrain, ADR-0011). */
+export class MapboxTerrainElevationProvider implements ElevationProvider {
+  readonly id = "mapbox-terrain";
+  constructor(
+    private readonly token: string,
+    private readonly opts: { zoom: number; tileset: string },
+    private readonly fetchTile: TileFetcher = mapboxTileFetcher(token),
+  ) {}
+  getElevations(points: LatLon[]) {
+    return terrainElevations(points, { ...this.opts, fetchTile: this.fetchTile });
   }
 }
 
