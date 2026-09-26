@@ -139,7 +139,9 @@ Empezar F0 en `engine-v2`:
 | C2: la energía del desvío se descuenta de la curva, la llegada, `energyKwh` y el promedio | ✅ | `bbbd181` |
 | C1: piso de SOC en todo el tramo, no solo al llegar | ✅ | `df7c7b3` |
 | Regla de ESLint de dependencias para `src/domain` | ✅ | `e908421` |
-| `scripts/record-snapshot.mjs` y fixture Piedecuesta → Vélez | ⏸ Bloqueado por B1 (sin token de Mapbox). Conviene hacerlo junto con F2, que define el formato `PlanningSnapshot`. | — |
-| Cobertura de ramas ≥ 70 % | ❌ Ya venía en 66,1 % desde `main`; ahora 66,6 %. `test:coverage` falla en CI desde antes de este trabajo. | — |
+| Grabación y reproducción del fixture Piedecuesta → Vélez (`npm run snapshot:record`, `src/test-support/`) | ✅ Herramientas listas y probadas sin red. ⏸ Falta grabar la cassette: la red de este entorno bloquea Mapbox y Open-Meteo (ver `04-plan-de-trabajo.md`, P1) | `4c25cfe` |
+| Cobertura de ramas ≥ 70 % | ✅ 76,3 % (venía en 66,1 % desde `main`) con tests de los módulos de estaciones | `c6c50fa` |
+| CI en `engine-v2` y en sus PR | ✅ Verde | `c6c50fa` |
+| Hook de inicio de sesión para sesiones web | ✅ | `3054cf5` |
 
 Cada corrección trae tests que fallan con el código anterior y pasan con el nuevo.
