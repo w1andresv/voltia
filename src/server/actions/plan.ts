@@ -6,18 +6,49 @@ import { checkRateLimit, getClientIp } from "@/infrastructure/rate-limit";
 
 const PlanSchema = PlanRequestSchema;
 
-export async function searchPlacesFn(input: { data: { q: string; lat?: number; lon?: number } }): Promise<Place[]> {
+export async function searchPlacesFn(input: {
+  data: { q: string; lat?: number; lon?: number };
+}): Promise<Place[]> {
   const data = input.data;
   const { createGeocoder } = await import("@/application/container");
-  return createGeocoder().search(data.q, data.lat != null && data.lon != null ? { lat: data.lat, lon: data.lon } : undefined);
+  return createGeocoder().search(
+    data.q,
+    data.lat != null && data.lon != null ? { lat: data.lat, lon: data.lon } : undefined,
+  );
 }
 
-export async function reversePlaceFn(input: { data: { lat: number; lon: number } }): Promise<Place> {
+export async function reversePlaceFn(input: {
+  data: { lat: number; lon: number };
+}): Promise<Place> {
   const { createGeocoder } = await import("@/application/container");
   return createGeocoder().reverse({ lat: input.data.lat, lon: input.data.lon });
 }
 
-export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResponse> {
+/** v1: planificador y energía actuales. v2: planificador por programación dinámica y energía física (F5, F7). */
+export type EngineChoice = "v1" | "v2";
+
+/** ¿El usuario actual puede elegir el motor? (vista previa, ENGINE_PREVIEW_EMAILS). */
+export async function engineChoiceFn(): Promise<{ allowed: boolean }> {
+  const { getActor } = await import("@/infrastructure/auth/server-actor");
+  const { canChooseEngine } = await import("@/infrastructure/auth/engine-preview");
+  return { allowed: canChooseEngine(await getActor()) };
+}
+
+/** Motores de planificación y energía según la elección, solo si el usuario puede elegir. */
+async function engineOverrides(choice: unknown) {
+  if (choice !== "v1" && choice !== "v2") return {};
+  const { getActor } = await import("@/infrastructure/auth/server-actor");
+  const { canChooseEngine } = await import("@/infrastructure/auth/engine-preview");
+  if (!canChooseEngine(await getActor())) return {};
+  return choice === "v2"
+    ? ({ engineMode: "v2", energyMode: "v2" } as const)
+    : ({ engineMode: "legacy", energyMode: "legacy" } as const);
+}
+
+export async function planTripFn(input: {
+  data: PlanRequest;
+  engine?: EngineChoice;
+}): Promise<PlanResponse> {
   const ip = await getClientIp();
   // 20 planificaciones/min por IP: protege las cuotas de OSRM/Overpass, que
   // son gratis y compartidas con otros usuarios de esas APIs públicas.
@@ -27,7 +58,8 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
 
   try {
     const { createPlanningService } = await import("@/application/container");
-    const { response, engine, chargerCount } = await createPlanningService().plan(data);
+    const overrides = await engineOverrides(input.engine);
+    const { response, engine, chargerCount } = await createPlanningService(overrides).plan(data);
 
     console.log(
       "[plan-trip]",
@@ -40,6 +72,7 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
         stationsVersion: response.geo.stationsVersion,
         warnings: response.geo.warnings.length,
         weather: response.geo.weather != null,
+        ...(overrides.engineMode ? { engineChoice: input.engine } : {}),
       }),
     );
 

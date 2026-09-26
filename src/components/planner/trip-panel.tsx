@@ -21,6 +21,7 @@ import { SocChart } from "./soc-chart";
 import { PlanStats } from "./stats";
 import { SaveTripButton } from "@/components/trips/save-trip-button";
 import { TripParams } from "./trip-params";
+import { EngineSwitch } from "./engine-switch";
 import { VehicleBar } from "./vehicle-bar";
 import {
   CONNECTOR_LABEL,
@@ -53,7 +54,9 @@ export function TripSetup() {
     const next = armed === slot ? null : slot;
     setArmed(next);
     if (next) {
-      document.getElementById("voltia-map-slot")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document
+        .getElementById("voltia-map-slot")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
 
@@ -96,6 +99,8 @@ export function TripSetup() {
           vehicle: v,
           conditions: s.conditions,
         },
+        // Solo cuenta si el servidor le permite elegir a este usuario.
+        ...(s.engineChoice ? { engine: s.engineChoice } : {}),
       });
     },
     onSuccess: (res) => {
@@ -114,7 +119,8 @@ export function TripSetup() {
     },
   });
 
-  const canPlan = Boolean(origin && destination && stationDataset && !loadingStations) && !planMut.isPending;
+  const canPlan =
+    Boolean(origin && destination && stationDataset && !loadingStations) && !planMut.isPending;
 
   return (
     <section className="relative z-20 space-y-3 px-4 pb-3 pt-3">
@@ -145,7 +151,11 @@ export function TripSetup() {
                 disabled={locating}
                 onClick={useMyLocation}
               >
-                {locating ? <LoaderCircle className="size-3.5 animate-spin" /> : <LocateFixed className="size-3.5" />}
+                {locating ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <LocateFixed className="size-3.5" />
+                )}
                 Mi ubicación
               </Button>
               <Button
@@ -211,7 +221,8 @@ export function TripSetup() {
           Punto de destino {destination ? "✓" : "— falta"}
         </li>
         <li className={stationDataset ? "text-ok" : "text-warn"}>
-          Electrolineras {stationDataset ? "✓" : loadingStations ? "— cargando..." : "— no disponibles"}
+          Electrolineras{" "}
+          {stationDataset ? "✓" : loadingStations ? "— cargando..." : "— no disponibles"}
         </li>
       </ul>
       <div className="flex gap-2">
@@ -227,6 +238,12 @@ export function TripSetup() {
         </Button>
       </div>
       <TripParams />
+      <EngineSwitch
+        onChange={() => {
+          // Con una ruta ya calculada, se vuelve a planificar con el motor elegido.
+          if (usePlanner.getState().geo && canPlan) planMut.mutate();
+        }}
+      />
       <div className="space-y-2 pt-1">
         {!canPlan && !planMut.isPending ? (
           <p className="text-xs text-warn">
@@ -310,7 +327,10 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
   if (plan.firstChargerUnreachable) {
     return (
       <div className="px-4 pb-24 pt-2">
-        <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-danger">
+        <p
+          role="alert"
+          className="rounded-lg bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-danger"
+        >
           {plan.infeasibleReason ?? FIRST_CHARGER_UNREACHABLE_REASON}
         </p>
       </div>
@@ -320,7 +340,10 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
   return (
     <div className="space-y-8 px-4 pb-24 pt-2">
       {plan.departureCharge ? (
-        <p role="alert" className="rounded-lg bg-warn/15 px-3 py-2.5 text-sm leading-relaxed text-warn">
+        <p
+          role="alert"
+          className="rounded-lg bg-warn/15 px-3 py-2.5 text-sm leading-relaxed text-warn"
+        >
           {departureChargeAdvice(plan.departureCharge.additionalPct)}
         </p>
       ) : null}
@@ -464,7 +487,10 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
               {i + 1}. {st.charger.name}
             </span>
             {st.adapter ? null : !isDcSocket(st.bestSocket) ? (
-              <span className="text-warn"> · Carga lenta — sin adaptador · {formatKw(st.chargeKw)}</span>
+              <span className="text-warn">
+                {" "}
+                · Carga lenta — sin adaptador · {formatKw(st.chargeKw)}
+              </span>
             ) : null}
             {st.adapterNeeded ? (
               <span className="mt-1 block text-xs leading-relaxed text-warn">
@@ -475,11 +501,15 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
             ) : null}
             <span className="mt-2 grid grid-cols-3 gap-2">
               <span className="rounded-md bg-bg px-2 py-1.5">
-                <span className="block text-[11px] uppercase tracking-wide text-subtle">Llegas</span>
+                <span className="block text-[11px] uppercase tracking-wide text-subtle">
+                  Llegas
+                </span>
                 <span className="font-mono text-sm text-fg">{formatPct(st.arriveSoc)}</span>
               </span>
               <span className="rounded-md bg-bg px-2 py-1.5">
-                <span className="block text-[11px] uppercase tracking-wide text-subtle">Mínimo</span>
+                <span className="block text-[11px] uppercase tracking-wide text-subtle">
+                  Mínimo
+                </span>
                 <span className="font-mono text-sm text-warn">{formatPct(st.minDepartSoc)}</span>
               </span>
               <span className="rounded-md bg-bg px-2 py-1.5">
@@ -488,19 +518,23 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
               </span>
             </span>
             <span className="mt-2 block font-mono text-xs text-muted">
-              {formatKwh(st.energyAddedKwh)} · {formatMinutes(st.chargeMinutes)} · alcance {formatKm(st.rangeGainKm)}
+              {formatKwh(st.energyAddedKwh)} · {formatMinutes(st.chargeMinutes)} · alcance{" "}
+              {formatKm(st.rangeGainKm)}
               {" · "}siguiente {formatKm(st.kmToNext)}
               {st.fromRouteKm > 0.15 ? ` · desvío ${formatKm(st.fromRouteKm, 1)}` : ""}
             </span>
             <span className="mt-1.5 block text-xs leading-relaxed">
               Llegas al {formatPct(st.arriveSoc)}: es lo que queda al entrar
-              {st.fromRouteKm > 0.15 ? `, después del tramo anterior y del desvío de ${formatKm(st.fromRouteKm, 1)}` : ""}.
-              {" "}Mínimo {formatPct(st.minDepartSoc)}: lo menos con lo que puedes salir para cubrir los{" "}
-              {formatKm(st.kmToNext)} siguientes
-              {st.nextLabel ? ` hasta ${st.nextLabel}` : " hasta el destino"} y todavía conservar el margen de{" "}
-              {formatPct(plan.safetyPct)}. Sales al {formatPct(st.departSoc)}: es lo que el plan pide cargar, el
-              mínimo más un poco de reserva. De {formatPct(st.arriveSoc)} a {formatPct(st.departSoc)} son{" "}
-              {formatKwh(st.energyAddedKwh)} y {formatMinutes(st.chargeMinutes)}. Esos kWh equivalen a unos{" "}
+              {st.fromRouteKm > 0.15
+                ? `, después del tramo anterior y del desvío de ${formatKm(st.fromRouteKm, 1)}`
+                : ""}
+              . Mínimo {formatPct(st.minDepartSoc)}: lo menos con lo que puedes salir para cubrir
+              los {formatKm(st.kmToNext)} siguientes
+              {st.nextLabel ? ` hasta ${st.nextLabel}` : " hasta el destino"} y todavía conservar el
+              margen de {formatPct(plan.safetyPct)}. Sales al {formatPct(st.departSoc)}: es lo que
+              el plan pide cargar, el mínimo más un poco de reserva. De {formatPct(st.arriveSoc)} a{" "}
+              {formatPct(st.departSoc)} son {formatKwh(st.energyAddedKwh)} y{" "}
+              {formatMinutes(st.chargeMinutes)}. Esos kWh equivalen a unos{" "}
               {formatKm(st.rangeGainKm)} de autonomía
               {st.kmToNext > 0 ? `; el tramo que sigue mide ${formatKm(st.kmToNext)}` : ""}.
             </span>
@@ -515,7 +549,9 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
                         : `Carga directa · ${CONNECTOR_LABEL[option.socket.connector]} · ${formatKw(option.chargeKw)}`}
                     {" · "}
                     {formatMinutes(option.chargeMinutes)}
-                    {option.reachesNext ? " · también alcanza para seguir, pero tarda más" : " · no cubre el tramo siguiente"}
+                    {option.reachesNext
+                      ? " · también alcanza para seguir, pero tarda más"
+                      : " · no cubre el tramo siguiente"}
                   </span>
                 ))}
               </span>

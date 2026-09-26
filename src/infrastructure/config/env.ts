@@ -8,6 +8,11 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().default(""),
   PLUGSHARE_TOKEN: z.string().default(""),
   ADMIN_EMAILS: z.string().default(""),
+  /**
+   * Correos (separados por coma) que ven el selector de motor v1/v2 en el
+   * planificador. Por defecto, solo el dueño del producto.
+   */
+  ENGINE_PREVIEW_EMAILS: z.string().default("w1andresv@gmail.com"),
   /** Motor de planificación: legacy (actual), shadow (ambos, responde el actual) o v2 (plan §6). */
   PLANNER_ENGINE: z.enum(["legacy", "shadow", "v2"]).default("legacy").catch("legacy"),
   /**
@@ -40,6 +45,7 @@ export function getEnv(): AppEnv {
     DATABASE_URL: process.env.DATABASE_URL?.trim() ?? "",
     PLUGSHARE_TOKEN: process.env.PLUGSHARE_TOKEN ?? "",
     ADMIN_EMAILS: process.env.ADMIN_EMAILS ?? "",
+    ENGINE_PREVIEW_EMAILS: process.env.ENGINE_PREVIEW_EMAILS?.trim() || undefined,
     PLANNER_ENGINE: process.env.PLANNER_ENGINE?.trim() || undefined,
     ELEVATION_SOURCE: process.env.ELEVATION_SOURCE?.trim() || undefined,
     ENERGY_ENGINE: process.env.ENERGY_ENGINE?.trim() || undefined,

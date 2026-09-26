@@ -24,3 +24,6 @@ F7 reemplaza la selección de paradas por puntaje (D6) por programación dinámi
 ## Decisión del dueño del producto (2026-09-26, D2 y D11)
 - **D2:** `PLANNER_ENGINE=v2` después de 1–2 semanas en `shadow` en producción, si `[plan-trip:shadow]` no muestra diferencias sin explicar.
 - **D11:** la espera en estación ocupada se mantiene en 15 min (`estimated`) hasta tener estado por conector (detalle de Blaze).
+
+## Selector v1/v2 (2026-09-26)
+Además de la variable del servidor, los correos en `ENGINE_PREVIEW_EMAILS` (por defecto el del dueño del producto) ven en el planificador un selector **v1 | v2**. v2 activa juntos el planificador y la energía v2 para sus planificaciones. El servidor verifica el correo; para los demás usuarios la elección se ignora y manda `PLANNER_ENGINE` / `ENERGY_ENGINE`.

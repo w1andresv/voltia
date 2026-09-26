@@ -64,6 +64,12 @@ interface PlannerState {
   batteryOpen: boolean;
   stationsOpen: boolean;
   myTripsOpen: boolean;
+  /**
+   * Motor elegido en el selector v1/v2 (vista previa, solo usuarios con permiso).
+   * null: el que configure el servidor.
+   */
+  engineChoice: "v1" | "v2" | null;
+  setEngineChoice: (choice: "v1" | "v2" | null) => void;
   stationSeed: { lat: number; lon: number; address?: string; editId?: string } | null;
   mapClickArmed: "origin" | "destination" | "waypoint" | "station" | null;
   placeSearchOpen: boolean;
@@ -143,7 +149,14 @@ export function rankedPlansFor(
   if (!geo?.routes.length || !origin || !destination) return [];
   const vehicle = s.vehicles.find((v) => v.id === s.selectedVehicleId) ?? VEHICLE_CATALOG[0]!;
   return computePlans(
-    { routes: geo.routes, chargers: geo.chargers, weather: geo.weather, origin, destination, detours: geo.detours },
+    {
+      routes: geo.routes,
+      chargers: geo.chargers,
+      weather: geo.weather,
+      origin,
+      destination,
+      detours: geo.detours,
+    },
     vehicle,
     conditions,
     geo.plannerEngine,
@@ -179,6 +192,7 @@ export const usePlanner = create<PlannerState>()(
       batteryOpen: false,
       stationsOpen: false,
       myTripsOpen: false,
+      engineChoice: null,
       stationSeed: null,
       mapClickArmed: null,
       placeSearchOpen: false,
@@ -281,6 +295,7 @@ export const usePlanner = create<PlannerState>()(
       setBatteryOpen: (v) => set({ batteryOpen: v }),
       setStationsOpen: (v) => set({ stationsOpen: v }),
       setMyTripsOpen: (v) => set({ myTripsOpen: v }),
+      setEngineChoice: (choice) => set({ engineChoice: choice }),
       setStationSeed: (v) => set({ stationSeed: v }),
       injectCharger: (c) =>
         set((s) => {
@@ -348,6 +363,7 @@ export const usePlanner = create<PlannerState>()(
       partialize: (s) => ({
         selectedVehicleId: s.selectedVehicleId,
         conditions: s.conditions,
+        engineChoice: s.engineChoice,
         tripRegenV: 3,
       }),
       migrate: (persisted) => migratePlannerState(persisted),
@@ -365,6 +381,7 @@ export const usePlanner = create<PlannerState>()(
               ? p.selectedVehicleId
               : current.selectedVehicleId,
           conditions: { ...DEFAULT_CONDITIONS, ...restConditions, regenLevel },
+          engineChoice: p.engineChoice === "v1" || p.engineChoice === "v2" ? p.engineChoice : null,
           mapBounds: null,
         };
       },
