@@ -104,16 +104,50 @@ function detourMinutesOf(km: number): number {
   return (km / DETOUR_SPEED_KMH) * 60;
 }
 
+/**
+ * Mayor consumo acumulado (kWh) desde fromIdx hasta cualquier punto del tramo,
+ * hasta toIdx. En montaña el punto más bajo de batería puede estar en la cima,
+ * no al final del tramo (C1).
+ */
+function maxDrawdownKwh(samples: RouteSample[], fromIdx: number, toIdx: number): number {
+  const base = samples[Math.max(0, fromIdx)]?.cumulativeKwh ?? 0;
+  const end = Math.min(samples.length - 1, toIdx);
+  let worst = 0;
+  for (let k = Math.max(0, fromIdx) + 1; k <= end; k++) {
+    worst = Math.max(worst, samples[k]!.cumulativeKwh - base);
+  }
+  return worst;
+}
+
+/** SOC más bajo en el tramo por la vía, saliendo de fromIdx con fromSoc. */
+function lowestSocOnLeg(
+  samples: RouteSample[],
+  fromIdx: number,
+  toIdx: number,
+  fromSoc: number,
+  capacity: number,
+): number {
+  return socAfter(fromSoc, maxDrawdownKwh(samples, fromIdx, toIdx), capacity);
+}
+
+/**
+ * SOC de salida para llegar con arrivalTarget y, además, no bajar de floorPct
+ * en ningún punto del tramo.
+ */
 function neededDepartSoc(args: {
   samples: RouteSample[];
   fromIdx: number;
   destIdx: number;
   arrivalTarget: number;
+  floorPct: number;
   capacity: number;
   detourKwh: number;
 }): number {
   const e = energyBetween(args.samples, args.fromIdx, args.destIdx) + args.detourKwh;
-  return args.arrivalTarget + (e / args.capacity) * 100;
+  const toArrive = args.arrivalTarget + (e / args.capacity) * 100;
+  const draw = maxDrawdownKwh(args.samples, args.fromIdx, args.destIdx);
+  const toStayAbove = args.floorPct + (draw / args.capacity) * 100;
+  return Math.max(toArrive, toStayAbove);
 }
 
 interface Candidate {
@@ -134,14 +168,17 @@ function arriveAt(
   samples: RouteSample[],
   cap: number,
   ctx: EnergyCtx,
-): { arrive: number; detourKwh: number; sIdx: number } | null {
+): { arrive: number; lowest: number; detourKwh: number; sIdx: number } | null {
   const sIdx = charger.nearestSampleIndex ?? 0;
   if (sIdx <= fromIdx) return null;
   const detourKwh = segmentEnergyKwh(charger.detourKm ?? 0, 0, DETOUR_SPEED_KMH, ctx, soc, {
     altitudeM: samples[sIdx]?.elevM,
   });
   const e = energyBetween(samples, fromIdx, sIdx) + detourKwh;
-  return { arrive: socAfter(soc, e, cap), detourKwh, sIdx };
+  const arrive = socAfter(soc, e, cap);
+  // El mínimo del tramo: por la vía hasta el cargador, o la llegada tras el desvío.
+  const lowest = Math.min(arrive, lowestSocOnLeg(samples, fromIdx, sIdx, soc, cap));
+  return { arrive, lowest, detourKwh, sIdx };
 }
 
 function scoreCharger(
@@ -197,8 +234,13 @@ function pickStops(args: {
   let soc = conditions.initialSoc;
   const stops: ChargeStop[] = [];
 
-  const energyToDest = energyBetween(samples, 0, destIdx);
-  if (socAfter(soc, energyToDest, cap) >= arrivalTarget - ARRIVE_TOLERANCE) {
+  // Llega al destino con el objetivo y sin bajar del piso en ningún punto (C1).
+  const canReachDestFrom = (fromIdx: number, fromSoc: number, extraKwh = 0) =>
+    socAfter(fromSoc, energyBetween(samples, fromIdx, destIdx) + extraKwh, cap) >=
+      arrivalTarget - ARRIVE_TOLERANCE &&
+    lowestSocOnLeg(samples, fromIdx, destIdx, fromSoc, cap) >= floor - ARRIVE_TOLERANCE;
+
+  if (canReachDestFrom(0, soc)) {
     return { stops: [], feasible: true };
   }
 
@@ -215,17 +257,13 @@ function pickStops(args: {
       : unreachable();
   }
 
-  const canReachDestFrom = (fromIdx: number, fromSoc: number, extraKwh = 0) =>
-    socAfter(fromSoc, energyBetween(samples, fromIdx, destIdx) + extraKwh, cap) >=
-    arrivalTarget - ARRIVE_TOLERANCE;
-
   const continuationOk = (fromIdx: number, fromSoc: number, skipId: string) => {
     if (canReachDestFrom(fromIdx, fromSoc)) return true;
     for (const ch of usable) {
       if (ch.id === skipId) continue;
       if (stops.some((s) => s.charger.id === ch.id)) continue;
       const hit = arriveAt(ch, fromIdx, fromSoc, samples, cap, ctx);
-      if (hit && hit.arrive >= floor) return true;
+      if (hit && hit.lowest >= floor) return true;
     }
     return false;
   };
@@ -243,7 +281,7 @@ function pickStops(args: {
       const plug = routeSocket(ch, vehicle);
       if (!plug) continue;
       const hit = arriveAt(ch, fromIdx, fromSoc, samples, cap, ctx);
-      if (!hit || hit.arrive < minArrive) continue;
+      if (!hit || hit.lowest < minArrive) continue;
       out.push({
         charger: ch,
         arriveSoc: hit.arrive,
@@ -297,7 +335,7 @@ function pickStops(args: {
       if (ch.id === pick.charger.id) continue;
       if (stops.some((s) => s.charger.id === ch.id)) continue;
       const hit = arriveAt(ch, pick.sIdx, maxTravel, samples, cap, ctx);
-      if (!hit || hit.arrive < 2) continue;
+      if (!hit || hit.lowest < 2) continue;
       const km = ch.nearestKm ?? Infinity;
       if (km < nearest) {
         nearest = km;
@@ -308,6 +346,7 @@ function pickStops(args: {
     }
     const need = neededDepartSoc({
       samples,
+      floorPct: floor,
       fromIdx: pick.sIdx,
       destIdx: nextIdx,
       arrivalTarget: reserve,
@@ -322,6 +361,7 @@ function pickStops(args: {
 
     const destNeed = neededDepartSoc({
       samples,
+      floorPct: floor,
       fromIdx: pick.sIdx,
       destIdx,
       arrivalTarget,
@@ -356,7 +396,7 @@ function pickStops(args: {
       if (ch.id === pick.charger.id) continue;
       if (stops.some((s) => s.charger.id === ch.id)) continue;
       const hit = arriveAt(ch, pick.sIdx, maxTravel, samples, cap, ctx);
-      if (!hit || hit.arrive < floor) continue;
+      if (!hit || hit.lowest < floor) continue;
       const plug = routeSocket(ch, vehicle);
       if (!plug) continue;
       const cand: Candidate = {
@@ -379,6 +419,7 @@ function pickStops(args: {
     if (bestNext) {
       nextNeed = neededDepartSoc({
         samples,
+        floorPct: floor,
         fromIdx: pick.sIdx,
         destIdx: bestNext.sIdx,
         arrivalTarget: safety,
@@ -431,6 +472,7 @@ function pickStops(args: {
         chargeTo > maxTravel &&
         neededDepartSoc({
           samples,
+          floorPct: floor,
           fromIdx: pick.sIdx,
           destIdx,
           arrivalTarget,
@@ -544,8 +586,7 @@ function pickStops(args: {
     soc = chosen.departSoc;
   }
 
-  const finalSoc = socAfter(soc, energyBetween(samples, idx, destIdx), cap);
-  if (finalSoc < arrivalTarget - ARRIVE_TOLERANCE && !conditions.allowBelowSafety) {
+  if (!canReachDestFrom(idx, soc) && !conditions.allowBelowSafety) {
     return {
       stops,
       feasible: false,
@@ -669,14 +710,16 @@ function assessFirstCharger(args: {
     return hit;
   };
 
-  const currentSamples = samplesAt(conditions.initialSoc);
-  const destSoc = socAfter(conditions.initialSoc, energyBetween(currentSamples, 0, destIdx), cap);
-  if (destSoc >= arrivalTarget || !usable.length) return { kind: "skip" };
-
   // Igual que pickStops: primero exigir el margen de seguridad al llegar a la
   // primera electrolinera; solo se baja a "llega justo" si ni al 100 % cabe.
   const floor = conditions.allowBelowSafety ? 2 : safety;
   const reachFloor = conditions.allowBelowSafety ? 2 : 0;
+
+  const currentSamples = samplesAt(conditions.initialSoc);
+  const destSoc = socAfter(conditions.initialSoc, energyBetween(currentSamples, 0, destIdx), cap);
+  const destLowest = lowestSocOnLeg(currentSamples, 0, destIdx, conditions.initialSoc, cap);
+  const destOk = destSoc >= arrivalTarget && destLowest >= floor - ARRIVE_TOLERANCE;
+  if (destOk || !usable.length) return { kind: "skip" };
 
   const reachableCharger = (soc: number, minArrive: number): Charger | null => {
     const samples = samplesAt(soc);
@@ -684,7 +727,7 @@ function assessFirstCharger(args: {
     let bestKm = Infinity;
     for (const charger of usable) {
       const hit = arriveAt(charger, 0, soc, samples, cap, energyCtx);
-      if (!hit || hit.arrive < minArrive - ARRIVE_TOLERANCE) continue;
+      if (!hit || hit.lowest < minArrive - ARRIVE_TOLERANCE) continue;
       const km = charger.nearestKm ?? Infinity;
       if (km < bestKm) {
         bestKm = km;
@@ -808,7 +851,9 @@ export function buildPlan(args: {
   );
   const remainingKwh = Math.max(0, (arrivalSoc / 100) * vehicle.batteryKwh);
   const canArriveWithoutCharge =
-    stops.length === 0 && arrivalSoc >= arrivalTargetPct - ARRIVE_TOLERANCE;
+    stops.length === 0 &&
+    arrivalSoc >= arrivalTargetPct - ARRIVE_TOLERANCE &&
+    minSoc >= safety - ARRIVE_TOLERANCE;
 
   const itinerary: ItineraryNode[] = [
     {

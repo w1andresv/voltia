@@ -811,3 +811,51 @@ describe("buildPlan — el desvío al cargador se descuenta de la curva de SOC (
     expect(plan.minSoc).toBeLessThanOrEqual(stop.arriveSoc);
   });
 });
+
+describe("buildPlan — el piso de SOC se respeta en todo el tramo, no solo al llegar (C1)", () => {
+  // Sube 1500 m en 40 km y baja en 20 km (tipo cañón del Chicamocha).
+  const distance = 60;
+  const elev = (km: number) => (km <= 40 ? 500 + (1500 * km) / 40 : 2000 - (1500 * (km - 40)) / 20);
+  const mountain = (): RawRoute => {
+    const base = straightRoute(distance, 1);
+    const samples = base.samples.map((s) => ({ ...s, elevM: elev(s.km), speedKmh: 60 }));
+    return { ...base, samples, elevation: { gainM: 1500, lossM: 1500, minM: 500, maxM: 2000 } };
+  };
+  const cond = conditions({
+    initialSoc: 31,
+    arrivalSoc: 10,
+    safetyMode: "low",
+    regenLevel: "high",
+    avgSpeedKmh: null,
+  });
+  const destination: Place = { label: "Destino", lat: 4 + distance / 111, lon: -74 };
+  const plan = (chargers: Charger[]) =>
+    buildPlan({
+      raw: mountain(),
+      vehicle: vehicle({ minSocRecommended: 10 }),
+      conditions: cond,
+      chargers,
+      weather: null,
+      origin: ORIGIN,
+      destination,
+    });
+
+  it("la bajada devuelve batería: se llega sobre la reserva pero la cima queda por debajo", () => {
+    const p = plan([]);
+    expect(p.arrivalSoc).toBeGreaterThanOrEqual(10);
+    expect(p.minSoc).toBeLessThan(10);
+  });
+
+  it("sin cargadores, esa ruta no es viable", () => {
+    const p = plan([]);
+    expect(p.feasible).toBe(false);
+    expect(p.canArriveWithoutCharge).toBe(false);
+  });
+
+  it("con un cargador antes de la subida, carga lo necesario para no bajar de la reserva", () => {
+    const p = plan([chargerAt(5)]);
+    expect(p.feasible).toBe(true);
+    expect(p.stops).toHaveLength(1);
+    expect(p.minSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+  });
+});
