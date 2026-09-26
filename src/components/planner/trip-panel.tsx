@@ -9,6 +9,7 @@ import { DEMO_TRIPS, usePlanner } from "@/lib/store";
 import { isDc } from "@/domain/charging";
 import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { useStationDataset } from "@/components/stations/use-station-dataset";
 import { ConsumptionChart } from "./consumption-chart";
 import { ElevationChart } from "./elevation-chart";
 import { ExportGpsButton } from "./export-gps-button";
@@ -45,6 +46,7 @@ export function TripSetup() {
   const setArmed = usePlanner((s) => s.setMapClickArmed);
   const destInput = useRef<HTMLInputElement>(null);
   const [locating, setLocating] = useState(false);
+  const { data: stationDataset, isPending: loadingStations } = useStationDataset();
 
   function armMap(slot: "origin" | "destination") {
     const next = armed === slot ? null : slot;
@@ -111,7 +113,7 @@ export function TripSetup() {
     },
   });
 
-  const canPlan = Boolean(origin && destination) && !planMut.isPending;
+  const canPlan = Boolean(origin && destination && stationDataset && !loadingStations) && !planMut.isPending;
 
   return (
     <section className="relative z-20 space-y-3 px-4 pb-3 pt-3">
@@ -207,6 +209,9 @@ export function TripSetup() {
         <li className={destination ? "text-ok" : "text-warn"}>
           Punto de destino {destination ? "✓" : "— falta"}
         </li>
+        <li className={stationDataset ? "text-ok" : "text-warn"}>
+          Electrolineras {stationDataset ? "✓" : loadingStations ? "— cargando..." : "— no disponibles"}
+        </li>
       </ul>
       <div className="flex gap-2">
         <Button
@@ -224,17 +229,29 @@ export function TripSetup() {
       <div className="space-y-2 pt-1">
         {!canPlan && !planMut.isPending ? (
           <p className="text-xs text-warn">
-            {!origin && !destination
-              ? "Faltan el punto de inicio y el destino para planificar el viaje."
-              : !origin
-                ? "Falta el punto de inicio. Búscalo o tócalo en el mapa."
-                : "Falta el punto de destino. Búscalo o tócalo en el mapa."}
+            {loadingStations
+              ? "Cargando las electrolineras disponibles..."
+              : !stationDataset
+                ? "Las electrolineras no están disponibles. Recarga la página."
+                : !origin && !destination
+                  ? "Faltan el punto de inicio y el destino para planificar el viaje."
+                  : !origin
+                    ? "Falta el punto de inicio. Búscalo o tócalo en el mapa."
+                    : "Falta el punto de destino. Búscalo o tócalo en el mapa."}
           </p>
         ) : null}
         <Button
           className="h-12 w-full"
           disabled={!canPlan}
           onClick={() => {
+            if (!stationDataset) {
+              toast.error(
+                loadingStations
+                  ? "Las electrolineras se están cargando. Espera un momento."
+                  : "Las electrolineras no están disponibles. Recarga la página.",
+              );
+              return;
+            }
             if (!origin || !destination) {
               toast.error(
                 !origin && !destination
