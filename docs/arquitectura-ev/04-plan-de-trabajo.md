@@ -22,7 +22,7 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 
 | # | Qué | Por qué | Cómo |
 |---|---|---|---|
-| P1 | **Grabar la cassette de Piedecuesta → Vélez** | F1 cierra con "misma respuesta que antes" sobre ese fixture. Sin él no hay test de igualdad ni modo sombra | En tu máquina, con `.env.local`: `npm run snapshot:record` y luego `npx vitest run src/test-support/piedecuesta-velez.test.ts` (crea el snapshot de referencia). Sube `src/test-support/fixtures/piedecuesta-velez.cassette.json` y `src/test-support/__snapshots__/`. Solo lee la base; no refresca el dataset |
+| P1 | ~~**Grabar la cassette de Piedecuesta → Vélez**~~ **Omitido (2026-09-26, decisión del dueño del producto).** La referencia es la caracterización con proveedores sintéticos. El grabador (`npm run snapshot:record`, con `STATIONS_URL` opcional) queda disponible por si más adelante se quiere | F1 cierra con "misma respuesta que antes" sobre ese fixture. Sin él no hay test de igualdad ni modo sombra | En tu máquina, con `.env.local`: `npm run snapshot:record` y luego `npx vitest run src/test-support/piedecuesta-velez.test.ts` (crea el snapshot de referencia). Sube `src/test-support/fixtures/piedecuesta-velez.cassette.json` y `src/test-support/__snapshots__/`. Solo lee la base; no refresca el dataset |
 | P2 | **Variables de entorno en la configuración del entorno** | `.env.local` vive solo en el contenedor de esta sesión | Menú del entorno en la barra de título de la sesión → Edit → variables de entorno. Las sesiones nuevas las leen |
 | P3 | **Red para las sesiones que graben o prueben con proveedores reales** | Este entorno bloquea `api.mapbox.com`, `api.open-meteo.com`, `photon.komoot.io` | Misma pantalla → Network access: agregar esos dominios (y `api.opentopodata.org`, `router.project-osrm.org` si se usan). No hace falta para F1–F9 si la cassette ya está grabada |
 | P4 | **Rotar la contraseña de la base** | Pasó por el chat | Supabase → Database → Reset password; actualizar `.env.local`, la configuración del entorno y Vercel |
@@ -124,7 +124,7 @@ Dividida en dos (ADR-0006).
   - [ ] `engines/energy/vehicle-params.ts`: cada parámetro como `SourcedValue` (Cd·A y Crr ya están en el vehículo).
   - [ ] `PhysicsEnergyModel` y `ManualConsumptionModel` intercambiables.
   - [ ] `engines/speed/engine.ts`: límites, curvatura, aceleración y frenado por modo; velocidad 0 en origen, destino y paradas.
-  - [ ] Pedir a Mapbox las anotaciones `maxspeed` y `speed` (verificar formato vigente) y regrabar la cassette.
+  - [ ] Pedir a Mapbox las anotaciones `maxspeed` y `speed` (verificar formato vigente); los proveedores sintéticos las simulan (sin cassette, P1 omitido).
   - [ ] `PLANNER_ENGINE=shadow` en producción: registrar las diferencias en el log `[plan-trip]`.
 - **Decisión previa:** datos físicos por vehículo (EPA para los Tesla, ficha para el resto). Se pueden cargar en el seed sin tocar código.
 - **Tests:** llano `E = (Crr·m·g + ½ρCdAv²)·d/η`; pendiente `= m·g·Δh`; ciclo 0 → v → 0.
@@ -161,7 +161,7 @@ Dividida en dos (ADR-0006).
   - [x] Viajes de la cuenta guardados con su snapshot y `modelVersion`; `/v/[shareId]` recalcula con el snapshot, sin consultar proveedores, y ofrece recalcular con los datos de hoy.
   - [ ] `PLANNER_ENGINE=v2`: decisión del dueño del producto después de mirar el modo sombra en producción.
   - [ ] Verificar (pasada 2) también al guardar o compartir, y guardar la ruta verificada en el snapshot.
-- **Cierre:** Piedecuesta → Vélez de extremo a extremo (plan §7) con las invariantes de la especificación §8.4 y el informe §8.5. Pendiente de la cassette real (P1); con proveedores sintéticos la caracterización cubre pasada 1, pasada 2 y reproducción desde el snapshot.
+- **Cierre:** Piedecuesta → Vélez de extremo a extremo (plan §7) con las invariantes de la especificación §8.4 y el informe §8.5. Sin cassette real (P1 omitido): la caracterización con proveedores sintéticos cubre pasada 1, pasada 2 y reproducción desde el snapshot, y es la referencia de cierre.
 - **Especificación:** F7 y F8.
 
 ### FB · Fuente de datos Blaze (Muvatec)
@@ -224,8 +224,8 @@ Dividida en dos (ADR-0006).
 
 | Fase | Estado | Commit |
 |---|---|---|
-| F0 | ✅ Hecha salvo la cassette (P1) | commits en `engine-v2` |
-| F1 | ✅ Hecha (igualdad con proveedores sintéticos; con la cassette real al grabarla) | ver `git log --grep "^F1:"` |
+| F0 | ✅ Hecha (cassette omitida, P1) | commits en `engine-v2` |
+| F1 | ✅ Hecha (igualdad con proveedores sintéticos) | ver `git log --grep "^F1:"` |
 | F2 | F2a ✅ hecha (sin cambio de resultados). F2b: fuente configurable ✅ (ADR-0011); falta elegir la fuente, limpieza y error tipado | ver `git log --grep "^F2"` |
 | F3 | ✅ Hecha | ver `git log --grep "^F3:"` |
 | F4 | ✅ Hecha (desvío por matriz pendiente) | ver `git log --grep "^F4:"` |
