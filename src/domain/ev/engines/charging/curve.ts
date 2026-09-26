@@ -42,7 +42,8 @@ export function lerpFactor(curve: ChargeCurvePoint[], soc: number): number {
 /**
  * Minutos para cargar de `socFrom` a `socTo`. La potencia en cada punto es
  * min(pico del vehículo × factor de la curva, potencia de la toma) (C3),
- * integrada en pasos de SOC, más los minutos fijos por parada.
+ * integrada en pasos de SOC, más los minutos fijos por parada (estacionar,
+ * conectar…). `withOverhead: false` da solo el tiempo de carga (fichas del vehículo).
  */
 export function chargeTimeMinutes(
   capacityKwh: number,
@@ -52,6 +53,7 @@ export function chargeTimeMinutes(
   chargerKw: number,
   curve: ChargeCurvePoint[],
   params = MODEL_PARAMETERS.charging,
+  opts: { withOverhead?: boolean } = {},
 ): number {
   if (socTo <= socFrom + 0.2) return 0;
   const span = socTo - socFrom;
@@ -63,5 +65,5 @@ export function chargeTimeMinutes(
     const power = Math.min(vehiclePeakKw * lerpFactor(curve, soc), chargerKw);
     hours += energyPerStep / Math.max(power, 1.5);
   }
-  return hours * 60 + params.connectionOverheadMin.value;
+  return hours * 60 + (opts.withOverhead === false ? 0 : params.connectionOverheadMin.value);
 }

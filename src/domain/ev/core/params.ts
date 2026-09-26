@@ -36,7 +36,7 @@ export interface ModelParameters {
     detourRoadFactor: SourcedValue<number>;
   };
   charging: {
-    /** Minutos fijos por parada (conectar, autorizar). 0 hasta calibrar. */
+    /** Minutos fijos por parada: estacionar, abrir la app, conectar, desconectar y salir. */
     connectionOverheadMin: SourcedValue<number>;
     /** Paso de la integración de la curva de carga, en puntos de SOC. */
     integrationStepPct: number;
@@ -91,7 +91,9 @@ export const MODEL_PARAMETERS: ModelParameters = {
     detourRoadFactor: sourced(1, "estimated", { notes: "Línea recta ida y vuelta; se reemplaza con la matriz de rutas." }),
   },
   charging: {
-    connectionOverheadMin: sourced(0, "configurable", { notes: "Sin dato medido; calibrar con paradas reales." }),
+    connectionOverheadMin: sourced(5, "estimated", {
+      notes: "Estacionar, app, conectar, desconectar y salir. Decisión del producto; calibrar con paradas reales.",
+    }),
     integrationStepPct: 0.5,
   },
   planner: {

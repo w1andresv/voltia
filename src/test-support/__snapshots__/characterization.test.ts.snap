@@ -119,9 +119,9 @@ exports[`caracterización del pipeline con proveedores sintéticos > modo más r
       "minSoc": 18.9,
       "noTolls": undefined,
       "stops": [
-        "s20 32.3→61.5 14 min",
+        "s20 32.3→61.5 19 min",
       ],
-      "totalMinutes": 163,
+      "totalMinutes": 168,
       "via": "Ruta 45A, Ruta 62",
     },
     {
@@ -136,9 +136,9 @@ exports[`caracterización del pipeline con proveedores sintéticos > modo más r
       "minSoc": 17.5,
       "noTolls": undefined,
       "stops": [
-        "s20 33.6→59.5 12 min",
+        "s20 33.6→59.5 17 min",
       ],
-      "totalMinutes": 155,
+      "totalMinutes": 160,
       "via": "Ruta 45A, Ruta 62",
     },
     {
@@ -184,7 +184,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > modo más r
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 2`] = `"defa7fedd218c631"`;
+exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 2`] = `"436f924a378a5631"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 1`] = `
 {
@@ -214,9 +214,9 @@ exports[`caracterización del pipeline con proveedores sintéticos > más segura
       "minSoc": 20.3,
       "noTolls": undefined,
       "stops": [
-        "s20 20.3→72.5 25 min",
+        "s20 20.3→72.5 30 min",
       ],
-      "totalMinutes": 174,
+      "totalMinutes": 179,
       "via": "Ruta 45A, Ruta 62",
     },
     {
@@ -231,9 +231,9 @@ exports[`caracterización del pipeline con proveedores sintéticos > más segura
       "minSoc": 20.6,
       "noTolls": undefined,
       "stops": [
-        "s20 20.6→70.5 24 min",
+        "s20 20.6→70.5 29 min",
       ],
-      "totalMinutes": 167,
+      "totalMinutes": 172,
       "via": "Ruta 45A, Ruta 62",
     },
     {
@@ -279,7 +279,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > más segura
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 2`] = `"07e127e267264f8f"`;
+exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 2`] = `"bf52626369f4844f"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > planificador v2: menos paradas, SOC 90 % 1`] = `
 {
@@ -398,27 +398,26 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
       "minSoc": 15.5,
       "noTolls": undefined,
       "stops": [
-        "s20 32.3→58 12 min",
+        "s20 32.3→58 17 min",
       ],
-      "totalMinutes": 162,
+      "totalMinutes": 167,
       "via": "Ruta 45A, Ruta 62",
     },
     {
-      "arrivalSoc": 15.5,
+      "arrivalSoc": 16,
       "departureCharge": undefined,
       "distanceKm": 128.7,
-      "energyKwh": 20.6,
+      "energyKwh": 20.5,
       "feasible": true,
       "id": "route-1",
       "initialSoc": 35,
       "label": "Ruta B",
-      "minSoc": 15,
+      "minSoc": 16,
       "noTolls": undefined,
       "stops": [
-        "s20 33.6→50 8 min",
-        "s72 15.2→23 2 min",
+        "s20 33.6→58 16 min",
       ],
-      "totalMinutes": 154,
+      "totalMinutes": 160,
       "via": "Ruta 45A, Ruta 62",
     },
     {
@@ -492,9 +491,9 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
       "minSoc": 20.3,
       "noTolls": undefined,
       "stops": [
-        "s20 20.3→63 20 min",
+        "s20 20.3→63 25 min",
       ],
-      "totalMinutes": 170,
+      "totalMinutes": 175,
       "via": "Ruta 45A, Ruta 62",
     },
     {
@@ -509,9 +508,9 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
       "minSoc": 20.6,
       "noTolls": undefined,
       "stops": [
-        "s20 20.6→63 20 min",
+        "s20 20.6→63 25 min",
       ],
-      "totalMinutes": 163,
+      "totalMinutes": 168,
       "via": "Ruta 45A, Ruta 62",
     },
     {

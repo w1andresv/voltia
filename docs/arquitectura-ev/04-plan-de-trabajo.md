@@ -145,7 +145,7 @@ Dividida en dos (ADR-0006).
 - **Cierre:** menos de 150 ms por ruta con el fixture (medido en el test).
 - **Especificación:** F6.
 - **Hecho (detrás de `PLANNER_ENGINE`, ADR-0007):** `engines/charging/planner.ts` (programación dinámica sobre estación × SOC de salida al 1 %, costo lexicográfico por estrategia, carga previa por búsqueda binaria), `engines/feasibility/engine.ts` (cinco estados, códigos y textos), `buildPlan({ engine: "v2" })`, servicio con `legacy | shadow | v2` y registro `[plan-trip:shadow]`. Caracterización del v2 en `characterization.test.ts`. La tabla de tramos con malla gruesa no hizo falta: 30 estaciones en 220 muestras corren en pocos ms en los tests.
-- **Pendiente:** decidir `connectionOverheadMin` antes de poner `v2` en producción.
+- **Decidido:** 5 minutos fijos por parada (`connectionOverheadMin`, ADR-0007), para no partir paradas por ganar poco tiempo.
 
 ### F8 · Composición, gráficas y pasada 2
 

@@ -25,7 +25,9 @@ export function BatteryDialog() {
 
   const floor = socFloors(vehicle, conditions).reservePct;
   const budget = batteryBudget(vehicle, conditions, weather);
-  const to80 = chargeTimeMinutes(vehicle.batteryKwh, 10, 80, vehicle.dcMaxKw, vehicle.dcMaxKw, vehicle.chargeCurve);
+  const to80 = chargeTimeMinutes(vehicle.batteryKwh, 10, 80, vehicle.dcMaxKw, vehicle.dcMaxKw, vehicle.chargeCurve, undefined, {
+    withOverhead: false,
+  });
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

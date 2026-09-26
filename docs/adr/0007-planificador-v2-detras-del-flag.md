@@ -18,5 +18,5 @@ F7 reemplaza la selección de paradas por puntaje (D6) por programación dinámi
 
 ## Consecuencias
 - Nada cambia para los usuarios hasta poner `PLANNER_ENGINE=shadow` (para medir) o `v2`.
-- **Pendiente de decidir antes de `v2`:** un tiempo fijo por parada (`ModelParameters.charging.connectionOverheadMin`, hoy 0). Con 0, "más rápida" puede preferir dos paradas cortas a una larga por un minuto. Un valor de 3–5 min lo evita, pero también suma ese tiempo a los planes del motor actual.
+- **Decidido (2026-09-26):** cada parada cuesta 5 minutos fijos (`ModelParameters.charging.connectionOverheadMin`: estacionar, abrir la app, conectar, desconectar y salir), marcado `estimated` hasta calibrarlo. El dueño del producto prefiere menos paradas: con 0 min, "más rápida" partía una parada en dos para ganar 1 minuto; con 5 min ya no. Aplica a los dos planificadores; la ficha "10→80 %" del panel de batería no lo suma.
 - El planificador actual se retira en F9.
