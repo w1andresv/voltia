@@ -10,6 +10,8 @@
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed.mjs",
     "migrate:photos": "node scripts/migrate-photos.mjs",
+    "stations:refresh": "node scripts/stations-refresh.mjs",
+    "stations:report": "node scripts/stations-report.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run && npm run test:scripts",
     "test:scripts": "node --test 'scripts/**/*.test.mjs'",

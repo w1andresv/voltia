@@ -33,7 +33,7 @@ import {
 
 const MAX_STOPS = 7;
 const PREFERRED_FROM_ROUTE_KM = 5;
-const MAX_FROM_ROUTE_KM = 12;
+export const MAX_FROM_ROUTE_KM = 12;
 const MIN_PROGRESS_KM = 4;
 const DETOUR_SPEED_KMH = 50;
 const FLAT_CURVE = [

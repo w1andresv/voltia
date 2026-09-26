@@ -251,6 +251,8 @@ export interface GeoBundle {
   chargers: Charger[];
   weather: WeatherSnapshot | null;
   warnings: string[];
+  /** Versión del dataset consolidado de electrolineras usado para este plan. */
+  stationsVersion?: string;
 }
 
 export interface PlanRequest {

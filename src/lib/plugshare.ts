@@ -5,9 +5,9 @@ export const PLUGSHARE_ACCESS_URL = "https://developer.plugshare.com/access";
 /**
  * No NEXT_PUBLIC_ token here on purpose: an operator-wide PlugShare key is
  * server-only (PLUGSHARE_TOKEN, see src/infrastructure/config/env.ts) and
- * chargers.plugshare.ts already falls back to it when the caller doesn't
- * send one. A client-side default would ship that key to every visitor's
- * browser bundle.
+ * getPlugshareStatusFn (src/server/actions/chargers.ts) only reports whether
+ * it's configured. A client-side default would ship that key to every
+ * visitor's browser bundle.
  */
 
 /** Accept Bearer/Basic/raw API keys. Never invent credentials. */

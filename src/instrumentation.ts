@@ -8,5 +8,8 @@
  * `npm run db:seed`, aparte de las migraciones.
  */
 export async function register(): Promise<void> {
-  // Sin tareas de arranque por ahora.
+  // Dataset de electrolineras: solo memoria <- Postgres, nunca llama a las
+  // fuentes externas aquí (no bloquea el arranque de la instancia).
+  const { preloadStationDataset } = await import("@/infrastructure/stations/service");
+  await preloadStationDataset();
 }

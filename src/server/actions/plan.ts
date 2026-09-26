@@ -29,10 +29,10 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
     const { fetchRoutes } = await import("@/infrastructure/providers/routing");
     const { applyElevationAll } = await import("@/infrastructure/providers/elevation.openmeteo");
     const { fetchWeather } = await import("@/infrastructure/providers/weather.openmeteo");
-    const { findCachedChargersAlong } = await import("@/infrastructure/providers/chargers.cache");
-    const { loadCommunityChargers } = await import("@/server/actions/stations-db");
-    const { buildPlan, rankPlans } = await import("@/domain/planner");
-    const { isVerifiedForPlanning } = await import("@/domain/types");
+    const { getStationDataset } = await import("@/infrastructure/stations/service");
+    const { findStationsNearRoute } = await import("@/domain/stations/spatial");
+    const { toPlanningCharger } = await import("@/domain/stations/to-charger");
+    const { buildPlan, rankPlans, MAX_FROM_ROUTE_KM } = await import("@/domain/planner");
 
     const waypoints = [data.origin, ...data.waypoints, data.destination];
     const warnings: string[] = [];
@@ -43,17 +43,21 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
     // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
     // alternativa puede planear sus paradas. Las sondas no se repiten donde se solapan.
     const chargerQuery = rawRoutes.flatMap((r) => r.samples);
-    const community = (await loadCommunityChargers("all")).filter(isVerifiedForPlanning);
-    const [routes, weather, chargerRes] = await Promise.all([
+    const [routes, weather, dataset] = await Promise.all([
       applyElevationAll(rawRoutes),
       mid ? fetchWeather(mid) : Promise.resolve(null),
-      findCachedChargersAlong(chargerQuery, community),
+      getStationDataset(),
     ]);
     if (routes.some((r) => r.elevation.maxM === 0 && r.elevation.minM === 0 && r.distanceKm > 5)) {
       warnings.push("No se obtuvo el perfil de elevación. El consumo puede estar subestimado en montaña.");
     }
-    const { chargers, warnings: chargerWarnings } = chargerRes;
-    warnings.push(...chargerWarnings);
+    for (const s of dataset.sources) {
+      if (s.stale) warnings.push(`Electrolineras de ${s.id}: usando el último dato disponible (fuente lenta o caída).`);
+      else if (!s.ok && s.error) warnings.push(`No se pudo consultar electrolineras de ${s.id}.`);
+    }
+    const chargers = findStationsNearRoute(dataset.stations, chargerQuery, MAX_FROM_ROUTE_KM)
+      .filter((s) => s.planning.eligible)
+      .map(toPlanningCharger);
 
     const built = routes.map((raw) =>
       buildPlan({
@@ -76,13 +80,14 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
         routes: routes.length,
         distanceKm: Math.round(routes[0]?.distanceKm ?? 0),
         chargers: chargers.length,
+        stationsVersion: dataset.version,
         warnings: warnings.length,
         weather: weather != null,
       }),
     );
 
     return {
-      geo: { routes, chargers, weather, warnings },
+      geo: { routes, chargers, weather, warnings, stationsVersion: dataset.version },
       plans: ranked,
       selectedId: ranked[0]?.id ?? "",
     };
