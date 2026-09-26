@@ -24,7 +24,7 @@ export function normalizeText(text: string | null | undefined, removeStopWords =
  */
 export function normalizeAddress(address: string | null | undefined): string {
   if (!address) return "";
-  let s = address
+  const s = address
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
