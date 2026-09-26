@@ -379,6 +379,21 @@ export function tripMassKg(vehicle: Vehicle, c: TripConditions): number {
   return vehicle.weightKg + extraWeightKg(c);
 }
 
+/**
+ * Pisos de batería del viaje. Única fuente para el planificador y los paneles.
+ *  - reservePct: el SOC no debe bajar de aquí al llegar a un cargador. Es el mayor
+ *    entre el margen de seguridad y el mínimo recomendado del vehículo (si el
+ *    usuario lo editó, vale su valor).
+ *  - arrivalTargetPct: SOC mínimo al destino (el pedido por el usuario, sin bajar de la reserva).
+ */
+export function socFloors(
+  vehicle: Pick<Vehicle, "minSocRecommended">,
+  c: TripConditions,
+): { reservePct: number; arrivalTargetPct: number } {
+  const reservePct = Math.max(safetyPct(c), vehicle.minSocRecommended);
+  return { reservePct, arrivalTargetPct: Math.max(c.arrivalSoc, reservePct) };
+}
+
 export function safetyPct(c: TripConditions): number {
   if (c.safetyMode === "conservative") return 20;
   if (c.safetyMode === "low") return 10;

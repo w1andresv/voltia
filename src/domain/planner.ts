@@ -28,7 +28,7 @@ import {
   FIRST_CHARGER_UNREACHABLE_REASON,
   isVerifiedForPlanning,
   NO_VERIFIED_STOP_REASON,
-  safetyPct,
+  socFloors,
 } from "./types";
 
 const MAX_STOPS = 7;
@@ -183,8 +183,7 @@ function pickStops(args: {
   weather: WeatherSnapshot | null;
 }): { stops: ChargeStop[]; feasible: boolean; reason?: string } {
   const { samples, vehicle, conditions, weather } = args;
-  const safety = safetyPct(conditions);
-  const arrivalTarget = Math.max(conditions.arrivalSoc, safety);
+  const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(vehicle, conditions);
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
   const maxTravel = Math.min(100, vehicle.maxSocTravel);
@@ -641,7 +640,7 @@ function assessFirstCharger(args: {
 
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samplesPre.length - 1;
-  const arrivalTarget = Math.max(conditions.arrivalSoc, safetyPct(conditions));
+  const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(vehicle, conditions);
   const energyCtx: EnergyCtx = {
     vehicle,
     conditions,
@@ -672,7 +671,6 @@ function assessFirstCharger(args: {
 
   // Igual que pickStops: primero exigir el margen de seguridad al llegar a la
   // primera electrolinera; solo se baja a "llega justo" si ni al 100 % cabe.
-  const safety = safetyPct(conditions);
   const floor = conditions.allowBelowSafety ? 2 : safety;
   const reachFloor = conditions.allowBelowSafety ? 2 : 0;
 
@@ -739,7 +737,7 @@ export function buildPlan(args: {
   destination: Place;
 }): RoutePlan {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
-  const safety = safetyPct(conditions);
+  const { reservePct: safety, arrivalTargetPct } = socFloors(vehicle, conditions);
   const ctx = { vehicle, conditions, weather, originAltitudeM: raw.samples[0]?.elevM };
 
   const styleSpeed = STYLE_SPEED_FACTOR[conditions.drivingStyle];
@@ -801,7 +799,7 @@ export function buildPlan(args: {
   const minSoc = samples.reduce((m, s) => Math.min(m, s.soc), 100);
   const remainingKwh = Math.max(0, (arrivalSoc / 100) * vehicle.batteryKwh);
   const canArriveWithoutCharge =
-    stops.length === 0 && arrivalSoc >= Math.max(conditions.arrivalSoc, safety);
+    stops.length === 0 && arrivalSoc >= arrivalTargetPct - ARRIVE_TOLERANCE;
 
   const itinerary: ItineraryNode[] = [
     {

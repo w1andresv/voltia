@@ -1,5 +1,5 @@
 import type { BodyType, RegenLevel, RouteSample, TripConditions, Vehicle, WeatherSnapshot } from "./types";
-import { tripMassKg, safetyPct } from "./types";
+import { tripMassKg, socFloors } from "./types";
 import { bearingDeg, toRad } from "./geo";
 
 const G = 9.81;
@@ -460,11 +460,7 @@ export function batteryBudget(
   wltpKm: number;
   wltpKwhPer100: number | null;
 } {
-  const floorPct = Math.max(
-    safetyPct(conditions),
-    vehicle.minSocRecommended,
-    conditions.arrivalSoc,
-  );
+  const floorPct = socFloors(vehicle, conditions).arrivalTargetPct;
   const usablePct = Math.max(0, conditions.initialSoc - floorPct);
   const packedKwh = (conditions.initialSoc / 100) * vehicle.batteryKwh;
   const usableKwh = (usablePct / 100) * vehicle.batteryKwh;

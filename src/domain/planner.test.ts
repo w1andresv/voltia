@@ -681,3 +681,49 @@ describe("rankPlans: 'Más eficiente' también respeta la jerarquía vial", () =
     expect(rankPlans([shortcut, trunk], "efficient")[0]?.id).toBe("troncal");
   });
 });
+
+describe("buildPlan — reserva con el mínimo recomendado del vehículo (C8)", () => {
+  const distance = 400;
+  const cond = conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 });
+  const destination: Place = { label: "Destino", lat: 4 + distance / 111, lon: -74 };
+  // Cargador donde el vehículo llega con 10–15 %: entre el margen "bajo" y el mínimo del vehículo.
+  const soc = annotateEnergy(
+    straightRoute(distance).samples,
+    { vehicle: vehicle(), conditions: cond, weather: null },
+    cond.initialSoc,
+  );
+  const hit = soc.find((s) => s.soc < 14)!;
+  const plan = (minSocRecommended: number) =>
+    buildPlan({
+      raw: straightRoute(distance),
+      vehicle: vehicle({ minSocRecommended }),
+      conditions: cond,
+      chargers: [chargerAt(hit.km)],
+      weather: null,
+      origin: ORIGIN,
+      destination,
+    });
+
+  it("el caso de prueba llega al cargador entre 10 y 15 %", () => {
+    expect(hit.soc).toBeGreaterThanOrEqual(10);
+    expect(hit.soc).toBeLessThan(15);
+  });
+
+  it("con mínimo del vehículo 10 % basta el margen bajo: no pide carga previa", () => {
+    const p = plan(10);
+    expect(p.safetyPct).toBe(10);
+    expect(p.departureCharge).toBeUndefined();
+    expect(p.stops[0]!.arriveSoc).toBeLessThan(15);
+  });
+
+  it("con mínimo del vehículo 15 % la reserva sube a 15 % y pide cargar antes de salir", () => {
+    const p = plan(15);
+    expect(p.safetyPct).toBe(15);
+    expect(p.departureCharge).toBeDefined();
+    expect(p.stops[0]!.arriveSoc).toBeGreaterThanOrEqual(15 - 1e-6);
+  });
+
+  it("usa el valor que el usuario haya puesto en el vehículo", () => {
+    expect(plan(25).safetyPct).toBe(25);
+  });
+});

@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { safetyPct } from "@/domain/types";
+import { socFloors } from "@/domain/types";
 import { vehicleLabel, vehicleSub } from "@/domain/vehicles";
 import { formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
@@ -11,7 +11,7 @@ export function VehicleBar() {
   const soc = conditions.initialSoc;
   const openVehicle = usePlanner((s) => s.setVehicleModalOpen);
   const openBattery = usePlanner((s) => s.setBatteryOpen);
-  const floor = Math.max(safetyPct(conditions), vehicle.minSocRecommended, conditions.arrivalSoc);
+  const floor = socFloors(vehicle, conditions).arrivalTargetPct;
 
   return (
     <div className="flex items-center gap-2">

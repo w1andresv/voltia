@@ -1,6 +1,6 @@
 import { chargeCurveSeries, chargeTimeMinutes } from "@/domain/charging";
 import { batteryBudget } from "@/domain/energy";
-import { departureChargeAdvice, safetyPct } from "@/domain/types";
+import { departureChargeAdvice, socFloors } from "@/domain/types";
 import { vehicleLabel } from "@/domain/vehicles";
 import { formatKm, formatKw, formatKwh, formatKwhPer100, formatMinutes, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
@@ -22,7 +22,7 @@ export function BatteryDialog() {
   const weather = usePlanner((s) => s.geo?.weather ?? null);
   const plan = usePlanner((s) => s.plans.find((p) => p.id === s.selectedPlanId) ?? s.plans[0] ?? null);
 
-  const floor = safetyPct(conditions);
+  const floor = socFloors(vehicle, conditions).reservePct;
   const budget = batteryBudget(vehicle, conditions, weather);
   const to80 = chargeTimeMinutes(vehicle.batteryKwh, 10, 80, vehicle.dcMaxKw, vehicle.dcMaxKw, vehicle.chargeCurve);
 
