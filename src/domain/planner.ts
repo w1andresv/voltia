@@ -608,9 +608,11 @@ export function classifyFirstChargerCharge(
   | { kind: "precharge"; additionalPct: number; requiredStartSoc: number }
   | { kind: "impossible" } {
   if (!(socNeededToArrive > currentSoc + 1e-6)) return { kind: "enough" };
+  if (socNeededToArrive > 100 + 1e-6) return { kind: "impossible" };
+  // Puntos enteros hacia arriba para mostrar; el SOC de salida no pasa de 100
+  // (con 20,5 % y 100 % necesario: +80 puntos, salida al 100 %) (C5).
   const additionalPct = Math.ceil(socNeededToArrive - currentSoc - 1e-6);
-  const requiredStartSoc = currentSoc + additionalPct;
-  if (requiredStartSoc > 100 + 1e-6) return { kind: "impossible" };
+  const requiredStartSoc = Math.min(100, currentSoc + additionalPct);
   return { kind: "precharge", additionalPct, requiredStartSoc };
 }
 
@@ -697,25 +699,24 @@ function assessFirstCharger(args: {
   if (reaches(current, minArrive)) return { kind: "skip" };
   if (!reaches(100, minArrive)) return { kind: "impossible" };
 
-  const maxAdd = Math.floor(100 - current + 1e-9);
-  let additional = Math.max(1, maxAdd);
-  if (current + maxAdd < 100 - 1e-6) {
-    additional = Math.ceil(100 - current - 1e-9);
-  } else {
-    let low = 1;
-    let high = Math.max(1, maxAdd);
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      if (mid >= 1 && reaches(current + mid, minArrive)) {
-        additional = mid;
-        high = mid - 1;
-      } else {
-        low = mid + 1;
-      }
+  // Búsqueda binaria del menor número entero de puntos a cargar. El último
+  // escalón se recorta a 100 %, que ya se sabe que alcanza (C5).
+  const startWith = (add: number) => Math.min(100, current + add);
+  const maxAdd = Math.max(1, Math.ceil(100 - current - 1e-9));
+  let additional = maxAdd;
+  let low = 1;
+  let high = maxAdd;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    if (reaches(startWith(mid), minArrive)) {
+      additional = mid;
+      high = mid - 1;
+    } else {
+      low = mid + 1;
     }
   }
 
-  const decision = classifyFirstChargerCharge(current, current + additional);
+  const decision = classifyFirstChargerCharge(current, startWith(additional));
   if (decision.kind !== "precharge") return { kind: "impossible" };
   const charger = reachableCharger(decision.requiredStartSoc, minArrive);
   if (!charger) return { kind: "impossible" };

@@ -505,6 +505,12 @@ describe("primera electrolinera verificada", () => {
       requiredStartSoc: 100,
     });
     expect(classifyFirstChargerCharge(80, 40)).toEqual({ kind: "enough" });
+    // SOC con decimales: la salida no pasa de 100 % (C5).
+    expect(classifyFirstChargerCharge(20.5, 100)).toEqual({
+      kind: "precharge",
+      additionalPct: 80,
+      requiredStartSoc: 100,
+    });
   });
 
   it("redacta la recomendación con el porcentaje adicional", () => {
@@ -725,5 +731,41 @@ describe("buildPlan — reserva con el mínimo recomendado del vehículo (C8)", 
 
   it("usa el valor que el usuario haya puesto en el vehículo", () => {
     expect(plan(25).safetyPct).toBe(25);
+  });
+});
+
+describe("buildPlan — carga previa con SOC inicial decimal (C5)", () => {
+  const distance = 300;
+  const destination: Place = { label: "Destino", lat: 4 + distance / 111, lon: -74 };
+  const plan = (initialSoc: number, chargerKm: number) =>
+    buildPlan({
+      raw: straightRoute(distance),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc, arrivalSoc: 10, safetyMode: "low" }),
+      chargers: [chargerAt(chargerKm)],
+      weather: null,
+      origin: ORIGIN,
+      destination,
+    });
+
+  it("20 % y 20,5 % dan el mismo resultado, sin volverse imposible", () => {
+    const whole = plan(20, 160);
+    const half = plan(20.5, 160);
+    expect(whole.departureCharge).toBeDefined();
+    expect(half.departureCharge).toBeDefined();
+    expect(half.firstChargerUnreachable).toBeUndefined();
+    expect(half.feasible).toBe(true);
+    expect(half.departureCharge!.requiredStartSoc).toBeLessThanOrEqual(100);
+  });
+
+  it("si hace falta salir al 100 % con SOC decimal, pide ese 100 %", () => {
+    // Busca el cargador más lejano al que se llega saliendo al 100 %.
+    let km = 10;
+    for (let k = 10; k < distance; k += 10) {
+      if (plan(100, k).departureCharge === undefined && !plan(100, k).firstChargerUnreachable) km = k;
+    }
+    const p = plan(20.5, km);
+    expect(p.firstChargerUnreachable).toBeUndefined();
+    expect(p.departureCharge?.requiredStartSoc).toBeLessThanOrEqual(100);
   });
 });
