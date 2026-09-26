@@ -1,5 +1,5 @@
 import { Flag, MapPin, Navigation } from "lucide-react";
-import { isDc } from "@/domain/charging";
+import { isDcSocket } from "@/domain/charging";
 import type { ChargeStop, ItineraryNode, RoutePlan } from "@/domain/types";
 import { CHARGER_SOURCE_LABEL, CONNECTOR_LABEL } from "@/domain/types";
 import { formatKm, formatKwh, formatKw, formatMinutes, formatPct, formatUpdatedAt } from "@/lib/format";
@@ -82,7 +82,7 @@ function ChargeLines({ stop }: { stop: ChargeStop }) {
       </div>
     );
   }
-  const slow = !stop.adapter && !isDc(stop.bestSocket.connector);
+  const slow = !stop.adapter && !isDcSocket(stop.bestSocket);
   return (
     <div className="space-y-1">
       {stop.adapter ? (

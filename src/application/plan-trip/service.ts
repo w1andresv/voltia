@@ -5,7 +5,7 @@ import type { WeatherProvider } from "@/domain/ports/weather";
 import type { ModelParameters } from "@/domain/ev/core/params";
 import { applyElevationProfile, elevationProbes } from "@/domain/ev/engines/elevation/engine";
 import { buildPlan, rankPlans } from "@/domain/planner";
-import { findStationsNearRoute } from "@/domain/stations/spatial";
+import { stationsNearRoutes } from "@/domain/ev/engines/corridor/engine";
 import { toPlanningCharger } from "@/domain/stations/to-charger";
 import type { PlanRequest, PlanResponse, RawRoute, RoutingEngine, TripConditions, Vehicle } from "@/domain/types";
 import { selectRoutes } from "./route-selection";
@@ -43,9 +43,6 @@ export class EVRoutePlanningService {
     const rawRoutes = routed.routes;
     warnings.push(...routed.warnings);
     const mid = rawRoutes[0]?.samples[Math.floor((rawRoutes[0].samples.length || 1) / 2)];
-    // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
-    // alternativa puede planear sus paradas.
-    const chargerQuery = rawRoutes.flatMap((r) => r.samples);
     const [routes, snapshot, dataset] = await Promise.all([
       Promise.all(rawRoutes.map((route) => this.withElevation(route))),
       mid && weather ? weather.current(mid) : Promise.resolve(null),
@@ -58,7 +55,13 @@ export class EVRoutePlanningService {
       if (s.stale) warnings.push(`Electrolineras de ${s.id}: usando el último dato disponible (fuente lenta o caída).`);
       else if (!s.ok && s.error) warnings.push(`No se pudo consultar electrolineras de ${s.id}.`);
     }
-    const chargers = findStationsNearRoute(dataset.stations, chargerQuery, params.corridor.maxFromRouteKm)
+    // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
+    // alternativa puede planear sus paradas. Cada ruta se evalúa por separado.
+    const chargers = stationsNearRoutes(
+      dataset.stations,
+      rawRoutes.map((r) => r.samples),
+      params.corridor.maxFromRouteKm,
+    )
       .filter((s) => s.planning.eligible)
       .map(toPlanningCharger);
 

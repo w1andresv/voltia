@@ -89,7 +89,9 @@ describe("provenance", () => {
 
 describe("ModelParameters", () => {
   it("conserva los valores del modelo actual", () => {
-    expect(MODEL_PARAMETERS.corridor).toEqual({ maxFromRouteKm: 12, preferredFromRouteKm: 5 });
+    expect(MODEL_PARAMETERS.corridor.maxFromRouteKm).toBe(12);
+    expect(MODEL_PARAMETERS.corridor.preferredFromRouteKm).toBe(5);
+    expect(MODEL_PARAMETERS.corridor.detourRoadFactor.value).toBe(1);
     expect(MODEL_PARAMETERS.planner).toEqual({
       maxStops: 7,
       minProgressKm: 4,

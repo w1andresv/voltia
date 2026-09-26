@@ -93,7 +93,8 @@ function mergeConnectors(records: NormalizedRecord[]): StationConnector[] {
       amperageA: sorted.find(c => c.amperageA != null)?.amperageA ?? null,
       status: sorted.find(c => c.status !== "unknown")?.status ?? "unknown",
       confirmed,
-      sources
+      sources,
+      powerOrigin: withPower.length ? "reported" : powerKw != null ? "assumed" : null,
     });
   }
   

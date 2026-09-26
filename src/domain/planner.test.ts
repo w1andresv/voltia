@@ -198,12 +198,16 @@ describe("buildPlan — adaptadores definidos", () => {
         connectors: ["ccs2", "type2"],
         dcMaxKw: 120,
         acMaxKw: 11,
+        adapters: [
+          { from: "gb_t", to: "ccs2" },
+          { from: "ccs1", to: "ccs2" },
+        ],
       }),
       conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
       chargers: [
         chargerAt(100, {
           sockets: [
-            { connector: "gb_t", powerKw: 50, count: 1 },
+            { connector: "gb_t", powerKw: 50, count: 1, current: "DC", currentOrigin: "reported" },
             { connector: "ccs1", powerKw: 40, count: 1 },
             { connector: "type2", powerKw: 11, count: 1 },
           ],
@@ -227,6 +231,28 @@ describe("buildPlan — adaptadores definidos", () => {
       true,
     );
     expect(stop.options?.[0]?.chargeMinutes).toBeLessThan(stop.options?.[2]?.chargeMinutes ?? 0);
+  });
+
+  it("sin adaptadores declarados, en la misma estación solo carga lento por Tipo 2 (C4)", () => {
+    const distance = 400;
+    const plan = buildPlan({
+      raw: straightRoute(distance),
+      vehicle: vehicle({ connectors: ["ccs2", "type2"], acMaxKw: 11 }),
+      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      chargers: [
+        chargerAt(100, {
+          sockets: [
+            { connector: "gb_t", powerKw: 50, count: 1, current: "DC", currentOrigin: "reported" },
+            { connector: "ccs1", powerKw: 40, count: 1 },
+            { connector: "type2", powerKw: 11, count: 1 },
+          ],
+        }),
+      ],
+      weather: null,
+      origin: ORIGIN,
+      destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+    });
+    expect(plan.stops.every((s) => !s.adapter && s.bestSocket.connector === "type2")).toBe(true);
   });
 
   it("un CHAdeMO sin adaptador definido no se usa", () => {

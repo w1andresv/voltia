@@ -15,6 +15,9 @@ function toSockets(station: StationForCharger, onlyEligible: boolean): ChargerSo
       connector: c.standard as ConnectorType,
       powerKw: c.powerKw ?? 0,
       count: c.quantity ?? 1,
+      current: c.current,
+      currentOrigin: c.currentOrigin,
+      powerOrigin: c.powerOrigin ?? null,
     });
   }
   return sockets;

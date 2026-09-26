@@ -16,7 +16,7 @@ import L from "leaflet";
 import { Flag, MapPin, Zap } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
-import { isDc } from "@/domain/charging";
+import { isDcSocket } from "@/domain/charging";
 import { CONNECTOR_LABEL, type Charger, type LatLon, type RouteSample } from "@/domain/types";
 import { mapPalette, socColor, type MapPalette } from "@/lib/map-colors";
 import { useColorScheme } from "@/components/shell/theme";
@@ -590,7 +590,7 @@ export function LeafletMap({
           icon={stopIcon(
             i + 1,
             colors,
-            st.adapter ? "adapter" : !isDc(st.bestSocket.connector) ? "slow" : "direct",
+            st.adapter ? "adapter" : !isDcSocket(st.bestSocket) ? "slow" : "direct",
           )}
           zIndexOffset={600}
         >
@@ -604,7 +604,7 @@ export function LeafletMap({
                   Necesario adaptador para carga rápida · {CONNECTOR_LABEL[st.adapter.from]} →{" "}
                   {CONNECTOR_LABEL[st.adapter.to]}
                 </div>
-              ) : !isDc(st.bestSocket.connector) ? (
+              ) : !isDcSocket(st.bestSocket) ? (
                 <div className="mt-1 text-xs font-medium text-warn">Carga lenta — sin adaptador</div>
               ) : null}
               <div className="mt-1 text-xs text-accent">

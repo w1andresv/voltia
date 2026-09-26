@@ -89,7 +89,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > menos parad
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > menos paradas, SOC 90 % 2`] = `"e2a0ecc20ffdfd17"`;
+exports[`caracterización del pipeline con proveedores sintéticos > menos paradas, SOC 90 % 2`] = `"84f5640639069660"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 1`] = `
 {
@@ -125,7 +125,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > modo más r
       "via": "Ruta 45A, Ruta 62",
     },
     {
-      "arrivalSoc": 17.6,
+      "arrivalSoc": 17.5,
       "departureCharge": undefined,
       "distanceKm": 128.7,
       "energyKwh": 20.5,
@@ -133,12 +133,12 @@ exports[`caracterización del pipeline con proveedores sintéticos > modo más r
       "id": "route-1",
       "initialSoc": 35,
       "label": "Ruta B",
-      "minSoc": 17.6,
+      "minSoc": 17.5,
       "noTolls": undefined,
       "stops": [
-        "s20 33.5→59.6 12 min",
+        "s20 33.6→59.5 12 min",
       ],
-      "totalMinutes": 156,
+      "totalMinutes": 155,
       "via": "Ruta 45A, Ruta 62",
     },
     {
@@ -184,7 +184,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > modo más r
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 2`] = `"0ccab937a8939263"`;
+exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 2`] = `"41f7684045719f31"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 1`] = `
 {
@@ -220,7 +220,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > más segura
       "via": "Ruta 45A, Ruta 62",
     },
     {
-      "arrivalSoc": 28.6,
+      "arrivalSoc": 28.5,
       "departureCharge": 7,
       "distanceKm": 128.7,
       "energyKwh": 20.5,
@@ -228,10 +228,10 @@ exports[`caracterización del pipeline con proveedores sintéticos > más segura
       "id": "route-1",
       "initialSoc": 22,
       "label": "Ruta B",
-      "minSoc": 20.5,
+      "minSoc": 20.6,
       "noTolls": undefined,
       "stops": [
-        "s20 20.5→70.6 24 min",
+        "s20 20.6→70.5 24 min",
       ],
       "totalMinutes": 167,
       "via": "Ruta 45A, Ruta 62",
@@ -279,4 +279,4 @@ exports[`caracterización del pipeline con proveedores sintéticos > más segura
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 2`] = `"d676d7bfdc0eecf6"`;
+exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 2`] = `"86bcdd37cefcf25e"`;

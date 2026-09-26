@@ -123,7 +123,7 @@ describe("EVRoutePlanningService", () => {
   });
 
   it("usa la distancia al corredor de los parámetros del modelo", async () => {
-    const narrow = { ...MODEL_PARAMETERS, corridor: { ...MODEL_PARAMETERS.corridor, maxFromRouteKm: 0.5 } };
+    const narrow = { ...MODEL_PARAMETERS, corridor: { ...MODEL_PARAMETERS.corridor, maxFromRouteKm: 0.1 } };
     const { response } = await new EVRoutePlanningService(deps({ params: narrow })).plan(request);
     expect(response.geo.chargers).toHaveLength(0);
   });

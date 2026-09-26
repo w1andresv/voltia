@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { currentFromStandard, defaultKwForStandard, standardizeConnector } from "./connectors";
 import type { ConsolidatedStation, StationConnector } from "./model";
-import { findStationsNearRoute } from "./spatial";
 import {
   addressSimilarity,
   diceTrigrams,
@@ -109,7 +108,9 @@ describe("standardizeConnector", () => {
 
 describe("currentFromStandard / defaultKwForStandard", () => {
   it("clasifica la corriente por estándar", () => {
-    for (const s of ["ccs2", "ccs1", "chademo", "nacs", "gb_t"] as const) expect(currentFromStandard(s)).toBe("DC");
+    for (const s of ["ccs2", "ccs1", "chademo", "nacs"] as const) expect(currentFromStandard(s)).toBe("DC");
+    // GB/T existe en AC y en DC: sin dato de la fuente no se asume (C4).
+    expect(currentFromStandard("gb_t")).toBeNull();
     for (const s of ["type2", "type1", "schuko", "tesla_destination"] as const) expect(currentFromStandard(s)).toBe("AC");
     expect(currentFromStandard("other")).toBeNull();
   });
@@ -159,26 +160,6 @@ function station(overrides: Partial<ConsolidatedStation> = {}): ConsolidatedStat
   };
 }
 
-describe("findStationsNearRoute", () => {
-  const route = [
-    { lat: 7, lon: -73 },
-    { lat: 7.1, lon: -73 },
-  ];
-
-  it("sin ruta o sin estaciones no devuelve nada", () => {
-    expect(findStationsNearRoute([station()], [], 12)).toEqual([]);
-    expect(findStationsNearRoute([], route, 12)).toEqual([]);
-  });
-
-  it("incluye las que están a menos de maxKm y excluye las lejanas", () => {
-    const near = station({ id: "near", lat: 7.05, lon: -73.05 }); // ~5,5 km
-    const edge = station({ id: "edge", lat: 7.05, lon: -73.15 }); // ~16,5 km: dentro de la caja, fuera del radio
-    const far = station({ id: "far", lat: 8, lon: -73 }); // fuera de la caja
-    const out = findStationsNearRoute([near, edge, far], route, 12).map((s) => s.id);
-    expect(out).toEqual(["near"]);
-  });
-});
-
 describe("toPlanningCharger / toDisplayCharger", () => {
   it("convierte una estación elegible con sus conectores confirmados", () => {
     const c = toPlanningCharger(
@@ -207,7 +188,9 @@ describe("toPlanningCharger / toDisplayCharger", () => {
       updatedAt: "2026-09-01T00:00:00Z",
       verified: true,
     });
-    expect(c.sockets).toEqual([{ connector: "ccs2", powerKw: 60, count: 2 }]);
+    expect(c.sockets).toEqual([
+      { connector: "ccs2", powerKw: 60, count: 2, current: "DC", currentOrigin: "standard", powerOrigin: null },
+    ]);
   });
 
   it("no convierte una estación no elegible para planificar", () => {
@@ -230,7 +213,7 @@ describe("toPlanningCharger / toDisplayCharger", () => {
     expect(c.operator).toBe("Red X");
     expect(c.available).toBe(false);
     expect(c.verified).toBe(false);
-    expect(c.sockets).toEqual([
+    expect(c.sockets.map(({ connector, powerKw, count }) => ({ connector, powerKw, count }))).toEqual([
       { connector: "ccs2", powerKw: 0, count: 1 },
       { connector: "type2", powerKw: 60, count: 2 },
     ]);

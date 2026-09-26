@@ -1,10 +1,11 @@
 import { compareByHierarchy } from "./road-hierarchy";
-import { chargeTimeMinutes, effectiveChargeKw, isDc, routePlugs, routeSocket } from "./charging";
+import { FLAT_CURVE, chargeTimeMinutes } from "./ev/engines/charging/curve";
+import { routePlugs, routeSocket } from "./ev/engines/compatibility/engine";
+import { placeOnRoute } from "./ev/engines/corridor/engine";
 import { STYLE_SPEED_FACTOR, annotateEnergy, energyMode, segmentEnergyKwh } from "./energy";
 import type { EnergySample } from "./ev/contracts/energy";
 import type { SocEvent } from "./ev/contracts/soc";
 import { legSoc, requiredStartSoc, simulateSoc } from "./ev/engines/soc/simulate";
-import { haversineKm } from "./geo";
 import type {
   ChargeChoice,
   ChargeStop,
@@ -39,10 +40,6 @@ const DETOUR_SPEED_KMH = MODEL_PARAMETERS.planner.detourSpeedKmh;
  * objetivo puede dar 19,999… al restar el tramo por redondeo de punto flotante.
  */
 const ARRIVE_TOLERANCE = MODEL_PARAMETERS.planner.socTolerancePct;
-const FLAT_CURVE = [
-  { soc: 0, powerFactor: 1 },
-  { soc: 100, powerFactor: 1 },
-];
 
 function rangeFromEnergy(vehicle: Vehicle, kwh: number): number {
   if (!(vehicle.batteryKwh > 0)) return 0;
@@ -58,29 +55,13 @@ type EnergyCtx = {
   originAltitudeM?: number;
 };
 
-export function attachChargersToRoute(
-  chargers: Charger[],
-  samples: { lat: number; lon: number; km: number }[],
-): Charger[] {
-  return chargers
-    .filter((c) => isVerifiedForPlanning(c))
-    .map((c) => {
-      let nearestKm = 0;
-      let nearestSampleIndex = 0;
-      let min = Infinity;
-      for (let i = 0; i < samples.length; i++) {
-        const s = samples[i]!;
-        const d = haversineKm(c, s);
-        if (d < min) {
-          min = d;
-          nearestKm = s.km;
-          nearestSampleIndex = i;
-        }
-      }
-      return { ...c, detourKm: min * 2, fromRouteKm: min, nearestKm, nearestSampleIndex };
-    })
-    .filter((c) => (c.fromRouteKm ?? 99) <= MAX_FROM_ROUTE_KM)
-    .sort((a, b) => (a.nearestKm ?? 0) - (b.nearestKm ?? 0));
+/** Estaciones verificadas ubicadas sobre la ruta por el corredor (D7). */
+function placeChargers(chargers: Charger[], samples: { lat: number; lon: number; km: number }[]): Charger[] {
+  return placeOnRoute(
+    chargers.filter((c) => isVerifiedForPlanning(c)),
+    samples,
+    { maxKm: MAX_FROM_ROUTE_KM, detourRoadFactor: MODEL_PARAMETERS.corridor.detourRoadFactor.value },
+  );
 }
 
 function socAfter(soc: number, energyKwh: number, capacity: number): number {
@@ -141,6 +122,8 @@ interface Candidate {
   socket: ChargerSocket;
   adapter: { from: ConnectorType; to: ConnectorType } | null;
   socketKw: number;
+  /** Carga rápida (DC) o lenta (AC). */
+  dc: boolean;
   sIdx: number;
   fromRouteKm: number;
   detourKwh: number;
@@ -275,7 +258,8 @@ function pickStops(args: {
         arriveSoc: hit.arrive,
         socket: plug.socket,
         adapter: plug.adapter,
-        socketKw: effectiveChargeKw(plug.socket, vehicle),
+        socketKw: plug.powerKw,
+        dc: plug.dc,
         sIdx: hit.sIdx,
         fromRouteKm: fromRouteKmOf(ch),
         detourKwh: hit.detourKwh,
@@ -298,12 +282,12 @@ function pickStops(args: {
       else if (close.length) pool = close;
     }
     const fastOk = pool.filter(
-      (c) => isDc(c.socket.connector) && continuationOk(c.sIdx, maxTravel, c.charger.id),
+      (c) => c.dc && continuationOk(c.sIdx, maxTravel, c.charger.id),
     );
     if (fastOk.length) pool = fastOk;
     else {
       const slowOk = pool.filter(
-        (c) => !isDc(c.socket.connector) && continuationOk(c.sIdx, maxTravel, c.charger.id),
+        (c) => !c.dc && continuationOk(c.sIdx, maxTravel, c.charger.id),
       );
       if (slowOk.length) pool = slowOk;
     }
@@ -345,7 +329,7 @@ function pickStops(args: {
   };
 
   const chooseDepart = (pick: Candidate): number => {
-    if (!isDc(pick.socket.connector)) return minimumDepart(pick);
+    if (!pick.dc) return minimumDepart(pick);
 
     const destNeed = neededDepartSoc({
       samples,
@@ -392,7 +376,8 @@ function pickStops(args: {
         arriveSoc: hit.arrive,
         socket: plug.socket,
         adapter: plug.adapter,
-        socketKw: effectiveChargeKw(plug.socket, vehicle),
+        socketKw: plug.powerKw,
+        dc: plug.dc,
         sIdx: hit.sIdx,
         fromRouteKm: fromRouteKmOf(ch),
         detourKwh: hit.detourKwh,
@@ -452,7 +437,7 @@ function pickStops(args: {
     });
 
     const pick = pool[0]!;
-    const slow = !isDc(pick.socket.connector);
+    const slow = !pick.dc;
     let chargeTo = chooseDepart(pick);
     if (!slow) {
       chargeTo = Math.min(100, Math.max(chargeTo, pick.arriveSoc + 8));
@@ -483,9 +468,9 @@ function pickStops(args: {
     const reachesNext = continuationOk(pick.sIdx, maxTravel, pick.charger.id);
     const options: ChargeChoice[] = routePlugs(pick.charger, vehicle)
       .map((plug) => {
-        const acMode = !isDc(plug.socket.connector);
+        const acMode = !plug.dc;
         const leave = acMode ? minDepartSoc : chargeTo;
-        const chargeKw = effectiveChargeKw(plug.socket, vehicle);
+        const chargeKw = plug.powerKw;
         const energyAddedKwh = Math.max(0, ((leave - pick.arriveSoc) / 100) * cap);
         return {
           mode: plug.adapter ? ("adapter" as const) : acMode ? ("ac" as const) : ("direct" as const),
@@ -764,7 +749,7 @@ export function buildPlan(args: {
       : s.speedKmh * styleSpeed,
   }));
 
-  const attached = attachChargersToRoute(args.chargers, samplesPre);
+  const attached = placeChargers(args.chargers, samplesPre);
   // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
   const energySamples = annotateEnergy(samplesPre, ctx);
   const cap = Math.max(vehicle.batteryKwh, 1);

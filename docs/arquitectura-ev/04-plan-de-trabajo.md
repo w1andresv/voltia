@@ -104,14 +104,15 @@ Dividida en dos (ADR-0006).
 
 - **Objetivo:** una sola proyección de estaciones y compatibilidad con los adaptadores que el usuario lleva (C4, C7).
 - **Tareas:**
-  - [ ] `engines/corridor/engine.ts`: distancia contra segmentos, desvío con fuente (`calculated` si viene de la matriz, `estimated` si no). Reemplaza `stations/spatial.ts` y `attachChargersToRoute`.
-  - [ ] `engines/compatibility/engine.ts`: `vehicle.adapters ∩ VERIFIED_DC_ADAPTERS`, corriente del conector, límite de potencia del adaptador.
-  - [ ] `StationConnector.powerOrigin` (`reported`/`assumed`) en `merge.ts`, y `current` y `powerOrigin` conservados en `toPlanningCharger`.
-  - [ ] Casillas "llevo este adaptador" en `vehicle-editor.tsx`.
-  - [ ] `engines/charging/curve.ts` (ya con el arreglo de C3), integración cada 0,5 % de SOC y `connectionOverheadMin`.
+  - [x] `engines/corridor/engine.ts`: distancia contra segmentos, desvío con fuente (`calculated` si viene de la matriz, `estimated` si no). Reemplaza `stations/spatial.ts` y `attachChargersToRoute`.
+  - [x] `engines/compatibility/engine.ts`: `vehicle.adapters ∩ VERIFIED_DC_ADAPTERS`, corriente del conector, límite de potencia del adaptador.
+  - [x] `StationConnector.powerOrigin` (`reported`/`assumed`) en `merge.ts`, y `current` y `powerOrigin` conservados en `toPlanningCharger`.
+  - [x] Casillas "llevo este adaptador" en `vehicle-editor.tsx`.
+  - [x] `engines/charging/curve.ts` (ya con el arreglo de C3), integración cada 0,5 % de SOC y `connectionOverheadMin`.
 - **Tests:** CCS2 / CCS1 / GB/T con y sin adaptador; GB/T AC no usa adaptador DC; potencia asumida marcada.
 - **Cierre:** C4 y C7 resueltos; `spatial.ts` y `attachChargersToRoute` eliminados.
 - **Especificación:** F5 (corredor y compatibilidad).
+- **Hecho:** `engines/corridor` (proyección contra segmentos, cada ruta por separado, desvío con `detourRoadFactor` estimado = 1 hasta tener matriz), `engines/compatibility` (adaptadores del usuario ∩ verificados, GB/T sin corriente reportada no es DC, límite del adaptador, `limitedBy` y `powerSource`), `engines/charging/curve.ts` (pasos de 0,5 % y `connectionOverheadMin` = 0 hasta calibrar). `charging.ts` queda como reexportación. Pendiente: desvíos medidos con la matriz de Mapbox (necesita red; va con F8).
 
 ### F5 · Energía v2 y perfil de velocidad
 
@@ -187,7 +188,7 @@ Dividida en dos (ADR-0006).
 | F1 | ✅ Hecha (igualdad con proveedores sintéticos; con la cassette real al grabarla) | ver `git log --grep "^F1:"` |
 | F2 | F2a ✅ hecha (sin cambio de resultados). F2b pendiente de B6 | ver `git log --grep "^F2"` |
 | F3 | ✅ Hecha | ver `git log --grep "^F3:"` |
-| F4 | Pendiente | — |
+| F4 | ✅ Hecha (desvío por matriz pendiente) | ver `git log --grep "^F4:"` |
 | F5 | Pendiente | — |
 | F6 | Pendiente | — |
 | F7 | Pendiente | — |

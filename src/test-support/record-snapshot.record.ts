@@ -44,7 +44,7 @@ it(
 
     const { createPlanningService } = await import("@/application/container");
     const { getStoredDataset } = await import("@/infrastructure/stations/store");
-    const { findStationsNearRoute } = await import("@/domain/stations/spatial");
+    const { stationsNearRoutes } = await import("@/domain/ev/engines/corridor/engine");
     const { MAX_FROM_ROUTE_KM } = await import("@/domain/planner");
 
     let dataset: StationDataset | null = null;
@@ -62,9 +62,9 @@ it(
 
     const stored = dataset as StationDataset | null;
     if (!stored) throw new Error("No se cargó el dataset de electrolineras.");
-    const corridor = findStationsNearRoute(
+    const corridor = stationsNearRoutes(
       stored.stations,
-      response.geo.routes.flatMap((r) => r.samples),
+      response.geo.routes.map((r) => r.samples),
       MAX_FROM_ROUTE_KM,
     ).map(sanitizeStation);
 

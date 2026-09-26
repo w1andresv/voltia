@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
-  bestSocket,
   chargeCurveSeries,
   chargeTimeMinutes,
-  compatibleSockets,
   DEFAULT_CURVE,
   effectiveChargeKw,
   isDc,
+  isDcSocket,
   routePlugs,
   routeSocket,
   lerpFactor,
   powerKwAtSoc,
+  socketCurrent,
+  usableAdapters,
 } from "./charging";
 import type { Charger, ChargerSocket, Vehicle } from "./types";
 
@@ -48,15 +49,25 @@ function charger(overrides: Partial<Charger> = {}): Charger {
   };
 }
 
-describe("isDc", () => {
-  it("clasifica CCS2/CCS1/CHAdeMO/NACS/GB-T como DC", () => {
+describe("isDc / socketCurrent", () => {
+  it("CCS2/CCS1/CHAdeMO/NACS son DC y Tipo 2 es AC", () => {
     expect(isDc("ccs2")).toBe(true);
     expect(isDc("chademo")).toBe(true);
     expect(isDc("nacs")).toBe(true);
+    expect(isDc("type2")).toBe(false);
   });
 
-  it("clasifica Tipo 2 como AC", () => {
-    expect(isDc("type2")).toBe(false);
+  it("GB/T existe en AC y DC: sin dato reportado no se asume ninguna (C4)", () => {
+    expect(isDc("gb_t")).toBe(false);
+    expect(socketCurrent({ connector: "gb_t", powerKw: 50, count: 1 })).toBeNull();
+    expect(socketCurrent({ connector: "gb_t", powerKw: 50, count: 1, current: "DC", currentOrigin: "standard" })).toBeNull();
+    expect(socketCurrent({ connector: "gb_t", powerKw: 50, count: 1, current: "DC", currentOrigin: "reported" })).toBe("DC");
+    expect(socketCurrent({ connector: "gb_t", powerKw: 7, count: 1, current: "AC", currentOrigin: "reported" })).toBe("AC");
+  });
+
+  it("la corriente reportada de la toma manda sobre el estándar", () => {
+    expect(isDcSocket({ connector: "type2", powerKw: 43, count: 1, current: "AC" })).toBe(false);
+    expect(isDcSocket({ connector: "ccs2", powerKw: 150, count: 1 })).toBe(true);
   });
 });
 
@@ -110,60 +121,80 @@ describe("chargeTimeMinutes", () => {
   });
 });
 
-describe("compatibleSockets / bestSocket", () => {
-  it("filtra los conectores que el vehículo no soporta", () => {
-    const c = charger({ sockets: [{ connector: "chademo", powerKw: 50, count: 1 }] });
-    expect(compatibleSockets(c, vehicle())).toHaveLength(0);
-  });
+const GBT_DC = { connector: "gb_t", powerKw: 50, count: 1, current: "DC", currentOrigin: "reported" } as const;
+const CARRIED = [
+  { from: "gb_t", to: "ccs2" },
+  { from: "ccs1", to: "ccs2" },
+] as const;
 
-  it("elige el socket DC de mayor potencia entre los compatibles", () => {
-    const c = charger({
-      sockets: [
-        { connector: "ccs2", powerKw: 50, count: 1 },
-        { connector: "ccs2", powerKw: 150, count: 1 },
+describe("usableAdapters", () => {
+  it("solo los que el usuario lleva, de la lista verificada y hacia un conector del vehículo", () => {
+    const v = vehicle({
+      connectors: ["ccs2"],
+      adapters: [
+        { from: "gb_t", to: "ccs2" },
+        { from: "chademo", to: "ccs2" },
+        { from: "ccs1", to: "nacs" },
       ],
     });
-    const best = bestSocket(c, vehicle());
-    expect(best?.powerKw).toBe(150);
-  });
-
-  it("da null cuando no hay ningún socket compatible", () => {
-    const c = charger({ sockets: [{ connector: "chademo", powerKw: 50, count: 1 }] });
-    expect(bestSocket(c, vehicle())).toBeNull();
+    expect(usableAdapters(v)).toEqual([{ from: "gb_t", to: "ccs2" }]);
+    expect(usableAdapters(vehicle())).toEqual([]);
   });
 });
 
 describe("routePlugs", () => {
-  it("ofrece GB/T y CCS1 hacia CCS2, y no inventa CHAdeMO", () => {
-    const c = charger({
-      sockets: [
-        { connector: "gb_t", powerKw: 50, count: 1 },
-        { connector: "ccs1", powerKw: 40, count: 1 },
-        { connector: "chademo", powerKw: 50, count: 1 },
-      ],
-    });
-    const plugs = routePlugs(c, vehicle({ connectors: ["ccs2"] }));
-    expect(plugs.map((p) => p.socket.connector)).toEqual(["gb_t", "ccs1"]);
-    expect(plugs.map((p) => p.adapter)).toEqual([
-      { from: "gb_t", to: "ccs2" },
-      { from: "ccs1", to: "ccs2" },
-    ]);
-    expect(routeSocket(c, vehicle({ connectors: ["ccs2"] }))?.socket.powerKw).toBe(50);
+  it("sin adaptadores declarados, no propone GB/T ni CCS1 (C4)", () => {
+    const c = charger({ sockets: [GBT_DC, { connector: "ccs1", powerKw: 40, count: 1 }] });
+    expect(routePlugs(c, vehicle({ connectors: ["ccs2"] }))).toEqual([]);
   });
 
-  it("suma el CCS2 directo y el AC compatible cuando existen", () => {
+  it("con los adaptadores que el usuario lleva, ofrece GB/T y CCS1 hacia CCS2, y no inventa CHAdeMO", () => {
+    const c = charger({
+      sockets: [GBT_DC, { connector: "ccs1", powerKw: 40, count: 1 }, { connector: "chademo", powerKw: 50, count: 1 }],
+    });
+    const v = vehicle({ connectors: ["ccs2"], adapters: [...CARRIED] });
+    const plugs = routePlugs(c, v);
+    expect(plugs.map((p) => p.socket.connector)).toEqual(["gb_t", "ccs1"]);
+    expect(plugs.map((p) => p.adapter)).toEqual([...CARRIED]);
+    expect(routeSocket(c, v)?.socket.powerKw).toBe(50);
+  });
+
+  it("un GB/T sin corriente conocida no se usa con adaptador DC", () => {
+    const c = charger({ sockets: [{ connector: "gb_t", powerKw: 50, count: 1 }] });
+    expect(routePlugs(c, vehicle({ connectors: ["ccs2"], adapters: [...CARRIED] }))).toEqual([]);
+  });
+
+  it("el adaptador limita la potencia", () => {
+    const c = charger({ sockets: [{ ...GBT_DC, powerKw: 120 }] });
+    const plug = routeSocket(c, vehicle({ connectors: ["ccs2"], adapters: [{ from: "gb_t", to: "ccs2", maxPowerKw: 60 }] }));
+    expect(plug?.powerKw).toBe(60);
+    expect(plug?.limitedBy).toBe("adapter");
+  });
+
+  it("indica qué limita la potencia y si la potencia de la toma es asumida (C7)", () => {
+    const reported = routeSocket(
+      charger({ sockets: [{ connector: "ccs2", powerKw: 350, count: 1, powerOrigin: "reported" }] }),
+      vehicle({ dcMaxKw: 120 }),
+    );
+    expect(reported).toMatchObject({ powerKw: 120, limitedBy: "vehicle", powerSource: "reported", dc: true });
+    const assumed = routeSocket(charger({ sockets: [{ connector: "ccs2", powerKw: 50, count: 1 }] }), vehicle());
+    expect(assumed).toMatchObject({ powerKw: 50, limitedBy: "station", powerSource: "assumed" });
+  });
+
+  it("suma el CCS2 directo, el adaptador y la mejor toma AC", () => {
     const c = charger({
       sockets: [
         { connector: "ccs2", powerKw: 150, count: 1 },
-        { connector: "gb_t", powerKw: 50, count: 1 },
+        GBT_DC,
+        { connector: "type2", powerKw: 7, count: 1 },
         { connector: "type2", powerKw: 11, count: 1 },
       ],
     });
-    const plugs = routePlugs(c, vehicle({ connectors: ["ccs2", "type2"] }));
-    expect(plugs.map((p) => [p.socket.connector, p.adapter?.from ?? "direct"])).toEqual([
-      ["ccs2", "direct"],
-      ["gb_t", "gb_t"],
-      ["type2", "direct"],
+    const plugs = routePlugs(c, vehicle({ connectors: ["ccs2", "type2"], adapters: [...CARRIED] }));
+    expect(plugs.map((p) => [p.socket.connector, p.adapter?.from ?? "direct", p.powerKw, p.dc])).toEqual([
+      ["ccs2", "direct", 120, true],
+      ["gb_t", "gb_t", 50, true],
+      ["type2", "direct", 11, false],
     ]);
   });
 

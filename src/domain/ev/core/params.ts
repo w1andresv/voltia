@@ -32,6 +32,14 @@ export interface ModelParameters {
     maxFromRouteKm: number;
     /** Distancia a la ruta que se prefiere al elegir parada. */
     preferredFromRouteKm: number;
+    /** Desvío estimado = 2 × distancia a la ruta × este factor (sin matriz de rutas). */
+    detourRoadFactor: SourcedValue<number>;
+  };
+  charging: {
+    /** Minutos fijos por parada (conectar, autorizar). 0 hasta calibrar. */
+    connectionOverheadMin: SourcedValue<number>;
+    /** Paso de la integración de la curva de carga, en puntos de SOC. */
+    integrationStepPct: number;
   };
   planner: {
     /** Tope de seguridad de paradas por ruta. */
@@ -76,6 +84,11 @@ export const MODEL_PARAMETERS: ModelParameters = {
   corridor: {
     maxFromRouteKm: 12,
     preferredFromRouteKm: 5,
+    detourRoadFactor: sourced(1, "estimated", { notes: "Línea recta ida y vuelta; se reemplaza con la matriz de rutas." }),
+  },
+  charging: {
+    connectionOverheadMin: sourced(0, "configurable", { notes: "Sin dato medido; calibrar con paradas reales." }),
+    integrationStepPct: 0.5,
   },
   planner: {
     maxStops: 7,

@@ -322,12 +322,36 @@ function VehicleForm({
       {(() => {
         const offered = VERIFIED_DC_ADAPTERS.filter((a) => value.connectors.includes(a.to));
         if (!offered.length) return null;
+        const carried = value.adapters ?? [];
+        const has = (a: { from: ConnectorType; to: ConnectorType }) =>
+          carried.some((c) => c.from === a.from && c.to === a.to);
         return (
-          <p className="text-xs leading-relaxed text-muted">
-            Adaptadores que la ruta puede proponer, porque están definidos:{" "}
-            {offered.map((a) => `${CONNECTOR_LABEL[a.from]} → ${CONNECTOR_LABEL[a.to]}`).join(", ")}. El resto de
-            combinaciones no se asume.
-          </p>
+          <div className="grid gap-1.5">
+            <div className="text-xs text-muted">Adaptadores que llevas en el carro</div>
+            {offered.map((a) => {
+              const on = has(a);
+              return (
+                <label key={`${a.from}-${a.to}`} className="flex min-h-11 items-center gap-2 text-sm text-fg">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-accent"
+                    checked={on}
+                    onChange={() =>
+                      set({
+                        adapters: on
+                          ? carried.filter((c) => !(c.from === a.from && c.to === a.to))
+                          : [...carried, { from: a.from, to: a.to }],
+                      })
+                    }
+                  />
+                  {CONNECTOR_LABEL[a.from]} → {CONNECTOR_LABEL[a.to]}
+                </label>
+              );
+            })}
+            <p className="text-xs leading-relaxed text-muted">
+              La ruta solo propone estaciones con adaptador si marcas que lo llevas. Otras combinaciones no se asumen.
+            </p>
+          </div>
         );
       })()}
       <div className="flex justify-end gap-2 pt-2">

@@ -33,8 +33,10 @@ export function currentFromStandard(standard: ExtendedConnectorType): CurrentTyp
     case "ccs1":
     case "chademo":
     case "nacs":
-    case "gb_t":
       return "DC";
+    // GB/T existe en AC y en DC: sin dato de la fuente no se asume ninguna (C4).
+    case "gb_t":
+      return null;
     case "type2":
     case "type1":
     case "schuko":

@@ -2,7 +2,7 @@ import { Check, TriangleAlert } from "lucide-react";
 import { formatRoadMix } from "@/domain/road-hierarchy";
 import { HIGHLIGHT_LABEL, routeHighlights } from "@/domain/route-highlights";
 import { CONNECTOR_LABEL, type RoutePlan } from "@/domain/types";
-import { isDc } from "@/domain/charging";
+import { isDcSocket } from "@/domain/charging";
 import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -109,7 +109,7 @@ export function RouteCompare({ plans }: { plans: RoutePlan[] }) {
                   <div>
                     {p.stops[0].adapter
                       ? `Necesario adaptador para carga rápida (${CONNECTOR_LABEL[p.stops[0].adapter.from]} → ${CONNECTOR_LABEL[p.stops[0].adapter.to]}) · `
-                      : !isDc(p.stops[0].bestSocket.connector)
+                      : !isDcSocket(p.stops[0].bestSocket)
                         ? "Carga lenta — sin adaptador · "
                         : ""}
                     {p.stops[0].charger.name}: {formatPct(p.stops[0].arriveSoc)} →{" "}

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { planTripFn, reversePlaceFn } from "@/server/actions/plan";
 import { ChargerFacts } from "./charger-facts";
 import { DEMO_TRIPS, usePlanner } from "@/lib/store";
-import { isDc } from "@/domain/charging";
+import { isDcSocket } from "@/domain/charging";
 import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { useStationDataset } from "@/components/stations/use-station-dataset";
@@ -468,7 +468,7 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
                 · Necesario adaptador para carga rápida ({CONNECTOR_LABEL[st.adapter.from]} →{" "}
                 {CONNECTOR_LABEL[st.adapter.to]})
               </span>
-            ) : !isDc(st.bestSocket.connector) ? (
+            ) : !isDcSocket(st.bestSocket) ? (
               <span className="text-warn"> · Carga lenta — sin adaptador · {formatKw(st.chargeKw)}</span>
             ) : null}
             <span className="mt-2 grid grid-cols-3 gap-2">

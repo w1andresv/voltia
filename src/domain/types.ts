@@ -58,6 +58,12 @@ export interface ChargerSocket {
   connector: ConnectorType;
   powerKw: number;
   count: number;
+  /** Tipo de corriente, si se conoce (F4). */
+  current?: "AC" | "DC" | null;
+  /** "reported": lo dice una fuente; "standard": se dedujo del estándar del conector. */
+  currentOrigin?: "reported" | "standard" | null;
+  /** "reported": potencia de una fuente; "assumed": valor por defecto del estándar (C7). */
+  powerOrigin?: "reported" | "assumed" | null;
 }
 
 export interface Charger {

@@ -18,6 +18,8 @@ export interface StationConnector {
   status: StationAvailability;
   confirmed: boolean;
   sources: SourceId[];
+  /** "reported": alguna fuente dio la potencia; "assumed": se tomó la del estándar (C7). La llena merge.ts. */
+  powerOrigin?: "reported" | "assumed" | null;
 }
 
 export interface SourceRef {
