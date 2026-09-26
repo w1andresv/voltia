@@ -18,7 +18,8 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "diagnose:route": "node scripts/diagnose-route.mjs"
+    "diagnose:route": "node scripts/diagnose-route.mjs",
+    "snapshot:record": "vitest run --config vitest.record.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.0",

@@ -1,6 +1,6 @@
 "use server";
 
-import type { Place, PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/domain/types";
+import type { Place, PlanRequest, PlanResponse } from "@/domain/types";
 import { PlanRequestSchema } from "@/domain/schemas";
 import { checkRateLimit, getClientIp } from "@/infrastructure/rate-limit";
 
@@ -26,71 +26,25 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
   const startedAt = Date.now();
 
   try {
-    const { fetchRoutes } = await import("@/infrastructure/providers/routing");
-    const { applyElevationAll } = await import("@/infrastructure/providers/elevation.openmeteo");
-    const { fetchWeather } = await import("@/infrastructure/providers/weather.openmeteo");
+    const { runPlanPipeline } = await import("@/server/plan-pipeline");
     const { getStationDataset } = await import("@/infrastructure/stations/service");
-    const { findStationsNearRoute } = await import("@/domain/stations/spatial");
-    const { toPlanningCharger } = await import("@/domain/stations/to-charger");
-    const { buildPlan, rankPlans, MAX_FROM_ROUTE_KM } = await import("@/domain/planner");
-
-    const waypoints = [data.origin, ...data.waypoints, data.destination];
-    const warnings: string[] = [];
-    const routed = await fetchRoutes(waypoints);
-    const rawRoutes = routed.routes;
-    warnings.push(...routed.warnings);
-    const mid = rawRoutes[0]?.samples[Math.floor((rawRoutes[0].samples.length || 1) / 2)];
-    // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
-    // alternativa puede planear sus paradas. Las sondas no se repiten donde se solapan.
-    const chargerQuery = rawRoutes.flatMap((r) => r.samples);
-    const [routes, weather, dataset] = await Promise.all([
-      applyElevationAll(rawRoutes),
-      mid ? fetchWeather(mid) : Promise.resolve(null),
-      getStationDataset(),
-    ]);
-    if (routes.some((r) => r.elevation.maxM === 0 && r.elevation.minM === 0 && r.distanceKm > 5)) {
-      warnings.push("No se obtuvo el perfil de elevación. El consumo puede estar subestimado en montaña.");
-    }
-    for (const s of dataset.sources) {
-      if (s.stale) warnings.push(`Electrolineras de ${s.id}: usando el último dato disponible (fuente lenta o caída).`);
-      else if (!s.ok && s.error) warnings.push(`No se pudo consultar electrolineras de ${s.id}.`);
-    }
-    const chargers = findStationsNearRoute(dataset.stations, chargerQuery, MAX_FROM_ROUTE_KM)
-      .filter((s) => s.planning.eligible)
-      .map(toPlanningCharger);
-
-    const built = routes.map((raw) =>
-      buildPlan({
-        raw,
-        vehicle: data.vehicle as Vehicle,
-        conditions: data.conditions as TripConditions,
-        chargers,
-        weather,
-        origin: data.origin,
-        destination: data.destination,
-      }),
-    );
-    const ranked = rankPlans(built, data.conditions.planningMode);
+    const { response, engine, chargerCount } = await runPlanPipeline(data, getStationDataset);
 
     console.log(
       "[plan-trip]",
       JSON.stringify({
         ms: Date.now() - startedAt,
-        engine: routed.engine,
-        routes: routes.length,
-        distanceKm: Math.round(routes[0]?.distanceKm ?? 0),
-        chargers: chargers.length,
-        stationsVersion: dataset.version,
-        warnings: warnings.length,
-        weather: weather != null,
+        engine,
+        routes: response.geo.routes.length,
+        distanceKm: Math.round(response.geo.routes[0]?.distanceKm ?? 0),
+        chargers: chargerCount,
+        stationsVersion: response.geo.stationsVersion,
+        warnings: response.geo.warnings.length,
+        weather: response.geo.weather != null,
       }),
     );
 
-    return {
-      geo: { routes, chargers, weather, warnings, stationsVersion: dataset.version },
-      plans: ranked,
-      selectedId: ranked[0]?.id ?? "",
-    };
+    return response;
   } catch (error) {
     console.error(
       "[plan-trip] failed",
