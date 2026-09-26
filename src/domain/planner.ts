@@ -36,6 +36,11 @@ const PREFERRED_FROM_ROUTE_KM = 5;
 export const MAX_FROM_ROUTE_KM = 12;
 const MIN_PROGRESS_KM = 4;
 const DETOUR_SPEED_KMH = 50;
+/**
+ * Margen para comparar SOC calculados: una salida calculada para llegar justo al
+ * objetivo puede dar 19,999… al restar el tramo por redondeo de punto flotante.
+ */
+const ARRIVE_TOLERANCE = 1e-4;
 const FLAT_CURVE = [
   { soc: 0, powerFactor: 1 },
   { soc: 100, powerFactor: 1 },
@@ -194,7 +199,7 @@ function pickStops(args: {
   const stops: ChargeStop[] = [];
 
   const energyToDest = energyBetween(samples, 0, destIdx);
-  if (socAfter(soc, energyToDest, cap) >= arrivalTarget) {
+  if (socAfter(soc, energyToDest, cap) >= arrivalTarget - ARRIVE_TOLERANCE) {
     return { stops: [], feasible: true };
   }
 
@@ -212,7 +217,8 @@ function pickStops(args: {
   }
 
   const canReachDestFrom = (fromIdx: number, fromSoc: number, extraKwh = 0) =>
-    socAfter(fromSoc, energyBetween(samples, fromIdx, destIdx) + extraKwh, cap) >= arrivalTarget;
+    socAfter(fromSoc, energyBetween(samples, fromIdx, destIdx) + extraKwh, cap) >=
+    arrivalTarget - ARRIVE_TOLERANCE;
 
   const continuationOk = (fromIdx: number, fromSoc: number, skipId: string) => {
     if (canReachDestFrom(fromIdx, fromSoc)) return true;
@@ -539,7 +545,7 @@ function pickStops(args: {
   }
 
   const finalSoc = socAfter(soc, energyBetween(samples, idx, destIdx), cap);
-  if (finalSoc < arrivalTarget && !conditions.allowBelowSafety) {
+  if (finalSoc < arrivalTarget - ARRIVE_TOLERANCE && !conditions.allowBelowSafety) {
     return {
       stops,
       feasible: false,
@@ -590,8 +596,6 @@ function driveMinutesFor(raw: RawRoute, conditions: TripConditions): number {
   }
   return raw.driveMinutes / STYLE_SPEED_FACTOR[conditions.drivingStyle];
 }
-
-const ARRIVE_TOLERANCE = 1e-4;
 
 /**
  * SOC de salida mínimo (en puntos enteros sobre la batería actual) para llegar
