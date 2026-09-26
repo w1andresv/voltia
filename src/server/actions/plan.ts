@@ -8,13 +8,13 @@ const PlanSchema = PlanRequestSchema;
 
 export async function searchPlacesFn(input: { data: { q: string; lat?: number; lon?: number } }): Promise<Place[]> {
   const data = input.data;
-  const { searchPlaces } = await import("@/infrastructure/providers/geocode.photon");
-  return searchPlaces(data.q, data.lat != null && data.lon != null ? { lat: data.lat, lon: data.lon } : undefined);
+  const { createGeocoder } = await import("@/application/container");
+  return createGeocoder().search(data.q, data.lat != null && data.lon != null ? { lat: data.lat, lon: data.lon } : undefined);
 }
 
 export async function reversePlaceFn(input: { data: { lat: number; lon: number } }): Promise<Place> {
-  const { reversePlace } = await import("@/infrastructure/providers/geocode.photon");
-  return reversePlace(input.data.lat, input.data.lon);
+  const { createGeocoder } = await import("@/application/container");
+  return createGeocoder().reverse({ lat: input.data.lat, lon: input.data.lon });
 }
 
 export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResponse> {
@@ -26,9 +26,8 @@ export async function planTripFn(input: { data: PlanRequest }): Promise<PlanResp
   const startedAt = Date.now();
 
   try {
-    const { runPlanPipeline } = await import("@/server/plan-pipeline");
-    const { getStationDataset } = await import("@/infrastructure/stations/service");
-    const { response, engine, chargerCount } = await runPlanPipeline(data, getStationDataset);
+    const { createPlanningService } = await import("@/application/container");
+    const { response, engine, chargerCount } = await createPlanningService().plan(data);
 
     console.log(
       "[plan-trip]",

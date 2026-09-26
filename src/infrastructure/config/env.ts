@@ -8,6 +8,8 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().default(""),
   PLUGSHARE_TOKEN: z.string().default(""),
   ADMIN_EMAILS: z.string().default(""),
+  /** Motor de planificación: legacy (actual), shadow (ambos, responde el actual) o v2 (plan §6). */
+  PLANNER_ENGINE: z.enum(["legacy", "shadow", "v2"]).default("legacy").catch("legacy"),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;
@@ -25,6 +27,7 @@ export function getEnv(): AppEnv {
     DATABASE_URL: process.env.DATABASE_URL?.trim() ?? "",
     PLUGSHARE_TOKEN: process.env.PLUGSHARE_TOKEN ?? "",
     ADMIN_EMAILS: process.env.ADMIN_EMAILS ?? "",
+    PLANNER_ENGINE: process.env.PLANNER_ENGINE?.trim() || undefined,
   });
   return cached;
 }

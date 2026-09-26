@@ -28,19 +28,21 @@ import {
   FIRST_CHARGER_UNREACHABLE_REASON,
   isVerifiedForPlanning,
   NO_VERIFIED_STOP_REASON,
-  socFloors,
 } from "./types";
+import { MODEL_PARAMETERS } from "./ev/core/params";
+import { socFloors } from "./ev/core/trip-config";
 
-const MAX_STOPS = 7;
-const PREFERRED_FROM_ROUTE_KM = 5;
-export const MAX_FROM_ROUTE_KM = 12;
-const MIN_PROGRESS_KM = 4;
-const DETOUR_SPEED_KMH = 50;
+// Umbrales del planificador: viven en ModelParameters (valores sin cambios).
+const MAX_STOPS = MODEL_PARAMETERS.planner.maxStops;
+const PREFERRED_FROM_ROUTE_KM = MODEL_PARAMETERS.corridor.preferredFromRouteKm;
+export const MAX_FROM_ROUTE_KM = MODEL_PARAMETERS.corridor.maxFromRouteKm;
+const MIN_PROGRESS_KM = MODEL_PARAMETERS.planner.minProgressKm;
+const DETOUR_SPEED_KMH = MODEL_PARAMETERS.planner.detourSpeedKmh;
 /**
  * Margen para comparar SOC calculados: una salida calculada para llegar justo al
  * objetivo puede dar 19,999… al restar el tramo por redondeo de punto flotante.
  */
-const ARRIVE_TOLERANCE = 1e-4;
+const ARRIVE_TOLERANCE = MODEL_PARAMETERS.planner.socTolerancePct;
 const FLAT_CURVE = [
   { soc: 0, powerFactor: 1 },
   { soc: 100, powerFactor: 1 },
@@ -225,9 +227,9 @@ function pickStops(args: {
   const destIdx = samples.length - 1;
   const maxTravel = Math.min(100, vehicle.maxSocTravel);
   const ctx: EnergyCtx = { vehicle, conditions, weather, originAltitudeM: samples[0]?.elevM };
-  const floor = conditions.allowBelowSafety ? 2 : safety;
+  const floor = conditions.allowBelowSafety ? MODEL_PARAMETERS.planner.belowSafetyFloorPct : safety;
   // 0: llegar justo a la electrolinera. Con "bajar del margen" se mantiene el 2 %.
-  const reachFloor = conditions.allowBelowSafety ? 2 : 0;
+  const reachFloor = conditions.allowBelowSafety ? MODEL_PARAMETERS.planner.belowSafetyFloorPct : 0;
   const destKm = samples[destIdx]?.km ?? 0;
 
   let idx = 0;
@@ -712,8 +714,8 @@ function assessFirstCharger(args: {
 
   // Igual que pickStops: primero exigir el margen de seguridad al llegar a la
   // primera electrolinera; solo se baja a "llega justo" si ni al 100 % cabe.
-  const floor = conditions.allowBelowSafety ? 2 : safety;
-  const reachFloor = conditions.allowBelowSafety ? 2 : 0;
+  const floor = conditions.allowBelowSafety ? MODEL_PARAMETERS.planner.belowSafetyFloorPct : safety;
+  const reachFloor = conditions.allowBelowSafety ? MODEL_PARAMETERS.planner.belowSafetyFloorPct : 0;
 
   const currentSamples = samplesAt(conditions.initialSoc);
   const destSoc = socAfter(conditions.initialSoc, energyBetween(currentSamples, 0, destIdx), cap);

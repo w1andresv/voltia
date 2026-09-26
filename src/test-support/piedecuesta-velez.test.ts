@@ -25,8 +25,10 @@ function datasetOf(c: Cassette): StationDataset {
 
 async function planFrom(cassette: Cassette): Promise<PlanResponse> {
   vi.stubGlobal("fetch", replayFetch(cassette.interactions));
-  const { runPlanPipeline } = await import("@/server/plan-pipeline");
-  const { response } = await runPlanPipeline(PIEDECUESTA_VELEZ.request(), async () => datasetOf(cassette));
+  const { createPlanningService } = await import("@/application/container");
+  const { response } = await createPlanningService({
+    stations: { getDataset: async () => datasetOf(cassette) },
+  }).plan(PIEDECUESTA_VELEZ.request());
   return response;
 }
 

@@ -42,17 +42,21 @@ it(
     const interactions: CassetteInteraction[] = [];
     vi.stubGlobal("fetch", recordingFetch(globalThis.fetch, interactions));
 
-    const { runPlanPipeline } = await import("@/server/plan-pipeline");
+    const { createPlanningService } = await import("@/application/container");
     const { getStoredDataset } = await import("@/infrastructure/stations/store");
     const { findStationsNearRoute } = await import("@/domain/stations/spatial");
     const { MAX_FROM_ROUTE_KM } = await import("@/domain/planner");
 
     let dataset: StationDataset | null = null;
-    const { response, engine } = await runPlanPipeline(PIEDECUESTA_VELEZ.request(), async () => {
-      dataset = await getStoredDataset();
-      if (!dataset) throw new Error("No hay dataset de electrolineras guardado en la base.");
-      return dataset;
-    });
+    const { response, engine } = await createPlanningService({
+      stations: {
+        getDataset: async () => {
+          dataset = await getStoredDataset();
+          if (!dataset) throw new Error("No hay dataset de electrolineras guardado en la base.");
+          return dataset;
+        },
+      },
+    }).plan(PIEDECUESTA_VELEZ.request());
     vi.unstubAllGlobals();
     expect(engine).not.toBe("osrm");
 

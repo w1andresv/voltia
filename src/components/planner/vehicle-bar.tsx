@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { socFloors } from "@/domain/types";
+import { socFloors } from "@/domain/ev/core/trip-config";
 import { vehicleLabel, vehicleSub } from "@/domain/vehicles";
 import { formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";

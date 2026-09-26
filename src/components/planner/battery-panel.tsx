@@ -1,6 +1,7 @@
 import { chargeCurveSeries, chargeTimeMinutes } from "@/domain/charging";
 import { batteryBudget } from "@/domain/energy";
-import { departureChargeAdvice, socFloors } from "@/domain/types";
+import { departureChargeAdvice } from "@/domain/types";
+import { socFloors } from "@/domain/ev/core/trip-config";
 import { vehicleLabel } from "@/domain/vehicles";
 import { formatKm, formatKw, formatKwh, formatKwhPer100, formatMinutes, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";

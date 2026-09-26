@@ -1,9 +1,12 @@
 import type { BodyType, RegenLevel, RouteSample, TripConditions, Vehicle, WeatherSnapshot } from "./types";
-import { tripMassKg, socFloors } from "./types";
+import { tripMassKg } from "./types";
+import { MODEL_PARAMETERS } from "./ev/core/params";
+import { socFloors } from "./ev/core/trip-config";
+import { G_MS2, J_PER_KWH as J_PER_KWH_UNIT } from "./ev/core/units";
 import { bearingDeg, toRad } from "./geo";
 
-const G = 9.81;
-const J_PER_KWH = 3_600_000;
+const G = G_MS2;
+const J_PER_KWH = J_PER_KWH_UNIT;
 const REF_SPEED = 70;
 const AUX_KW = 0.45;
 const CYCLE_OVERHEAD = 1.14;
@@ -120,14 +123,11 @@ export function wltpKwhPer100(vehicle: Vehicle): number | null {
  * pickup 0,32–0,38, con su área frontal. Cada vehículo puede traer los suyos
  * (`dragAreaM2`, `rollingResistance`) en el payload del catálogo.
  */
-export const BODY_TYPE_PHYSICS: Record<BodyType, { dragAreaM2: number; rollingResistance: number }> = {
-  sedan: { dragAreaM2: 0.55, rollingResistance: 0.009 },
-  suv_compact: { dragAreaM2: 0.75, rollingResistance: 0.009 },
-  suv_large: { dragAreaM2: 0.95, rollingResistance: 0.01 },
-};
+export const BODY_TYPE_PHYSICS: Record<BodyType, { dragAreaM2: number; rollingResistance: number }> =
+  MODEL_PARAMETERS.vehicle.bodyTypePhysics.value;
 
 /** Sin carrocería declarada se asume SUV compacta: la más común entre los eléctricos en Colombia. */
-export const DEFAULT_BODY_TYPE: BodyType = "suv_compact";
+export const DEFAULT_BODY_TYPE: BodyType = MODEL_PARAMETERS.vehicle.defaultBodyType;
 
 function bodyPhysics(vehicle: Vehicle) {
   return BODY_TYPE_PHYSICS[vehicle.bodyType ?? DEFAULT_BODY_TYPE] ?? BODY_TYPE_PHYSICS[DEFAULT_BODY_TYPE];

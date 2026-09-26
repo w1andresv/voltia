@@ -51,18 +51,20 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 
 - **Objetivo:** separar tipos, puertos y composición sin cambiar ningún resultado.
 - **Tareas:**
-  - [ ] `src/domain/ev/core/units.ts` (conversiones con tests) y `provenance.ts` (`DataSource`, `SourcedValue`).
-  - [ ] `src/domain/ev/core/params.ts`: `ModelParameters` con `modelVersion`. Mover aquí `BODY_TYPE_PHYSICS`, `MAX_FROM_ROUTE_KM` y los umbrales del planificador, sin cambiar valores.
-  - [ ] `src/domain/ev/core/trip-config.ts`: `TripConditions + Vehicle → TripConfiguration`, que absorbe `socFloors`.
-  - [ ] `src/domain/ports/`: `RoutingProvider`, `ElevationProvider`, `WeatherProvider`, `StationCatalog` (plan §3.1).
-  - [ ] Adaptadores que envuelven el código actual: `MapboxRoutingProvider`, `OsrmRoutingProvider`, `OpenMeteoElevationProvider`, `OpenMeteoWeatherProvider`, `DatasetStationCatalog`.
-  - [ ] `src/application/plan-trip/service.ts` (`EVRoutePlanningService`) y `src/application/container.ts`. El servicio llama por dentro a `runPlanPipeline`/`buildPlan`.
-  - [ ] `planTripFn` usa el servicio. Borrar `src/server/plan-pipeline.ts` o dejarlo como implementación interna del servicio.
-  - [ ] Flag `PLANNER_ENGINE = legacy | shadow | v2` en `infrastructure/config/env.ts` (por defecto `legacy`).
-  - [ ] Ampliar la regla de ESLint con los bloques de engines y de `components/lib/server` del plan §2.2.
+  - [x] `src/domain/ev/core/units.ts` (conversiones con tests) y `provenance.ts` (`DataSource`, `SourcedValue`).
+  - [x] `src/domain/ev/core/params.ts`: `ModelParameters` con `modelVersion`. Mover aquí `BODY_TYPE_PHYSICS`, `MAX_FROM_ROUTE_KM` y los umbrales del planificador, sin cambiar valores.
+  - [x] `src/domain/ev/core/trip-config.ts`: `TripConditions + Vehicle → TripConfiguration`, que absorbe `socFloors`.
+  - [x] `src/domain/ports/`: `RoutingProvider`, `ElevationProvider`, `WeatherProvider`, `StationCatalog` (plan §3.1).
+  - [x] Adaptadores que envuelven el código actual: `MapboxRoutingProvider`, `OsrmRoutingProvider`, `OpenMeteoElevationProvider`, `OpenMeteoWeatherProvider`, `DatasetStationCatalog`.
+  - [x] `src/application/plan-trip/service.ts` (`EVRoutePlanningService`) y `src/application/container.ts`. El servicio llama por dentro a `runPlanPipeline`/`buildPlan`.
+  - [x] `planTripFn` usa el servicio. `src/server/plan-pipeline.ts` se borró; la grabación y los tests usan `createPlanningService({ stations })`.
+  - [x] Geocodificación a través de `createGeocoder()` (puerto `GeocodingProvider`).
+  - [x] Flag `PLANNER_ENGINE = legacy | shadow | v2` en `infrastructure/config/env.ts` (por defecto `legacy`).
+  - [x] Ampliar la regla de ESLint con los bloques de engines y de `components/lib/server` del plan §2.2.
 - **Tests:** conversiones de unidades; `trip-config` (pisos iguales a `socFloors`); **igualdad** del servicio con el pipeline actual sobre la cassette.
 - **Cierre:** misma respuesta que antes en el fixture (deep-equal); `server/actions` no importa proveedores.
 - **Especificación:** F1 (tipos, `SourcedValue`, unidades).
+- **Hecho:** puertos transitorios (ADR-0005); los contratos de `domain/ev/contracts` se crean con cada engine. Igualdad probada con el test de caracterización (snapshot sin cambios); la igualdad sobre la cassette real queda para cuando se grabe (P1).
 
 ### F2 · Snapshot y datos crudos
 
@@ -171,7 +173,7 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 | Fase | Estado | Commit |
 |---|---|---|
 | F0 | ✅ Hecha salvo la cassette (P1) | commits en `engine-v2` |
-| F1 | En curso | — |
+| F1 | ✅ Hecha (igualdad con proveedores sintéticos; con la cassette real al grabarla) | ver `git log --grep "^F1:"` |
 | F2 | Pendiente (decidir B6) | — |
 | F3 | Pendiente | — |
 | F4 | Pendiente | — |

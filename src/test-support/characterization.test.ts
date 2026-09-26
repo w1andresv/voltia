@@ -83,10 +83,16 @@ function summary(res: PlanResponse) {
   };
 }
 
-/** Punto de entrada que se caracteriza. Las fases lo cambian por el servicio sin cambiar resultados. */
+/**
+ * Punto de entrada que se caracteriza: el servicio de planificación con los
+ * proveedores de producción (Mapbox, Open-Meteo) sobre fetch simulado, y las
+ * estaciones sintéticas. El snapshot se grabó con el pipeline anterior a F1.
+ */
 async function plan(req: PlanRequest): Promise<PlanResponse> {
-  const { runPlanPipeline } = await import("@/server/plan-pipeline");
-  const { response } = await runPlanPipeline(req, async () => syntheticStations());
+  const { createPlanningService } = await import("@/application/container");
+  const { response } = await createPlanningService({
+    stations: { getDataset: async () => syntheticStations() },
+  }).plan(req);
   return response;
 }
 

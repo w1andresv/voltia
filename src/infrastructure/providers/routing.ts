@@ -251,41 +251,40 @@ async function fetchMapboxRouteSet(
 }
 
 /**
- * Rutas para el planificador. Con token de Mapbox pide en paralelo la ruta
- * normal (con sus alternativas) y una que evite peajes, y NO cae a OSRM: si
- * Mapbox falla, el error llega al usuario. OSRM solo se usa sin token.
+ * Rutas de Mapbox: pide en paralelo la ruta normal (con sus alternativas) y una
+ * que evite peajes, y corrige atajos por vías menores. NO cae a OSRM: si Mapbox
+ * falla, el error llega al usuario.
  */
-export async function fetchRoutes(waypoints: LatLon[]): Promise<FetchRoutesResult> {
-  const token = mapboxServerToken();
+export async function fetchMapboxRoutes(waypoints: LatLon[], token: string): Promise<FetchRoutesResult> {
   const warnings: string[] = [];
-  if (token) {
-    const preferred = mapboxProfileFor(waypoints.length);
-    const profiles: MapboxProfile[] =
-      preferred === "driving-traffic" ? ["driving-traffic", "driving"] : ["driving"];
-    let lastError: unknown;
-    for (const profile of profiles) {
-      try {
-        const { routes, snapKm, corrected } = await fetchMapboxRouteSet(waypoints, token, profile);
-        if (!routes.length) continue;
-        if (corrected)
-          console.log(`[routing] ${corrected} ronda(s) de corrección de atajos por vías menores`);
-        if (profile !== preferred) warnings.push(MAPBOX_DRIVING_FALLBACK_WARNING);
-        warnings.push(...snapWarnings(snapKm));
-        return { routes, engine: engineFor(profile), warnings };
-      } catch (error) {
-        lastError = error;
-      }
+  const preferred = mapboxProfileFor(waypoints.length);
+  const profiles: MapboxProfile[] =
+    preferred === "driving-traffic" ? ["driving-traffic", "driving"] : ["driving"];
+  let lastError: unknown;
+  for (const profile of profiles) {
+    try {
+      const { routes, snapKm, corrected } = await fetchMapboxRouteSet(waypoints, token, profile);
+      if (!routes.length) continue;
+      if (corrected)
+        console.log(`[routing] ${corrected} ronda(s) de corrección de atajos por vías menores`);
+      if (profile !== preferred) warnings.push(MAPBOX_DRIVING_FALLBACK_WARNING);
+      warnings.push(...snapWarnings(snapKm));
+      return { routes, engine: engineFor(profile), warnings };
+    } catch (error) {
+      lastError = error;
     }
-    // Con token, distancia y trazo salen SIEMPRE de Mapbox: si falla, se informa
-    // el motivo en vez de mostrar en silencio una ruta de OSRM con otros km.
-    console.error("[routing] Mapbox falló:", redact(lastError));
-    if (lastError instanceof MapboxRoutingError && lastError.noRoute) {
-      throw new Error("Mapbox no encontró un camino entre esos puntos.");
-    }
-    throw new Error(`No se pudo calcular la ruta con Mapbox: ${redact(lastError)}`);
-  } else {
-    warnings.push(OSRM_NO_TOKEN_WARNING);
   }
+  // Con token, distancia y trazo salen SIEMPRE de Mapbox: si falla, se informa
+  // el motivo en vez de mostrar en silencio una ruta de OSRM con otros km.
+  console.error("[routing] Mapbox falló:", redact(lastError));
+  if (lastError instanceof MapboxRoutingError && lastError.noRoute) {
+    throw new Error("Mapbox no encontró un camino entre esos puntos.");
+  }
+  throw new Error(`No se pudo calcular la ruta con Mapbox: ${redact(lastError)}`);
+}
+
+/** Rutas de OSRM público: solo se usan sin token de Mapbox, con un aviso. */
+export async function fetchOsrmRoutes(waypoints: LatLon[]): Promise<FetchRoutesResult> {
   const osrm = await fetchOsrmCandidates(waypoints);
   return {
     routes: buildRouteSet(
@@ -293,6 +292,12 @@ export async function fetchRoutes(waypoints: LatLon[]): Promise<FetchRoutesResul
       "osrm",
     ),
     engine: "osrm",
-    warnings,
+    warnings: [OSRM_NO_TOKEN_WARNING],
   };
+}
+
+/** Rutas para el planificador: Mapbox con token, OSRM sin él. */
+export async function fetchRoutes(waypoints: LatLon[]): Promise<FetchRoutesResult> {
+  const token = mapboxServerToken();
+  return token ? fetchMapboxRoutes(waypoints, token) : fetchOsrmRoutes(waypoints);
 }

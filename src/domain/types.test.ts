@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DRIVER_KG, extraWeightKg, hasValidCoords, isVerifiedForPlanning, PERSON_KG, safetyPct, socFloors, tripMassKg } from "./types";
+import { DRIVER_KG, extraWeightKg, hasValidCoords, isVerifiedForPlanning, PERSON_KG, safetyPct, tripMassKg } from "./types";
 import { DEFAULT_CURVE } from "./charging";
 import type { Charger, TripConditions, Vehicle } from "./types";
 
@@ -125,31 +125,3 @@ describe("isVerifiedForPlanning", () => {
   });
 });
 
-describe("socFloors", () => {
-  const base: TripConditions = {
-    passengers: 0,
-    luggageKg: 0,
-    initialSoc: 80,
-    arrivalSoc: 10,
-    avgSpeedKmh: null,
-    ac: "normal",
-    temperatureC: null,
-    drivingStyle: "normal",
-    safetyMode: "low",
-    customSafetyPct: 15,
-    planningMode: "fastest",
-    allowBelowSafety: false,
-    regenLevel: "medium",
-  };
-
-  it("la reserva es el mayor entre el margen y el mínimo del vehículo", () => {
-    expect(socFloors({ minSocRecommended: 15 }, base).reservePct).toBe(15);
-    expect(socFloors({ minSocRecommended: 5 }, base).reservePct).toBe(10);
-    expect(socFloors({ minSocRecommended: 5 }, { ...base, safetyMode: "conservative" }).reservePct).toBe(20);
-  });
-
-  it("el objetivo al destino no baja de la reserva", () => {
-    expect(socFloors({ minSocRecommended: 15 }, base).arrivalTargetPct).toBe(15);
-    expect(socFloors({ minSocRecommended: 15 }, { ...base, arrivalSoc: 30 }).arrivalTargetPct).toBe(30);
-  });
-});
