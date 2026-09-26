@@ -123,3 +123,23 @@ Empezar F0 en `engine-v2`:
 2. Tests de regresión y arreglos de C3 y C5 (XS), C2 (S), C1 (M) y C8 (cuando decidas B2).
 3. Reglas de ESLint para `src/domain`.
 4. `scripts/record-snapshot.mjs`. El fixture queda para cuando haya token (B1).
+
+---
+
+## 10. Estado de F0 (rama `engine-v2`)
+
+| Punto | Estado | Commit |
+|---|---|---|
+| Error de lint heredado de `main` (`text.ts:27`) | ✅ | `cabfaac` |
+| Cd·A y Crr por carrocería (MVP), con valores explícitos en cada vehículo del catálogo | ✅ | `f0287aa`, `67580e7` |
+| Falso "no viable" por redondeo al llegar justo al objetivo | ✅ (apareció al cambiar Cd·A) | `96f180c` |
+| C8: la reserva incluye `minSocRecommended` (decisión B2: sí; si el usuario lo edita, vale su valor) | ✅ | `54e71fb` |
+| C3: potencia de carga = min(auto × curva, cargador) | ✅ | `0df0237` |
+| C5: carga previa con SOC inicial decimal | ✅ | `02a059b` |
+| C2: la energía del desvío se descuenta de la curva, la llegada, `energyKwh` y el promedio | ✅ | `bbbd181` |
+| C1: piso de SOC en todo el tramo, no solo al llegar | ✅ | `df7c7b3` |
+| Regla de ESLint de dependencias para `src/domain` | ✅ | `e908421` |
+| `scripts/record-snapshot.mjs` y fixture Piedecuesta → Vélez | ⏸ Bloqueado por B1 (sin token de Mapbox). Conviene hacerlo junto con F2, que define el formato `PlanningSnapshot`. | — |
+| Cobertura de ramas ≥ 70 % | ❌ Ya venía en 66,1 % desde `main`; ahora 66,6 %. `test:coverage` falla en CI desde antes de este trabajo. | — |
+
+Cada corrección trae tests que fallan con el código anterior y pasan con el nuevo.
