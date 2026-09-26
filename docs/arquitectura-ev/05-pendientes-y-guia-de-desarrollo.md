@@ -138,6 +138,7 @@ Cada una desbloquea algo. Cuando se tome, va a un ADR (o se actualiza el que se 
 | D8 ✅ | Tabla de velocidad por clase vial cuando no hay límite — **decidido: tabla propuesta (90/80/60/50/40)** | Valores de la normativa colombiana vigente | Confirmar con la normativa y marcar `configurable` | F5 | `ModelParameters.speed` |
 | D9 ✅ | Datos de Blaze — **decidido: solo electrolineras (listado + detalle por estación)** | Qué endpoints hay y qué reemplazan | Llenar la tabla de §5.7 | FB | ADR-0008 |
 | D10 ✅ | Cómo se une `engine-v2` a `main` — **decidido: merge commit** | Merge commit o squash | Merge commit: conserva un commit por fase y los ADR citan esos commits | F9 | ADR-0001 |
+| D13 | Cómo registra el usuario un viaje real para calibrar | Al terminar el viaje, un botón "¿Con cuánto llegaste?" (SOC de llegada, y opcionalmente intermedios), o importar datos del vehículo (API del fabricante, OBD) | Empezar con el SOC de llegada en "Mis viajes" (una tabla nueva `voltia_trip_observations`); importar después | Calibración (§5.8) | Nuevo ADR |
 | D11 ✅ | Espera en estación "ocupada" — **decidido: 15 min hasta tener datos** | 15 min (hoy, estimado) o calibrado | Mantener hasta tener datos de ocupación (Blaze) | F7 | `ModelParameters.planner.occupiedWaitMin` |
 
 ---
@@ -159,7 +160,7 @@ Cada una desbloquea algo. Cuando se tome, va a un ADR (o se actualiza el que se 
 | D12 | 2026-09-26 | **Caché de elevación por el máximo tiempo posible** (pedido: "en cookies"). Se implementó en el servidor, sin vencimiento: la Data Cache de Next con `revalidate: false`, que persiste entre peticiones y despliegues y es compartida por todos los usuarios. Las cookies no sirven: ~4 KB cada una frente a ~100–150 KB por tesela, viajan en cada petición y el navegador no consulta la elevación (lo hace el servidor) | Teselas de Mapbox y consultas de Open-Meteo sin vencimiento (`CACHE_FOREVER` en `http.ts`). Los viajes guardados ya llevan la elevación en su snapshot |
 | D11 | 2026-09-26 | **Espera en estación ocupada: 15 min (estimado)** hasta tener datos | Cuando el detalle de Blaze dé estado por conector, se revisa (p. ej. sin espera si hay otro conector compatible libre) |
 
-**Todas las decisiones de esta sección están tomadas.** Lo que queda abierto depende de datos o de acciones: el tileset y el costo de Mapbox (O4, O6), el cierre del periodo de sombra (O3 → D2), cuándo activar la energía v2 (el dueño, D3) y el formato de los endpoints de Blaze (O5).
+**Las decisiones D1–D12 están tomadas; D13 (calibración) quedó abierta en la sesión D.** Lo que queda abierto depende de datos o de acciones: el tileset y el costo de Mapbox (O4, O6), el cierre del periodo de sombra (O3 → D2), cuándo activar la energía v2 (el dueño, D3) y el formato de los endpoints de Blaze (O5).
 
 ## 4. Tareas operativas (sin código)
 
@@ -355,7 +356,10 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
 #### 5.3.5 Temperatura (D4) — ✅ hecho (sesión A)
 **Decidido (D4): se hace ya.** Se agrega un `EfficiencyModel` en `engines/energy/`: la eficiencia del tren motriz como función de la temperatura, con puntos `estimated` y la extensión que prevé la especificación §5.4. Se usa en `segmentEnergyV2` en vez de `drivetrainEfficiency` constante. Tests: a 20 °C, el mismo resultado que hoy; a 5 °C, menos eficiencia.
 
-#### 5.3.6 Parámetros físicos por vehículo en el catálogo
+#### 5.3.6 Parámetros físicos por vehículo en el catálogo — ⏳ tarea de datos (6 vehículos)
+
+> Revisado en la sesión D: los Cd se publican (p. ej. Tesla Model 3 actualizado, 0,219), pero el área frontal y las eficiencias casi nunca vienen del fabricante; solo hay estimaciones de terceros. Para no meter cifras sin fuente, queda como tarea de datos. Hay que conseguir la ficha o prueba publicada de cada vehículo (`mg-s5-ev-comfort`, `mg-s5-ev-deluxe`, `tesla-model-3-lr-awd`, `tesla-model-y-rwd`, `tesla-model-y-lr-awd`, `volvo-ex30-sm-er`) y registrar cada cifra con su referencia. La calibración (§5.8) es la otra vía.
+
 - **Contexto:** el esquema ya acepta `drivetrainEfficiency`, `regenEfficiency`, `maxRegenPowerKw`, `rotationalInertiaFactor` y `baseAuxPowerKw`; ningún vehículo los trae y todos usan los valores por defecto `estimated`.
 - **Pasos:**
   1. Buscar datos con fuente (fichas del fabricante, EPA para los Tesla, pruebas publicadas). Registrar cada cifra con su referencia en `docs/catalogo-pendientes.md`.
@@ -460,7 +464,10 @@ Rutas, elevación, clima, geocodificación y vehículos siguen con los proveedor
 10. **ESLint:** nada fuera de `src/infrastructure/` y `container.ts` importa `@/infrastructure/blaze/*`. La regla actual ya lo cubre; verificarlo con un import de prueba.
 11. **Limpieza (F9):** con `DATA_SOURCE=blaze` estable, borrar las fuentes que Blaze reemplaza en `src/infrastructure/stations/sources/*`, la fusión (`src/domain/stations/merge.ts`, `src/infrastructure/stations/registry.ts`) y el cron de refresco del dataset, si ya no se usan.
 
-### 5.8 Calibración (`TripObservation`)
+### 5.8 Calibración (`TripObservation`) — 🟡 contrato hecho (sesión D); falta dónde se guarda y cómo lo carga el usuario (D13)
+
+> **Sesión D (2026-09-26):** `src/domain/ev/contracts/calibration.ts` define `TripObservation` y su esquema zod (plan, modelo, vehículo, condiciones y al menos dos SOC observados). También define `compareObservation`, que calcula el error de SOC en cada punto, el error medio y máximo, el error de energía y la razón de consumo observado/predicho. La tabla, la acción y la pantalla (pasos 2 y 3) esperan D13.
+
 
 - **Contexto:** la especificación §9 define solo el contrato de datos. Casi todos los parámetros físicos son `estimated`; la calibración los vuelve `calculated`.
 - **Pasos:**

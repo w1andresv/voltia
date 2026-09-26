@@ -44,6 +44,9 @@ Cambiarlo cambia el consumo, así que va detrás del modo sombra, igual que el p
 - **D5:** `sport` = +8 % sobre la velocidad típica, con tope legal y de curva (lo implementado).
 - **D8:** sin límite de Mapbox, tope por tipo de vía: primaria 90, secundaria 80, terciaria 60, local/urbana 50, sin pavimentar 40 km/h, `configurable` (guía 05, §5.3.4).
 
+## Calibración (sesión D, 2026-09-26)
+Contrato `TripObservation` y `compareObservation` en `domain/ev/contracts/calibration.ts` (especificación §9). Falta decidir cómo registra el usuario el viaje real (guía 05, D13).
+
 ## Sesión A (2026-09-26)
 Se resolvieron los pendientes de este ADR:
 - **Paradas:** 0 km/h en los puntos intermedios (`legBoundariesKm`).
