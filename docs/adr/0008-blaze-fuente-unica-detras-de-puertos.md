@@ -22,6 +22,9 @@ Hoy los datos entran por cinco puertos (`domain/ports`): `StationCatalog`, `Rout
   - `VehicleCatalog` (`list()`, `get(id)`): hoy el catálogo se lee directo de Postgres;
   - `StationAvailability` (`statusOf(ids)`): estado en vivo por estación o conector, separado del catálogo porque cambia cada minuto y el catálogo cada día.
 
+## Alcance decidido (2026-09-26, D9)
+Blaze se usa **solo para electrolineras**: un endpoint de listado, que reemplaza el dataset consolidado, y un endpoint de detalle por estación, que se pide solo para las estaciones usadas en la ruta cuando haga falta. Rutas, elevación, clima, geocodificación y vehículos siguen con los proveedores actuales. No se crean `VehicleCatalog` ni adaptadores de rutas o clima para Blaze; sí `BlazeStationCatalog` y un puerto `StationDetails`. Los pasos están en `docs/arquitectura-ev/05-pendientes-y-guia-de-desarrollo.md` §5.7.
+
 ## Consecuencias
 - Cambiar de fuente o volver atrás es una variable de entorno, sin tocar el dominio.
 - Tests: contrato del mapper con respuestas grabadas de Blaze (fixtures sin credenciales, con el mismo `assertNoSecrets` de la cassette), más una caracterización con `DATA_SOURCE=blaze` sobre esos fixtures.

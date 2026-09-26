@@ -122,23 +122,41 @@ Un valor inválido en `PLANNER_ENGINE`, `ENERGY_ENGINE` o `ELEVATION_SOURCE` cae
 
 ## 3. Decisiones pendientes del dueño del producto
 
-Cada una desbloquea algo. Cuando se tome, va a un ADR (o se actualiza el que se indica).
+Cada una desbloquea algo. Cuando se tome, va a un ADR (o se actualiza el que se indica). Las decisiones tomadas quedan registradas en §3.1.
 
 | # | Decisión | Opciones | Recomendación | Desbloquea | Dónde queda |
 |---|---|---|---|---|---|
-| D1 | Fuente de elevación por defecto (B6) | `open-meteo`, `open-meteo-adaptive`, `mapbox-terrain` | `mapbox-terrain` si `elevation:compare` confirma que funciona y el costo cabe en el plan de Mapbox | F2b | ADR-0011 → "aceptada con fuente X" |
-| D2 | Cuándo pasar `PLANNER_ENGINE` a `v2` | Ya, tras N días en sombra, o tras revisar X viajes | Tras 1–2 semanas en `shadow` sin diferencias inexplicadas en `[plan-trip:shadow]` | F8, F9 | ADR-0007 |
-| D3 | Cuándo pasar `ENERGY_ENGINE` a `v2` y el rango aceptable de diferencia | Por ejemplo ±10 % de energía y ±10 min por ruta | Definir el rango antes de mirar los datos; si la mayoría de viajes cae dentro, activar | F6 | ADR-0012 → nuevo ADR de F6 |
-| D4 | Efecto del frío en la energía v2 | Nada (hoy), un factor de eficiencia por temperatura (`EfficiencyModel`), o calefacción más alta | Esperar datos: si los viajes a Bogotá (≈14 °C) salen bajos en sombra, agregar el modelo | F5 | ADR-0012 |
-| D5 | Modo `sport` sin dato de congestión | +8 % sobre la velocidad típica con tope legal (hoy) o ir al límite legal | Mantener +8 % hasta tener congestión | — | ADR-0012 |
-| D6 | Verificar la pasada 2 al guardar y al compartir | Sí (1–3 rutas más por viaje guardado) o no | Sí: se guardan pocos viajes y el resultado queda en el snapshot | F8 | ADR-0009 |
-| D7 | La UI en F9: leer `EVRoutePlan` o conservar `RoutePlan` | Migrar todos los componentes o renombrar `RoutePlan` como contrato definitivo | Conservar `RoutePlan` ampliado (menos riesgo, ya tiene todo); ver §5.10 | F9 | Nuevo ADR |
-| D8 | Tabla de velocidad por clase vial cuando no hay límite | Valores de la normativa colombiana vigente | Confirmar con la normativa y marcar `configurable` | F5 | `ModelParameters.speed` |
-| D9 | Datos de Blaze | Qué endpoints hay y qué reemplazan | Llenar la tabla de §5.7 | FB | ADR-0008 |
-| D10 | Cómo se une `engine-v2` a `main` | Merge commit o squash | Merge commit: conserva un commit por fase y los ADR citan esos commits | F9 | ADR-0001 |
-| D11 | Espera en estación "ocupada" | 15 min (hoy, estimado) o calibrado | Mantener hasta tener datos de ocupación (Blaze) | F7 | `ModelParameters.planner.occupiedWaitMin` |
+| D1 ✅ | Fuente de elevación por defecto (B6) — **decidido: `mapbox-terrain`** | `open-meteo`, `open-meteo-adaptive`, `mapbox-terrain` | `mapbox-terrain` si `elevation:compare` confirma que funciona y el costo cabe en el plan de Mapbox | F2b | ADR-0011 → "aceptada con fuente X" |
+| D2 ✅ | Cuándo pasar `PLANNER_ENGINE` a `v2` — **decidido: tras 1–2 semanas en sombra** | Ya, tras N días en sombra, o tras revisar X viajes | Tras 1–2 semanas en `shadow` sin diferencias inexplicadas en `[plan-trip:shadow]` | F8, F9 | ADR-0007 |
+| D3 ✅ | Cuándo pasar `ENERGY_ENGINE` a `v2` y el rango aceptable de diferencia — **decidido: lo decide el dueño con la variable `ENERGY_ENGINE`** | Por ejemplo ±10 % de energía y ±10 min por ruta | Definir el rango antes de mirar los datos; si la mayoría de viajes cae dentro, activar | F6 | ADR-0012 → nuevo ADR de F6 |
+| D4 ✅ | Efecto del frío en la energía v2 — **decidido: agregarlo ya** | Nada (hoy), un factor de eficiencia por temperatura (`EfficiencyModel`), o calefacción más alta | Esperar datos: si los viajes a Bogotá (≈14 °C) salen bajos en sombra, agregar el modelo | F5 | ADR-0012 |
+| D5 ✅ | Modo `sport` sin dato de congestión — **decidido: +8 % con tope legal** | +8 % sobre la velocidad típica con tope legal (hoy) o ir al límite legal | Mantener +8 % hasta tener congestión | — | ADR-0012 |
+| D6 ✅ | Verificar la pasada 2 al guardar y al compartir — **decidido: solo al compartir** | Sí (1–3 rutas más por viaje guardado) o no | Sí: se guardan pocos viajes y el resultado queda en el snapshot | F8 | ADR-0009 |
+| D7 ✅ | La UI en F9: leer `EVRoutePlan` o conservar `RoutePlan` — **decidido: conservar `RoutePlan` ampliado** | Migrar todos los componentes o renombrar `RoutePlan` como contrato definitivo | Conservar `RoutePlan` ampliado (menos riesgo, ya tiene todo); ver §5.10 | F9 | Nuevo ADR |
+| D8 ✅ | Tabla de velocidad por clase vial cuando no hay límite — **decidido: tabla propuesta (90/80/60/50/40)** | Valores de la normativa colombiana vigente | Confirmar con la normativa y marcar `configurable` | F5 | `ModelParameters.speed` |
+| D9 ✅ | Datos de Blaze — **decidido: solo electrolineras (listado + detalle por estación)** | Qué endpoints hay y qué reemplazan | Llenar la tabla de §5.7 | FB | ADR-0008 |
+| D10 ✅ | Cómo se une `engine-v2` a `main` — **decidido: merge commit** | Merge commit o squash | Merge commit: conserva un commit por fase y los ADR citan esos commits | F9 | ADR-0001 |
+| D11 ✅ | Espera en estación "ocupada" — **decidido: 15 min hasta tener datos** | 15 min (hoy, estimado) o calibrado | Mantener hasta tener datos de ocupación (Blaze) | F7 | `ModelParameters.planner.occupiedWaitMin` |
 
 ---
+
+### 3.1 Decisiones tomadas
+
+| # | Fecha | Decisión | Consecuencia en este documento |
+|---|---|---|---|
+| D1 | 2026-09-26 | **`mapbox-terrain`** como fuente de elevación por defecto | §5.1.1 pasa a "hacer": cambiar el valor por defecto, servir teselas en el fetch sintético y regenerar la caracterización. O4 queda para verificar el tileset y el costo, no para elegir |
+| D2 | 2026-09-26 | **`PLANNER_ENGINE=v2` tras 1–2 semanas en `shadow`** en producción, si `[plan-trip:shadow]` no muestra diferencias sin explicar | O3 es requisito; al cerrar el periodo se resume en el ADR-0007 y se cambia el valor por defecto (§5.5) |
+| D3 | 2026-09-26 | **Sin rango numérico: el dueño del producto decide cuándo activar la energía v2**, con la variable `ENERGY_ENGINE` (ya existe: `legacy` · `shadow` · `v2`) | La variable se conserva hasta que él dé el visto bueno. F6 (§5.4) no empieza hasta que lo pida explícitamente; mientras tanto el modelo anterior sigue en el código |
+| D4 | 2026-09-26 | **Agregar ya el efecto del frío** a la energía v2: eficiencia del tren motriz en función de la temperatura, con puntos `estimated` parecidos al modelo actual | §5.3.5 pasa a "hacer ahora" (no espera datos de sombra) |
+| D5 | 2026-09-26 | **Sport = +8 % sobre la velocidad típica, con tope en el límite legal y en la curva** (lo que ya hace el código) | Sin cambios de código; el ADR-0012 pasa de propuesta a decisión |
+| D6 | 2026-09-26 | **Verificar la pasada 2 solo al compartir** un viaje, no al guardarlo | §5.6.1: la verificación va en `shareTripFn`, no en `saveTripFn`. El viaje guardado sin compartir muestra el plan de la pasada 1 |
+| D7 | 2026-09-26 | **Conservar `RoutePlan` ampliado** como contrato definitivo (con `dataQuality`, supuestos, `modelVersion` y `snapshotId`); no se crea `EVRoutePlan` ni `legacy-adapter.ts` | §5.10 paso 1 queda fijado; se escribe el ADR en F9 |
+| D8 | 2026-09-26 | **Tope por tipo de vía cuando no hay límite:** primaria 90, secundaria 80, terciaria 60, local/urbana 50, sin pavimentar 40 km/h; fuente `configurable`, ajustable en `ModelParameters.speed.defaultByRoadTier` | §5.3.4 tiene los valores; sigue pendiente confirmar contra la normativa vigente al implementarlo |
+| D9 | 2026-09-26 | **Blaze solo para electrolineras:** un endpoint con el listado y otro con el detalle de cada una, que se pide solo para las estaciones usadas en la ruta cuando haga falta. Rutas, elevación, clima, geocodificación y vehículos siguen con los proveedores actuales | §5.7 se reduce a `BlazeStationCatalog` (listado) y un puerto de detalle; ya no hacen falta `VehicleCatalog` ni adaptadores de rutas o clima. Falta el formato exacto de los dos endpoints (O5) |
+| D10 | 2026-09-26 | **Merge commit** para unir `engine-v2` a `main` | Se conserva un commit por fase; §5.10 paso 10 usa merge commit |
+| D11 | 2026-09-26 | **Espera en estación ocupada: 15 min (estimado)** hasta tener datos | Cuando el detalle de Blaze dé estado por conector, se revisa (p. ej. sin espera si hay otro conector compatible libre) |
+
+**Todas las decisiones de esta sección están tomadas.** Lo que queda abierto depende de datos o de acciones: el tileset y el costo de Mapbox (O4, O6), el cierre del periodo de sombra (O3 → D2), cuándo activar la energía v2 (el dueño, D3) y el formato de los endpoints de Blaze (O5).
 
 ## 4. Tareas operativas (sin código)
 
@@ -301,13 +319,13 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
 #### 5.3.4 Velocidad por clase vial cuando no hay límite
 - **Contexto:** la especificación dice `v_exp = min(límite ?? defaultByRoadClass, típica)`. Hoy, sin límite, solo cuenta la típica del proveedor.
 - **Pasos:**
-  1. En `ModelParameters.speed`, agregar `defaultByRoadTier: SourcedValue<Record<RoadTier, number>>` (primaria, secundaria, terciaria, local, sin pavimentar) con valores de la normativa colombiana vigente (D8), fuente `configurable` y referencia a la norma.
+  1. En `ModelParameters.speed`, agregar `defaultByRoadTier: SourcedValue<Record<RoadTier, number>>` con los valores de D8: primaria 90, secundaria 80, terciaria 60, local/urbana 50, sin pavimentar 40 km/h; fuente `configurable` y referencia a la norma cuando se confirme. La clase `unknown` no tiene tope.
   2. En `toRawRoute`, asignar a cada muestra su `roadTier` con la clasificación de `engines/route/classify.ts`. Moverla o compartirla por `core/` para no cruzar engines. Campo opcional `roadTier?` en las muestras y en el esquema del snapshot.
   3. En `speedMesh`/`buildSpeedProfile`, si no hay `limitKmh`, usar `defaultByRoadTier[roadTier]` como tope, con `limitingFactor = "road_class_default"` (agregarlo a `LimitingFactor` en `contracts/speed.ts`).
 - **Tests:** sin límite y con clase terciaria, el tope es el de la tabla; con límite, manda el límite.
 
 #### 5.3.5 Temperatura (D4)
-Solo si O3 muestra que el v2 subestima en frío. Se agrega un `EfficiencyModel` en `engines/energy/`: la eficiencia del tren motriz como función de la temperatura, con puntos `estimated` y la extensión que prevé la especificación §5.4. Se usa en `segmentEnergyV2` en vez de `drivetrainEfficiency` constante. Tests: a 20 °C, el mismo resultado que hoy; a 5 °C, menos eficiencia.
+**Decidido (D4): se hace ya.** Se agrega un `EfficiencyModel` en `engines/energy/`: la eficiencia del tren motriz como función de la temperatura, con puntos `estimated` y la extensión que prevé la especificación §5.4. Se usa en `segmentEnergyV2` en vez de `drivetrainEfficiency` constante. Tests: a 20 °C, el mismo resultado que hoy; a 5 °C, menos eficiencia.
 
 #### 5.3.6 Parámetros físicos por vehículo en el catálogo
 - **Contexto:** el esquema ya acepta `drivetrainEfficiency`, `regenEfficiency`, `maxRegenPowerKw`, `rotationalInertiaFactor` y `baseAuxPowerKw`; ningún vehículo los trae y todos usan los valores por defecto `estimated`.
@@ -321,7 +339,7 @@ Solo si O3 muestra que el v2 subestima en frío. Se agrega un `EfficiencyModel` 
 
 ### 5.4 F6 · Quitar los multiplicadores
 
-- **Contexto:** el modelo anterior (`src/domain/energy.ts`) sigue vivo porque `ENERGY_ENGINE=legacy` es el valor por defecto. F6 se hace **después** de D3: cuando la energía v2 ya es la que responde en producción.
+- **Contexto:** el modelo anterior (`src/domain/energy.ts`) sigue vivo porque `ENERGY_ENGINE=legacy` es el valor por defecto. Por D3, **el dueño del producto decide cuándo activar la energía v2** con `ENERGY_ENGINE`, y F6 empieza solo cuando lo pida explícitamente.
 - **Pasos:**
   1. Cambiar el valor por defecto de `ENERGY_ENGINE` a `v2` (`src/infrastructure/config/env.ts`) y observar una semana.
   2. **Lo que usa el modelo anterior fuera del planificador:**
@@ -358,20 +376,20 @@ Solo si O3 muestra que el v2 subestima en frío. Se agrega un `EfficiencyModel` 
 
 ### 5.6 F8 · Pasada 2 al guardar y compartir; activar v2
 
-#### 5.6.1 Verificar al guardar
-- **Contexto:** la pasada 2 solo corre al planificar con `v2`. Un viaje guardado conserva los datos de la pasada 1 (ADR-0010): al abrirlo se ve el plan sin verificar.
+#### 5.6.1 Verificar al compartir (D6)
+- **Contexto:** la pasada 2 solo corre al planificar con `v2`. Un viaje guardado conserva los datos de la pasada 1 (ADR-0010). Por D6, se verifica **al compartir**: el link público muestra el plan verificado; guardar no gasta consultas extra.
 - **Pasos:**
   1. En `EVRoutePlanningService` (`src/application/plan-trip/service.ts`), nuevo método `verify(snapshot, planId, request)`:
      - arma `PlanInputs` desde el snapshot;
      - elige el plan con `computePlans`;
      - llama a `verifyPlan` (`verify-plan.ts`);
      - devuelve el plan verificado **y** la ruta real que usó (`RawRoute`).
-  2. Guardar en el snapshot un campo nuevo `verifiedRoutes?: Record<planId, RawRoute>`, opcional en el esquema.
-  3. En `computePlans` (o en la página compartida), si hay `verifiedRoutes[planId]`, usar esa ruta para ese plan, con `chargers` = solo las estaciones del plan. Así, al abrir el viaje se ve el plan verificado.
-  4. En `saveTripFn` (`src/server/actions/trips.ts`): después de validar el snapshot, llamar a `createPlanningService().verify(...)` con un tiempo máximo (p. ej. 8 s). Si falla o se pasa del tiempo, se guarda sin verificar. Nunca bloquea el guardado.
-  5. Al compartir (`shareTripFn`), si el snapshot no tiene `verifiedRoutes`, verificar igual.
-- **Tests:** `trips.test.ts` con el servicio simulado (guarda con `verifiedRoutes`; si `verify` falla, guarda igual); la página compartida usa la ruta verificada.
-- **Depende de:** D6.
+  2. Guardar en el snapshot un campo nuevo `verifiedRoutes?: Record<planId, RawRoute>`, opcional en el esquema (`contracts/snapshot.ts`).
+  3. En la página compartida (`src/app/v/[shareId]/page.tsx`), si hay `verifiedRoutes[planId]`, recalcular ese plan con esa ruta y con `chargers` = solo las estaciones del plan. Así el link muestra el plan verificado.
+  4. En `shareTripFn` (`src/server/actions/trips.ts`): si el viaje tiene snapshot y no tiene `verifiedRoutes`, llamar a `createPlanningService().verify(...)` con un tiempo máximo (p. ej. 8 s) y actualizar `payload.snapshot`. Si falla o se pasa del tiempo, se comparte igual, sin verificar. Nunca bloquea el link.
+  5. `saveTripFn` no cambia.
+- **Tests:** `trips.test.ts` con el servicio simulado (al compartir guarda `verifiedRoutes`; si `verify` falla, comparte igual; guardar no llama a `verify`); la página compartida usa la ruta verificada.
+- **Depende de:** nada más (D6 decidida).
 
 #### 5.6.2 `PLANNER_ENGINE=v2`
 Ver §5.5.
@@ -380,32 +398,39 @@ Ver §5.5.
 
 ### 5.7 FB · Fuente de datos Blaze (Muvatec)
 
-El diseño está en el ADR-0008 y en el plan 04, sección FB.
+El diseño está en el ADR-0008. **Alcance (D9):** Blaze entrega solo electrolineras, con dos endpoints:
+- **listado** de todas las estaciones: reemplaza el dataset consolidado de OSM, SIVEEIC, comunidad y catálogo;
+- **detalle** de una estación: se pide solo para las estaciones que usa la ruta (paradas propuestas y las que el usuario abre), cuando haga falta.
 
-1. **O5:** la documentación en `docs/blaze/`.
-2. **Llenar la tabla de correspondencia** (plan 04, FB): para cada dato (estaciones, disponibilidad, precios, vehículos, rutas, elevación, clima, geocodificación), el endpoint de Blaze, los campos y sus unidades. Decidir D9 y pasar el ADR-0008 a "aceptada".
+Rutas, elevación, clima, geocodificación y vehículos siguen con los proveedores actuales.
+
+1. **O5:** la documentación de los dos endpoints en `docs/blaze/`: URL, autenticación, parámetros, paginación, forma de la respuesta, unidades (kW, AC/DC, tipo de conector), frecuencia de actualización y límites de uso. Sin tokens ni datos de clientes.
+2. **Correspondencia de campos** (va en el ADR-0008, que pasa a "aceptada"):
+   - listado → `ConsolidatedStation`: id, nombre, coordenadas, operador, conectores con estándar, potencia, corriente, cantidad y estado, disponibilidad, precio, dirección;
+   - detalle → lo que el listado no trae: estado en vivo por conector, precio vigente, horario, fotos, servicios, etc.
 3. **Cliente** `src/infrastructure/blaze/client.ts`:
    - lee `BLAZE_API_URL` y `BLAZE_API_KEY` en `getEnv()` (`src/infrastructure/config/env.ts`);
-   - `fetchJson` con timeout, un reintento y `cacheTtlMs` por recurso (estaciones: 1 h; disponibilidad: 1 min; vehículos: 1 día);
+   - `fetchJson` con timeout, un reintento y caché: **listado** con `cacheTtlMs` del orden de 1 h (ajustar a la frecuencia que declare Blaze); **detalle** corto (1–5 min si trae estado en vivo);
    - la credencial va en la cabecera que indique la documentación y nunca en la URL ni en los logs (usar `safeUrl`).
-4. **Esquemas** `src/infrastructure/blaze/schemas.ts`: zod de cada respuesta, **tal como llega**, con `.passthrough()` en los objetos que pueden crecer.
+4. **Esquemas** `src/infrastructure/blaze/schemas.ts`: zod del listado y del detalle, **tal como llegan**, con `.passthrough()` en los objetos que pueden crecer.
 5. **Traductores** `src/infrastructure/blaze/mappers.ts`, funciones puras:
-   - Blaze → `ConsolidatedStation` y `StationConnector` (`src/domain/stations/model.ts`), con `source: "blaze"`, `powerOrigin` y `currentOrigin` según lo que diga la fuente;
+   - listado → `ConsolidatedStation[]` y `StationConnector` (`src/domain/stations/model.ts`), con `source: "blaze"` y `powerOrigin`/`currentOrigin` según lo que diga la fuente;
+   - detalle → un tipo de dominio `StationDetail` (nuevo, en `src/domain/stations/model.ts`) con lo que el detalle agrega;
    - agregar `"blaze"` al tipo `SourceId`.
-6. **Adaptadores:**
-   - `BlazeStationCatalog implements StationCatalog` (primero);
-   - si hay disponibilidad en vivo: puerto nuevo `src/domain/ports/station-availability.ts` (`statusOf(ids) → Record<id, StationStatus>`), adaptador `BlazeAvailability`, y en el servicio aplicar la disponibilidad a los cargadores del corredor antes de planificar (`available`, `status`);
-   - si hay vehículos: puerto `VehicleCatalog` (`list()`, `get(id)`) y adaptador; hoy el catálogo se lee de Postgres en `src/infrastructure/catalog/catalog-store.ts`;
-   - rutas, elevación, clima y geocodificación: solo si Blaze los ofrece, como otro `RoutingProvider`, `ElevationProvider`, etc. En elevación sería otra opción de `ELEVATION_SOURCE`.
-7. **Selección** en `src/application/container.ts`: `DATA_SOURCE = legacy | blaze`, por defecto `legacy`. Con `blaze` y sin credencial, `legacy` más `console.warn`.
-8. **Tests:**
-   - fixtures grabados de Blaze **sin secretos** (revisar con `assertNoSecrets` de `src/test-support/cassette.ts`);
+6. **Listado:** `BlazeStationCatalog implements StationCatalog` (`getDataset()` arma un `StationDataset` con `version` = la que dé Blaze o un hash del listado). El planificador no cambia: filtra el corredor igual que hoy.
+7. **Detalle:**
+   - puerto nuevo `src/domain/ports/station-details.ts`: `StationDetails.get(id) → StationDetail | null` y `getMany(ids)`;
+   - adaptador `BlazeStationDetails`;
+   - **en la planificación** (`service.ts`): después de elegir las paradas del plan recomendado, pedir el detalle **solo** de esas estaciones (en paralelo, con tiempo máximo) y aplicar lo que cambie la decisión. Si una estación resulta `offline` u ocupada, replanificar una vez sin ella o con la espera (`occupiedWaitMin`). Si el detalle no responde, seguir con el listado;
+   - **en la UI:** la ficha de una estación (`src/components/planner/charger-facts.tsx` / `station-hub.tsx`) pide el detalle al abrirla, por una acción de servidor nueva `getStationDetailFn(id)` que usa el puerto a través de `container.ts`.
+8. **Selección** en `src/application/container.ts`: `DATA_SOURCE = legacy | blaze`, por defecto `legacy`. Con `blaze` y sin credencial, `legacy` más `console.warn`.
+9. **Tests:**
+   - fixtures grabados del listado y de un detalle **sin secretos** (revisar con `assertNoSecrets` de `src/test-support/cassette.ts`);
    - un test de contrato por traductor;
-   - la caracterización con `DATA_SOURCE=blaze` sobre esos fixtures (las estaciones cambian; las invariantes no).
-9. **ESLint:** nada fuera de `src/infrastructure/` y `container.ts` puede importar `@/infrastructure/blaze/*`. La regla actual ya lo cubre para dominio, aplicación y UI; verificarlo con un import de prueba.
-10. **Limpieza (F9):** si Blaze reemplaza las fuentes de estaciones, borrar `src/infrastructure/stations/sources/*` (salvo la que siga), `merge.ts`, `registry.ts` y el cron de refresco.
-
----
+   - servicio con un `StationDetails` falso: el detalle solo se pide para las paradas, y una parada `offline` provoca replanificar;
+   - caracterización con `DATA_SOURCE=blaze` sobre los fixtures (las estaciones cambian; las invariantes no).
+10. **ESLint:** nada fuera de `src/infrastructure/` y `container.ts` importa `@/infrastructure/blaze/*`. La regla actual ya lo cubre; verificarlo con un import de prueba.
+11. **Limpieza (F9):** con `DATA_SOURCE=blaze` estable, borrar las fuentes que Blaze reemplaza en `src/infrastructure/stations/sources/*`, la fusión (`src/domain/stations/merge.ts`, `src/infrastructure/stations/registry.ts`) y el cron de refresco del dataset, si ya no se usan.
 
 ### 5.8 Calibración (`TripObservation`)
 
@@ -443,9 +468,8 @@ Sin la cassette real (P1 omitido), se prueban sobre la ruta **sintética** (`src
 
 **Requisitos previos:** `PLANNER_ENGINE=v2` y `ENERGY_ENGINE=v2` en producción sin problemas (D2, D3), F6 hecha, D7 y D10 decididas.
 
-1. **Contrato del plan (D7):**
-   - *Recomendado:* `RoutePlan` queda como contrato definitivo, ampliado con lo que le falta de `EVRoutePlan` (`dataQuality`, `assumptions`, `modelVersion`, `snapshotId`). Se documenta en un ADR y no se crea `legacy-adapter.ts`.
-   - *Alternativa:* crear `EVRoutePlan` y migrar los 14 componentes de `src/components/planner/`. Es más trabajo y más riesgo, sin beneficio visible para el usuario.
+1. **Contrato del plan (D7, decidido):**
+   - `RoutePlan` queda como contrato definitivo, ampliado con lo que le falta de `EVRoutePlan` (`dataQuality`, `assumptions`, `modelVersion`, `snapshotId`). Se documenta en un ADR y no se crea `legacy-adapter.ts`.
 2. **Borrar el código anterior:**
    - `planStopsLegacy` y todo lo que solo usa él en `src/domain/planner.ts`: `pickStops`, `assessFirstCharger`, la selección por puntaje y constantes asociadas;
    - `PLANNER_ENGINE`, `logShadow`, `shadow-report.ts` y sus tests;
@@ -464,7 +488,7 @@ Sin la cassette real (P1 omitido), se prueban sobre la ruta **sintética** (`src
     1. `git fetch origin main && git merge origin/main` en `engine-v2`; resolver conflictos (el código de `main` puede haber cambiado en paralelo).
     2. `npm run typecheck && npm run lint && npm run test:coverage && npm run build`.
     3. Abrir el PR con la plantilla del repo si existe. Resumir las fases con sus commits y ADR y el antes y después de números sobre la caracterización.
-    4. Revisión y merge según D10.
+    4. Revisión y merge con **merge commit** (D10).
     5. Después del merge: el hook de sesión y las reglas de ESLint quedan activos para todas las sesiones.
 
 ---
@@ -472,27 +496,35 @@ Sin la cassette real (P1 omitido), se prueban sobre la ruta **sintética** (`src
 ## 6. Orden recomendado y dependencias
 
 ```text
-Ya (sin esperar a nadie)           Con datos del dueño/producción        Al final
-─────────────────────────          ─────────────────────────────         ─────────
-O1 rotar contraseña                O3 sombra en Vercel ─┬─► D2 ─► PLANNER v2 ─┐
-O3 activar sombra en Vercel        O4 elevation:compare ─► D1 ─► 5.1.1         │
-5.3.2 0 km/h en tramos                                  └─► D3 ─► ENERGY v2 ─► F6 (5.4)
-5.3.3 desvío con energía local     O5 docs Blaze ─► D9 ─► FB (5.7)             │
-5.3.4 velocidad por clase vial*    O6 plan Mapbox ─► 5.2 matriz               │
-5.1.2–5.1.4 túneles, pendiente,    D6 ─► 5.6.1 verificar al guardar           │
-            error tipado           5.3.6 datos físicos por vehículo           ▼
-5.9 invariantes e informe          5.8 calibración (contrato)            F9 (5.10) ─► PR a main
-(* necesita D8 para los valores)
+Ya (sin esperar a nadie)             Con datos o acciones                         Al final
+─────────────────────────            ────────────────────                         ────────
+O1 rotar contraseña                  O3 sombra 1–2 semanas ─► PLANNER v2 (D2) ─┐
+O3 activar sombra en Vercel          Dueño decide ─► ENERGY v2 (D3) ─► F6 (5.4)│
+5.1.1 mapbox-terrain por defecto     O4 verificar tileset y costo (D1)         │
+5.1.2–5.1.4 túneles, pendiente,      O5 docs Blaze ─► FB (5.7, alcance D9)     │
+            error tipado             O6 plan Mapbox ─► 5.2 matriz              │
+5.3.2 0 km/h en tramos               5.3.6 datos físicos por vehículo          ▼
+5.3.3 desvío con energía local       5.8 calibración (contrato)           F9 (5.10) ─► PR a main
+5.3.4 velocidad por vía (D8)                                                 (merge commit, D10)
+5.3.5 efecto del frío (D4)
+5.6.1 verificar al compartir (D6)
+5.9 invariantes e informe
 ```
 
 **Secuencia sugerida en sesiones de trabajo:**
-1. **Sesión A (sin red):** 5.3.2, 5.3.3 y 5.9. Mejoran el v2 antes de medirlo en sombra.
-2. **Tú:** O1, O3 y O4. Dejar la sombra corriendo 1–2 semanas.
-3. **Sesión B (sin red, con fixtures):** 5.1.2, 5.1.3 y 5.1.4; 5.3.4 cuando se decida D8.
-4. **Sesión C:** 5.1.1 con los datos de O4; 5.6.1 si se decide D6.
-5. **Con los datos de sombra:** D2 y D3 → activar v2 → F6 (5.4).
-6. **FB** cuando llegue la documentación (puede ir en paralelo desde el paso 3).
-7. **F9** y el PR a `main`.
+1. **Tú, ya:** O1 (contraseña), O3 (sombra en Vercel) y O4 (tileset y costo de Mapbox).
+2. **Sesión A (sin red):**
+   - 5.3.2 (0 km/h en los tramos);
+   - 5.3.3 (desvío con energía local);
+   - 5.3.4 (velocidad por tipo de vía, D8);
+   - 5.3.5 (frío, D4).
+
+   Mejoran la energía v2 mientras corre la sombra.
+3. **Sesión B (sin red, con fixtures):** 5.1.1 (`mapbox-terrain` por defecto, D1), 5.1.2–5.1.4 (túneles, pendiente, error tipado) y 5.6.1 (verificar al compartir, D6).
+4. **Sesión C:** 5.9 (invariantes e informe).
+5. **Al cerrar la sombra (D2):** `PLANNER_ENGINE=v2`. **Cuando lo decidas (D3):** `ENERGY_ENGINE=v2` y luego F6.
+6. **FB** cuando lleguen los dos endpoints de Blaze (O5); puede ir en paralelo desde el paso 3.
+7. **F9** y el PR a `main` con merge commit.
 
 ---
 

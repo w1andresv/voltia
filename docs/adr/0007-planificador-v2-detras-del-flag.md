@@ -20,3 +20,7 @@ F7 reemplaza la selección de paradas por puntaje (D6) por programación dinámi
 - Nada cambia para los usuarios hasta poner `PLANNER_ENGINE=shadow` (para medir) o `v2`.
 - **Decidido (2026-09-26):** cada parada cuesta 5 minutos fijos (`ModelParameters.charging.connectionOverheadMin`: estacionar, abrir la app, conectar, desconectar y salir), marcado `estimated` hasta calibrarlo. El dueño del producto prefiere menos paradas: con 0 min, "más rápida" partía una parada en dos para ganar 1 minuto; con 5 min ya no. Aplica a los dos planificadores; la ficha "10→80 %" del panel de batería no lo suma.
 - El planificador actual se retira en F9.
+
+## Decisión del dueño del producto (2026-09-26, D2 y D11)
+- **D2:** `PLANNER_ENGINE=v2` después de 1–2 semanas en `shadow` en producción, si `[plan-trip:shadow]` no muestra diferencias sin explicar.
+- **D11:** la espera en estación ocupada se mantiene en 15 min (`estimated`) hasta tener estado por conector (detalle de Blaze).

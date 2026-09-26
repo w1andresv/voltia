@@ -15,3 +15,6 @@ Se trabaja directo en `engine-v2`, con un commit por fase (prefijo `F<N>:`), a p
 - Cada fase es un punto de la historia fácil de revisar o revertir (`git revert` de un commit).
 - No se puede usar `engine-v2/<algo>` como nombre de rama: git no admite una rama `engine-v2` y otra bajo `engine-v2/`.
 - Hay que traer `main` a `engine-v2` con merge cuando cambie, para no acumular conflictos.
+
+## Decisión del dueño del producto (2026-09-26, D10)
+`engine-v2` se une a `main` con **merge commit**, para conservar un commit por fase.

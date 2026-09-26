@@ -37,3 +37,9 @@ Cambiarlo cambia el consumo, así que va detrás del modo sombra, igual que el p
 - Pendiente de calibrar con viajes reales: eficiencias, captura de regeneración y potencia auxiliar (todo `estimated`), y si hace falta un efecto de temperatura sobre la eficiencia (el v2 no lo tiene; el actual sumaba hasta +7 % a 10 °C).
 - Pendiente: 0 km/h en los puntos intermedios del usuario y en las paradas de carga (la ruta base no trae los límites entre tramos), el desvío a una estación con la energía local del perfil (hoy usa el cálculo del modelo actual) y la tabla de velocidad por clase vial cuando no hay límite.
 - F6 (quitar los multiplicadores del código) se hace cuando el modo sombra en producción muestre diferencias dentro de un rango aceptado.
+
+## Decisiones del dueño del producto (2026-09-26)
+- **D3:** no se fija un rango numérico de diferencia. El dueño decide cuándo activar la energía v2 con `ENERGY_ENGINE`, que se conserva hasta su visto bueno; F6 empieza solo cuando lo pida.
+- **D4:** se agrega **ya** el efecto del frío: eficiencia del tren motriz en función de la temperatura, con puntos `estimated` parecidos al modelo actual (guía 05, §5.3.5).
+- **D5:** `sport` = +8 % sobre la velocidad típica, con tope legal y de curva (lo implementado).
+- **D8:** sin límite de Mapbox, tope por tipo de vía: primaria 90, secundaria 80, terciaria 60, local/urbana 50, sin pavimentar 40 km/h, `configurable` (guía 05, §5.3.4).

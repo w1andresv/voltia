@@ -18,3 +18,6 @@ La especificación (§4) pide una segunda pasada: pedir la ruta real que pasa po
 - Con `v2`, el plan recomendado usa la distancia, la energía y el tiempo reales de entrar a cada estación, en vez del desvío estimado (2 × distancia en línea recta).
 - Costo: 1 a 3 consultas de rutas y de elevación por planificación con paradas.
 - Pendiente: verificar también al guardar o compartir un viaje (necesita el snapshot guardado, ver F8 `PlanningSnapshot`), y medir en sombra cuántas veces cambia el plan antes de pasar a `v2`.
+
+## Decisión del dueño del producto (2026-09-26, D6)
+La pasada 2 se ejecuta también **al compartir** un viaje, no al guardarlo. El resultado verificado queda en el snapshot (`verifiedRoutes`) y el link público lo muestra (guía 05, §5.6.1).

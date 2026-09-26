@@ -27,3 +27,6 @@ B6: hoy se piden 96 puntos por ruta a Open-Meteo, uno cada ~3 km en 300 km, y en
 - Con `open-meteo-adaptive` o `mapbox-terrain` cambian el desnivel y el consumo en montaña. Conviene probarlas con `PLANNER_ENGINE=shadow`, mirar el log y correr `elevation:compare` en rutas de montaña antes de elegir.
 - Costo: `mapbox-terrain` cuenta como uso de teselas de Mapbox (revisar el plan contratado); la caché lo reduce con el uso. `open-meteo-adaptive` hace varias consultas por ruta; el uso gratuito de Open-Meteo es no comercial.
 - Pendiente de F2b: limpieza de túneles y puentes, límite de pendiente y error tipado `ELEVATION_UNAVAILABLE`. El tileset `mapbox.terrain-rgb` se verifica al correr `elevation:compare` con un token real; si Mapbox pide `mapbox.mapbox-terrain-dem-v1`, se cambia en `ModelParameters.elevation.terrain.tileset`.
+
+## Decisión del dueño del producto (2026-09-26, D1)
+La fuente por defecto pasa a ser **`mapbox-terrain`**. Queda por hacer el cambio de código (guía 05, §5.1.1) y verificar con `npm run elevation:compare` que el tileset responde y que el costo cabe en el plan de Mapbox (O4, O6).
