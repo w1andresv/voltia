@@ -11,6 +11,7 @@ Orden sugerido de lectura:
 | 5 | `traspaso-y-proximos-pasos.md` | Estado del branch, cómo recrearlo y subirlo, datos clave, próximos pasos (F0), mensaje para una sesión nueva y scripts para reproducir los hallazgos sin npm. |
 | 6 | `03-viabilidad.md` | Viabilidad de implementar el plan sobre el código actual, bloqueos, riesgos y estado de F0. |
 | 7 | `04-plan-de-trabajo.md` | Guía operativa de F1–F9: ramas, tareas, tests, criterios de cierre y pendientes antes de empezar. |
+| 8 | `05-pendientes-y-guia-de-desarrollo.md` | Todo lo que falta, paso a paso: requisitos, variables, decisiones pendientes, tareas operativas, pendientes por fase con archivos, tests y cierre, orden recomendado y riesgos. |
 
 Las decisiones tomadas están en [`docs/adr/`](../adr/README.md).
 
