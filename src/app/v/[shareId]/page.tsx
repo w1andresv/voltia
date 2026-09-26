@@ -52,6 +52,7 @@ export default async function SharedTripPage({
       request.vehicle as Vehicle,
       request.conditions as TripConditions,
       snapshot.plannerEngine,
+      snapshot.energyEngine,
     );
     return (
       <SharedTripView

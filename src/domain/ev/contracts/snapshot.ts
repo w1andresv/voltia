@@ -43,6 +43,7 @@ const RawRouteSchema = z
         elevM: z.number(),
         slopePct: z.number(),
         speedKmh: z.number(),
+        speedLimitKmh: z.number().optional(),
       }),
     ),
     distanceKm: z.number(),
@@ -92,6 +93,8 @@ const SnapshotObjectSchema = z.object({
   createdAt: z.string(),
   modelVersion: z.string(),
   plannerEngine: z.enum(["legacy", "v2"]),
+  /** Falta en snapshots anteriores a F5: equivale a "legacy". */
+  energyEngine: z.enum(["legacy", "v2"]).optional(),
   providers: z.object({
     routing: z.string(),
     elevation: z.string(),

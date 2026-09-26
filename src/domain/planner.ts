@@ -7,6 +7,7 @@ import { toTripConfiguration } from "./ev/core/trip-config";
 import { kwhToSocPct } from "./ev/core/units";
 import { placeOnRoute } from "./ev/engines/corridor/engine";
 import { STYLE_SPEED_FACTOR, annotateEnergy, energyMode, segmentEnergyKwh } from "./energy";
+import { energyProfileForRoute, type EnergyEngine } from "./ev/energy-v2";
 import type { EnergySample } from "./ev/contracts/energy";
 import type { SocEvent } from "./ev/contracts/soc";
 import { legSoc, requiredStartSoc, simulateSoc, walkSoc } from "./ev/engines/soc/simulate";
@@ -1054,6 +1055,8 @@ export function buildPlan(args: {
   destination: Place;
   /** Planificador de paradas: el actual (por defecto) o el v2 por programación dinámica (F7). */
   engine?: "legacy" | "v2";
+  /** Modelo de energía: el actual (por defecto) o el v2, física sin multiplicadores y perfil de velocidad (F5). */
+  energyEngine?: EnergyEngine;
 }): RoutePlan {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
   const { reservePct: safety, arrivalTargetPct } = socFloors(vehicle, conditions);
@@ -1069,7 +1072,8 @@ export function buildPlan(args: {
 
   const attached = placeChargers(args.chargers, samplesPre);
   // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
-  const energySamples = annotateEnergy(samplesPre, ctx);
+  const energyV2 = args.energyEngine === "v2" ? energyProfileForRoute(raw, vehicle, conditions, weather) : null;
+  const energySamples = energyV2 ? energyV2.samples : annotateEnergy(samplesPre, ctx);
   const cap = Math.max(vehicle.batteryKwh, 1);
   const chosen =
     args.engine === "v2"
@@ -1095,7 +1099,8 @@ export function buildPlan(args: {
   const energyKwh = last.cumulativeKwh + detourKwh;
   const energyGrossKwh = samples.reduce((a, s) => a + s.energyGrossKwh, 0) + detourKwh;
   const energyRegenKwh = samples.reduce((a, s) => a + s.energyRegenKwh, 0);
-  const driveMin = driveMinutesFor(raw, conditions);
+  // Con el v2 el tiempo de manejo sale del perfil de velocidad (no se reescala al del proveedor).
+  const driveMin = energyV2 ? energyV2.durationMinutes : driveMinutesFor(raw, conditions);
   const chargeMin = stops.reduce((a, s) => a + s.chargeMinutes, 0);
   const detourKm = stops.reduce((a, s) => a + (s.detourKm ?? 0), 0);
   const detourMin = stops.reduce((a, s) => a + (s.detourMinutes ?? 0), 0);
@@ -1182,6 +1187,13 @@ export function buildPlan(args: {
     departureCharge,
     firstChargerUnreachable: chosen.firstChargerUnreachable,
     planner: args.engine === "v2" ? "v2" : "legacy",
+    energyEngine: energyV2 ? "v2" : "legacy",
+    ...(energyV2
+      ? {
+          energyAssumptions: energyV2.assumptions,
+          providerDriveMinutes: raw.driveMinutes,
+        }
+      : {}),
     feasibilityStatus: chosen.feasibilityStatus,
     infeasibilityCode: chosen.infeasibilityCode,
     stops,

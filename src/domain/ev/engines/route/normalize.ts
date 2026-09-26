@@ -150,6 +150,51 @@ export function buildSamples(points: LatLon[], distanceKm: number, durationMin: 
   return samples;
 }
 
+/**
+ * Límite legal de cada muestra: el menor límite conocido entre la muestra
+ * anterior y esta, según la anotación `maxspeed` del proveedor. Sin anotación
+ * (OSRM, o Mapbox sin datos) las muestras quedan sin límite.
+ */
+export function applySpeedLimits(
+  samples: RawRoute["samples"],
+  route: ProviderRoute,
+  distanceKm: number,
+): RawRoute["samples"] {
+  const pieces: [number, number | null][] = [];
+  for (const leg of route.legs) {
+    const d = leg.annotation?.distanceM;
+    const lim = leg.annotation?.maxspeedKmh;
+    if (!d?.length || lim?.length !== d.length) return samples;
+    d.forEach((m, i) => pieces.push([m, lim[i] ?? null]));
+  }
+  if (!pieces.some(([, l]) => l != null) || samples.length < 2 || !(distanceKm > 0)) return samples;
+  const totalKm = pieces.reduce((a, [m]) => a + m, 0) / 1000;
+  const scale = totalKm / distanceKm;
+  const out = samples.map((s) => ({ ...s }));
+  let p = 0;
+  let pStart = 0;
+  for (let i = 1; i < out.length; i++) {
+    const a = out[i - 1]!.km * scale;
+    const b = out[i]!.km * scale;
+    let min = Infinity;
+    // Avanza hasta el primer tramo que termina después de `a`.
+    while (p < pieces.length && pStart + pieces[p]![0] / 1000 <= a) {
+      pStart += pieces[p]![0] / 1000;
+      p++;
+    }
+    let q = p;
+    let qStart = pStart;
+    while (q < pieces.length && qStart < b) {
+      const lim = pieces[q]![1];
+      if (lim != null) min = Math.min(min, lim);
+      qStart += pieces[q]![0] / 1000;
+      q++;
+    }
+    if (Number.isFinite(min)) out[i]!.speedLimitKmh = min;
+  }
+  return out;
+}
+
 /** Vías principales según el resumen de cada tramo ("Ruta 45A, Ruta 66"). */
 export function viaOf(route: ProviderRoute): string | undefined {
   const names = route.legs
@@ -173,9 +218,9 @@ export function toRawRoute(
     via: viaOf(route),
     noTolls: meta.noTolls || undefined,
     geometry: downsample(route.geometry, MAP_GEOMETRY_POINTS),
-    samples: applySegmentSpeeds(
-      buildSamples(route.geometry, distanceKm, driveMinutes),
-      speedProfile(route),
+    samples: applySpeedLimits(
+      applySegmentSpeeds(buildSamples(route.geometry, distanceKm, driveMinutes), speedProfile(route), distanceKm),
+      route,
       distanceKm,
     ),
     distanceKm,

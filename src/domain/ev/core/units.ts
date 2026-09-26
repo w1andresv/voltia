@@ -4,8 +4,10 @@
  * Toda conversión pasa por aquí.
  */
 
-/** Aceleración de la gravedad, m/s². */
+/** Aceleración de la gravedad del modelo anterior, m/s² (se conserva para no cambiar sus resultados). */
 export const G_MS2 = 9.81;
+/** Gravedad estándar (especificación §5.4), m/s². La usa el motor de energía v2. */
+export const G_STANDARD_MS2 = 9.80665;
 /** Julios en un kWh. */
 export const J_PER_KWH = 3_600_000;
 

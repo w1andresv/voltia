@@ -15,6 +15,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0009](./0009-pasada-2-solo-plan-recomendado.md) | Pasada 2: solo el plan recomendado, solo con el planificador v2 | Aceptada |
 | [0010](./0010-snapshot-con-rutas-muestreadas.md) | PlanningSnapshot con rutas ya muestreadas, guardado solo en la cuenta | Aceptada |
 | [0011](./0011-fuente-de-elevacion-configurable.md) | Fuente de elevación configurable (B6) | Aceptada |
+| [0012](./0012-energia-v2-detras-de-energy-engine.md) | Energía v2 (física sin multiplicadores y perfil de velocidad) detrás de ENERGY_ENGINE | Aceptada |
 
 ## Plantilla
 

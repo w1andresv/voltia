@@ -1,12 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoutingError } from "@/domain/ev/contracts/route";
 import { fakeMapboxRoute, fakeProviderRoute } from "@/test-support/mapbox-fixtures";
-import { MapboxRoutingProvider, OpenMeteoElevationProvider, toProviderRoute } from "./adapters";
+import {
+  MapboxRoutingProvider,
+  OpenMeteoElevationProvider,
+  maxspeedKmh,
+  toProviderRoute,
+} from "./adapters";
 
 vi.mock("next/cache", () => ({ unstable_cache: (fn: () => Promise<unknown>) => fn }));
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 describe("toProviderRoute", () => {
@@ -46,7 +54,13 @@ describe("toProviderRoute", () => {
       {
         distance: 2000,
         duration: 120,
-        geometry: { coordinates: [[-73, 7], [-73, 7.01], [-73, 7.02]] },
+        geometry: {
+          coordinates: [
+            [-73, 7],
+            [-73, 7.01],
+            [-73, 7.02],
+          ],
+        },
         legs: [{ summary: "Ruta 45", annotation: { distance: [1000, 1000], duration: [50, 70] } }],
       },
       "mapbox",
@@ -67,7 +81,13 @@ describe("MapboxRoutingProvider", () => {
   it("traduce los errores a RoutingError sin el token", async () => {
     vi.stubGlobal("fetch", async () => json({ message: "Forbidden" }, 403));
     const error = await new MapboxRoutingProvider("pk.secreto.xyz")
-      .calculateRoutes({ waypoints: [{ lat: 7, lon: -73 }, { lat: 6, lon: -73.6 }], alternatives: true })
+      .calculateRoutes({
+        waypoints: [
+          { lat: 7, lon: -73 },
+          { lat: 6, lon: -73.6 },
+        ],
+        alternatives: true,
+      })
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(RoutingError);
     expect((error as RoutingError).noRoute).toBe(false);
@@ -77,7 +97,13 @@ describe("MapboxRoutingProvider", () => {
   it("marca 'sin camino' cuando Mapbox no encuentra ruta", async () => {
     vi.stubGlobal("fetch", async () => json({ code: "NoRoute", routes: [] }));
     const error = await new MapboxRoutingProvider("pk.abc.def")
-      .calculateRoutes({ waypoints: [{ lat: 7, lon: -73 }, { lat: 6, lon: -73.6 }], alternatives: true })
+      .calculateRoutes({
+        waypoints: [
+          { lat: 7, lon: -73 },
+          { lat: 6, lon: -73.6 },
+        ],
+        alternatives: true,
+      })
       .catch((e: unknown) => e);
     expect((error as RoutingError).noRoute).toBe(true);
   });
@@ -86,10 +112,17 @@ describe("MapboxRoutingProvider", () => {
     const urls: string[] = [];
     vi.stubGlobal("fetch", async (url: string) => {
       urls.push(url);
-      return json({ code: "Ok", routes: [fakeMapboxRoute([["primary", 5, 4]])], waypoints: [{ distance: 1500 }, { distance: 0 }] });
+      return json({
+        code: "Ok",
+        routes: [fakeMapboxRoute([["primary", 5, 4]])],
+        waypoints: [{ distance: 1500 }, { distance: 0 }],
+      });
     });
     const set = await new MapboxRoutingProvider("pk.abc.def").calculateRoutes({
-      waypoints: [{ lat: 7, lon: -73 }, { lat: 6, lon: -73.6 }],
+      waypoints: [
+        { lat: 7, lon: -73 },
+        { lat: 6, lon: -73.6 },
+      ],
       alternatives: true,
       avoid: { tolls: true, points: [{ lat: 6.5, lon: -73.3 }] },
     });
@@ -111,5 +144,31 @@ describe("OpenMeteoElevationProvider", () => {
       { lat: 6.5, lon: -73.2 },
     ]);
     expect(out).toEqual([700, 650]);
+  });
+});
+
+describe("maxspeedKmh (anotación de Mapbox)", () => {
+  it("km/h, mph y sin dato", () => {
+    expect(maxspeedKmh({ speed: 80, unit: "km/h" })).toBe(80);
+    expect(maxspeedKmh({ speed: 50, unit: "mph" })).toBeCloseTo(80.4672, 6);
+    expect(maxspeedKmh({ unknown: true })).toBeNull();
+    expect(maxspeedKmh({ none: true })).toBeNull();
+  });
+
+  it("toProviderRoute la trae por par de puntos", () => {
+    const raw = fakeMapboxRoute([["primary", 2, 2]]);
+    const withLimits = {
+      ...raw,
+      legs: raw.legs.map((l) => ({
+        ...l,
+        annotation: {
+          distance: [1000, 1000],
+          duration: [60, 60],
+          maxspeed: [{ speed: 60, unit: "km/h" }, { unknown: true }],
+        },
+      })),
+    };
+    const out = toProviderRoute(withLimits, "mapbox", "driving");
+    expect(out.legs[0]!.annotation?.maxspeedKmh).toEqual([60, null]);
   });
 });

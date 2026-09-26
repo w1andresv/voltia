@@ -71,6 +71,36 @@ export interface ModelParameters {
     /** Pasada 2: rutas reales que se piden como máximo para verificar un plan (especificación §4). */
     maxVerifyIterations: number;
   };
+  speed: {
+    /** Malla del perfil de velocidad y de los tramos de energía v2, m. */
+    meshSpacingM: number;
+    /** Distancia entre los tres puntos con que se mide el radio de una curva, m. */
+    curvatureSpanM: number;
+    /** Por modo de conducción (especificación §5.3). `targetSpeedFactor` escala la velocidad típica; nunca supera el límite legal. */
+    modes: SourcedValue<
+      Record<
+        "efficient" | "normal" | "sport",
+        { targetSpeedFactor: number; maxAccelMs2: number; maxDecelMs2: number; maxLateralAccelMs2: number }
+      >
+    >;
+  };
+  energy: {
+    /** Valores por defecto de la física del vehículo cuando el vehículo no trae los suyos (F5). */
+    vehicleDefaults: {
+      rotationalInertiaFactor: SourcedValue<number>;
+      drivetrainEfficiency: SourcedValue<number>;
+      regenEfficiency: SourcedValue<number>;
+      maxRegenPowerKw: SourcedValue<number>;
+      baseAuxPowerKw: SourcedValue<number>;
+    };
+    /**
+     * Regeneración por modo: fracción del frenado que va al motor (el resto, a los
+     * frenos de fricción) y fracción de la potencia máxima de regeneración que se usa.
+     */
+    regenModes: SourcedValue<Record<"low" | "medium" | "high", { captureFraction: number; maxPowerFraction: number }>>;
+    /** Velocidad a la que se supone medido el consumo manual del usuario, km/h. */
+    manualReferenceSpeedKmh: number;
+  };
   chart: {
     /** Ventana de la gráfica de consumo según el largo de la ruta (especificación §5.10). */
     windows: { upToKm: number; windowKm: number }[];
@@ -127,6 +157,42 @@ export const MODEL_PARAMETERS: ModelParameters = {
     socGridPct: 1,
     occupiedWaitMin: sourced(15, "estimated", { notes: "Sin datos de ocupación; calibrar." }),
     maxVerifyIterations: 3,
+  },
+  speed: {
+    meshSpacingM: 100,
+    curvatureSpanM: 100,
+    modes: sourced(
+      {
+        efficient: { targetSpeedFactor: 0.9, maxAccelMs2: 0.8, maxDecelMs2: 0.8, maxLateralAccelMs2: 1.5 },
+        normal: { targetSpeedFactor: 1, maxAccelMs2: 1.2, maxDecelMs2: 1.5, maxLateralAccelMs2: 2 },
+        sport: { targetSpeedFactor: 1.08, maxAccelMs2: 2, maxDecelMs2: 2.5, maxLateralAccelMs2: 3 },
+      },
+      "estimated",
+      {
+        reference: "docs/arquitectura-ev/prompt_ev_route_engine_v2.md §5.3",
+        notes: "sport: +8 % sobre la velocidad típica, tope en el límite legal (sin dato de congestión).",
+      },
+    ),
+  },
+  energy: {
+    vehicleDefaults: {
+      rotationalInertiaFactor: sourced(1.05, "estimated", { notes: "Típico 1,03–1,08 (especificación §3.3)." }),
+      drivetrainEfficiency: sourced(0.9, "estimated", { notes: "Batería → rueda; el modelo anterior daba 0,90–0,925 según motorKw." }),
+      regenEfficiency: sourced(0.8, "estimated", { notes: "Rueda → batería." }),
+      maxRegenPowerKw: sourced(60, "estimated", { notes: "Sin dato del fabricante; el modelo anterior usaba 40 % de motorKw." }),
+      baseAuxPowerKw: sourced(0.45, "estimated", { notes: "Mismo valor que el modelo anterior." }),
+    },
+    regenModes: sourced(
+      {
+        // captureFraction × regenEfficiency ≈ el recobro del modelo anterior (0,35 / 0,55 / 0,70).
+        low: { captureFraction: 0.45, maxPowerFraction: 0.5 },
+        medium: { captureFraction: 0.7, maxPowerFraction: 0.8 },
+        high: { captureFraction: 0.88, maxPowerFraction: 1 },
+      },
+      "estimated",
+      { notes: "Calibrar con viajes reales (TripObservation)." },
+    ),
+    manualReferenceSpeedKmh: 70,
   },
   chart: {
     windows: [

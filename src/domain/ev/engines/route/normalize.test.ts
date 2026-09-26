@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderRoute } from "@/domain/ev/contracts/route";
-import { applySegmentSpeeds, buildSamples, speedProfile, toRawRoute, viaOf } from "./normalize";
+import {
+  applySegmentSpeeds,
+  applySpeedLimits,
+  buildSamples,
+  speedProfile,
+  toRawRoute,
+  viaOf,
+} from "./normalize";
 
 function route(overrides: Partial<ProviderRoute> = {}): ProviderRoute {
   return {
@@ -16,7 +23,9 @@ function route(overrides: Partial<ProviderRoute> = {}): ProviderRoute {
 
 describe("speedProfile", () => {
   it("usa las anotaciones por par de puntos", () => {
-    const r = route({ legs: [{ annotation: { distanceM: [1000, 1000, 2000], durationS: [120, 60, 60] } }] });
+    const r = route({
+      legs: [{ annotation: { distanceM: [1000, 1000, 2000], durationS: [120, 60, 60] } }],
+    });
     expect(speedProfile(r)).toEqual({ cumKm: [0, 1, 2, 4], cumS: [0, 120, 180, 240] });
   });
 
@@ -52,8 +61,12 @@ describe("applySegmentSpeeds", () => {
   it("cada muestra toma la velocidad del proveedor entre la anterior y ella", () => {
     const profile = { cumKm: [0, 2, 4], cumS: [0, 120, 240] };
     const fast = { cumKm: [0, 2, 4], cumS: [0, 180, 240] };
-    expect(applySegmentSpeeds(samples, profile, 4).map((s) => Math.round(s.speedKmh))).toEqual([60, 60, 60, 60, 60]);
-    expect(applySegmentSpeeds(samples, fast, 4).map((s) => Math.round(s.speedKmh))).toEqual([40, 40, 40, 120, 120]);
+    expect(applySegmentSpeeds(samples, profile, 4).map((s) => Math.round(s.speedKmh))).toEqual([
+      60, 60, 60, 60, 60,
+    ]);
+    expect(applySegmentSpeeds(samples, fast, 4).map((s) => Math.round(s.speedKmh))).toEqual([
+      40, 40, 40, 120, 120,
+    ]);
   });
 
   it("sin perfil deja las muestras como estaban", () => {
@@ -79,7 +92,11 @@ describe("buildSamples y toRawRoute", () => {
   });
 
   it("toRawRoute usa las anotaciones cuando vienen", () => {
-    const r = route({ legs: [{ annotation: { distanceM: [1000, 1000, 1000, 1000], durationS: [180, 180, 30, 30] } }] });
+    const r = route({
+      legs: [
+        { annotation: { distanceM: [1000, 1000, 1000, 1000], durationS: [180, 180, 30, 30] } },
+      ],
+    });
     const raw = toRawRoute(r, { id: "r", label: "Ruta" });
     const speeds = raw.samples.map((s) => s.speedKmh);
     expect(Math.min(...speeds)).toBeLessThan(30);
@@ -90,9 +107,67 @@ describe("buildSamples y toRawRoute", () => {
   });
 
   it("vías principales sin repetir, hasta 3", () => {
-    expect(viaOf(route({ legs: [{ summary: "Ruta 45A, Ruta 66" }, { summary: "Ruta 66, Ruta 62, Ruta 55" }] }))).toBe(
-      "Ruta 45A, Ruta 66, Ruta 62",
-    );
+    expect(
+      viaOf(
+        route({
+          legs: [{ summary: "Ruta 45A, Ruta 66" }, { summary: "Ruta 66, Ruta 62, Ruta 55" }],
+        }),
+      ),
+    ).toBe("Ruta 45A, Ruta 66, Ruta 62");
     expect(viaOf(route({ legs: [{ summary: "" }] }))).toBeUndefined();
+  });
+});
+
+describe("applySpeedLimits", () => {
+  const samples = [0, 1, 2, 3, 4].map((km) => ({
+    km,
+    lat: 7,
+    lon: -73,
+    elevM: 0,
+    slopePct: 0,
+    speedKmh: 60,
+  }));
+
+  it("cada muestra toma el menor límite conocido entre la anterior y ella", () => {
+    const r = route({
+      legs: [
+        {
+          annotation: {
+            distanceM: [1500, 1000, 1500],
+            durationS: [60, 60, 60],
+            maxspeedKmh: [80, 60, null],
+          },
+        },
+      ],
+    });
+    const out = applySpeedLimits(samples, r, 4);
+    expect(out.map((s) => s.speedLimitKmh)).toEqual([undefined, 80, 60, 60, undefined]);
+  });
+
+  it("sin anotación de límite, o sin ningún dato, no cambia nada", () => {
+    expect(
+      applySpeedLimits(
+        samples,
+        route({ legs: [{ annotation: { distanceM: [4000], durationS: [240] } }] }),
+        4,
+      ),
+    ).toBe(samples);
+    expect(
+      applySpeedLimits(
+        samples,
+        route({
+          legs: [{ annotation: { distanceM: [4000], durationS: [240], maxspeedKmh: [null] } }],
+        }),
+        4,
+      ),
+    ).toBe(samples);
+  });
+
+  it("toRawRoute lleva el límite a las muestras", () => {
+    const r = route({
+      legs: [{ annotation: { distanceM: [4000], durationS: [240], maxspeedKmh: [90] } }],
+    });
+    const raw = toRawRoute(r, { id: "a", label: "A" });
+    expect(raw.samples.slice(1).every((s) => s.speedLimitKmh === 90)).toBe(true);
   });
 });

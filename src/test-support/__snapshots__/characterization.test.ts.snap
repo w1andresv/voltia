@@ -1,5 +1,369 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`caracterización del pipeline con proveedores sintéticos > energía v2: eficiente, SOC 60 % 1`] = `
+{
+  "chargers": [
+    "s20",
+    "s35",
+    "s45",
+    "s60",
+    "s72",
+  ],
+  "engine": [
+    "mapbox",
+    "mapbox",
+    "mapbox",
+    "mapbox",
+  ],
+  "plans": [
+    {
+      "arrivalSoc": 20.3,
+      "departureCharge": undefined,
+      "distanceKm": 129.1,
+      "energyKwh": 18.7,
+      "feasible": true,
+      "id": "route-0",
+      "initialSoc": 60,
+      "label": "Ruta A",
+      "minSoc": 20.3,
+      "noTolls": undefined,
+      "stops": [],
+      "totalMinutes": 158,
+      "via": "Ruta 45A, Ruta 62",
+    },
+    {
+      "arrivalSoc": 20.8,
+      "departureCharge": undefined,
+      "distanceKm": 128.7,
+      "energyKwh": 18.5,
+      "feasible": true,
+      "id": "route-1",
+      "initialSoc": 60,
+      "label": "Ruta B",
+      "minSoc": 20.8,
+      "noTolls": undefined,
+      "stops": [],
+      "totalMinutes": 157,
+      "via": "Ruta 45A, Ruta 62",
+    },
+    {
+      "arrivalSoc": 18.8,
+      "departureCharge": undefined,
+      "distanceKm": 144,
+      "energyKwh": 19.4,
+      "feasible": true,
+      "id": "route-2",
+      "initialSoc": 60,
+      "label": "Ruta C",
+      "minSoc": 18.8,
+      "noTolls": true,
+      "stops": [],
+      "totalMinutes": 173,
+      "via": "Ruta 45A",
+    },
+    {
+      "arrivalSoc": 15.5,
+      "departureCharge": undefined,
+      "distanceKm": 149.4,
+      "energyKwh": 21,
+      "feasible": true,
+      "id": "route-3",
+      "initialSoc": 60,
+      "label": "Ruta D",
+      "minSoc": 15.5,
+      "noTolls": undefined,
+      "stops": [],
+      "totalMinutes": 178,
+      "via": "Ruta 66",
+    },
+  ],
+  "selectedId": "route-0",
+  "warnings": [],
+  "weather": {
+    "elevationM": 1200,
+    "source": "Open-Meteo",
+    "temperatureC": 22,
+    "windDirDeg": 200,
+    "windKmh": 12,
+  },
+}
+`;
+
+exports[`caracterización del pipeline con proveedores sintéticos > energía v2: menos paradas, SOC 90 %, sport 1`] = `
+{
+  "chargers": [
+    "s20",
+    "s35",
+    "s45",
+    "s60",
+    "s72",
+  ],
+  "engine": [
+    "mapbox",
+    "mapbox",
+    "mapbox",
+    "mapbox",
+  ],
+  "plans": [
+    {
+      "arrivalSoc": 48,
+      "departureCharge": undefined,
+      "distanceKm": 129.1,
+      "energyKwh": 19.8,
+      "feasible": true,
+      "id": "route-0",
+      "initialSoc": 90,
+      "label": "Ruta A",
+      "minSoc": 48,
+      "noTolls": undefined,
+      "stops": [],
+      "totalMinutes": 131,
+      "via": "Ruta 45A, Ruta 62",
+    },
+    {
+      "arrivalSoc": 48.4,
+      "departureCharge": undefined,
+      "distanceKm": 128.7,
+      "energyKwh": 19.6,
+      "feasible": true,
+      "id": "route-1",
+      "initialSoc": 90,
+      "label": "Ruta B",
+      "minSoc": 48.4,
+      "noTolls": undefined,
+      "stops": [],
+      "totalMinutes": 131,
+      "via": "Ruta 45A, Ruta 62",
+    },
+    {
+      "arrivalSoc": 46.1,
+      "departureCharge": undefined,
+      "distanceKm": 144,
+      "energyKwh": 20.7,
+      "feasible": true,
+      "id": "route-2",
+      "initialSoc": 90,
+      "label": "Ruta C",
+      "minSoc": 46.1,
+      "noTolls": true,
+      "stops": [],
+      "totalMinutes": 144,
+      "via": "Ruta 45A",
+    },
+    {
+      "arrivalSoc": 43.2,
+      "departureCharge": undefined,
+      "distanceKm": 149.4,
+      "energyKwh": 22,
+      "feasible": true,
+      "id": "route-3",
+      "initialSoc": 90,
+      "label": "Ruta D",
+      "minSoc": 43.2,
+      "noTolls": undefined,
+      "stops": [],
+      "totalMinutes": 149,
+      "via": "Ruta 66",
+    },
+  ],
+  "selectedId": "route-0",
+  "warnings": [],
+  "weather": {
+    "elevationM": 1200,
+    "source": "Open-Meteo",
+    "temperatureC": 22,
+    "windDirDeg": 200,
+    "windKmh": 12,
+  },
+}
+`;
+
+exports[`caracterización del pipeline con proveedores sintéticos > energía v2: modo más rápido, SOC 35 % 1`] = `
+{
+  "chargers": [
+    "s20",
+    "s35",
+    "s45",
+    "s60",
+    "s72",
+  ],
+  "engine": [
+    "mapbox",
+    "mapbox",
+    "mapbox",
+    "mapbox",
+  ],
+  "plans": [
+    {
+      "arrivalSoc": 18.9,
+      "departureCharge": undefined,
+      "distanceKm": 129.1,
+      "energyKwh": 19.9,
+      "feasible": true,
+      "id": "route-0",
+      "initialSoc": 35,
+      "label": "Ruta A",
+      "minSoc": 18.9,
+      "noTolls": undefined,
+      "stops": [
+        "s20 32.7→58.8 17 min",
+      ],
+      "totalMinutes": 167,
+      "via": "Ruta 45A, Ruta 62",
+    },
+    {
+      "arrivalSoc": 17.5,
+      "departureCharge": undefined,
+      "distanceKm": 128.7,
+      "energyKwh": 19,
+      "feasible": true,
+      "id": "route-1",
+      "initialSoc": 35,
+      "label": "Ruta B",
+      "minSoc": 17.5,
+      "noTolls": undefined,
+      "stops": [
+        "s20 34→56.9 16 min",
+      ],
+      "totalMinutes": 159,
+      "via": "Ruta 45A, Ruta 62",
+    },
+    {
+      "arrivalSoc": -7.1,
+      "departureCharge": undefined,
+      "distanceKm": 144,
+      "energyKwh": 19.8,
+      "feasible": false,
+      "id": "route-2",
+      "initialSoc": 35,
+      "label": "Ruta C",
+      "minSoc": -7.1,
+      "noTolls": true,
+      "stops": [],
+      "totalMinutes": 155,
+      "via": "Ruta 45A",
+    },
+    {
+      "arrivalSoc": -10.4,
+      "departureCharge": undefined,
+      "distanceKm": 149.4,
+      "energyKwh": 21.4,
+      "feasible": false,
+      "id": "route-3",
+      "initialSoc": 35,
+      "label": "Ruta D",
+      "minSoc": -10.4,
+      "noTolls": undefined,
+      "stops": [],
+      "totalMinutes": 161,
+      "via": "Ruta 66",
+    },
+  ],
+  "selectedId": "route-0",
+  "warnings": [],
+  "weather": {
+    "elevationM": 1200,
+    "source": "Open-Meteo",
+    "temperatureC": 22,
+    "windDirDeg": 200,
+    "windKmh": 12,
+  },
+}
+`;
+
+exports[`caracterización del pipeline con proveedores sintéticos > energía v2: más segura, SOC 15 % 1`] = `
+{
+  "chargers": [
+    "s20",
+    "s35",
+    "s45",
+    "s60",
+    "s72",
+  ],
+  "engine": [
+    "mapbox",
+    "mapbox",
+    "mapbox",
+    "mapbox",
+  ],
+  "plans": [
+    {
+      "arrivalSoc": 29.9,
+      "departureCharge": 8,
+      "distanceKm": 129.1,
+      "energyKwh": 19.9,
+      "feasible": true,
+      "id": "route-0",
+      "initialSoc": 23,
+      "label": "Ruta A",
+      "minSoc": 20.7,
+      "noTolls": undefined,
+      "stops": [
+        "s20 20.7→69.8 28 min",
+      ],
+      "totalMinutes": 178,
+      "via": "Ruta 45A, Ruta 62",
+    },
+    {
+      "arrivalSoc": 28.5,
+      "departureCharge": 7,
+      "distanceKm": 128.7,
+      "energyKwh": 19,
+      "feasible": true,
+      "id": "route-1",
+      "initialSoc": 22,
+      "label": "Ruta B",
+      "minSoc": 21,
+      "noTolls": undefined,
+      "stops": [
+        "s20 21→67.9 27 min",
+      ],
+      "totalMinutes": 171,
+      "via": "Ruta 45A, Ruta 62",
+    },
+    {
+      "arrivalSoc": -27.1,
+      "departureCharge": undefined,
+      "distanceKm": 144,
+      "energyKwh": 19.8,
+      "feasible": false,
+      "id": "route-2",
+      "initialSoc": 15,
+      "label": "Ruta C",
+      "minSoc": -27.1,
+      "noTolls": true,
+      "stops": [],
+      "totalMinutes": 155,
+      "via": "Ruta 45A",
+    },
+    {
+      "arrivalSoc": -30.4,
+      "departureCharge": undefined,
+      "distanceKm": 149.4,
+      "energyKwh": 21.4,
+      "feasible": false,
+      "id": "route-3",
+      "initialSoc": 15,
+      "label": "Ruta D",
+      "minSoc": -30.4,
+      "noTolls": undefined,
+      "stops": [],
+      "totalMinutes": 161,
+      "via": "Ruta 66",
+    },
+  ],
+  "selectedId": "route-0",
+  "warnings": [],
+  "weather": {
+    "elevationM": 1200,
+    "source": "Open-Meteo",
+    "temperatureC": 22,
+    "windDirDeg": 200,
+    "windKmh": 12,
+  },
+}
+`;
+
 exports[`caracterización del pipeline con proveedores sintéticos > menos paradas, SOC 90 % 1`] = `
 {
   "chargers": [
@@ -89,7 +453,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > menos parad
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > menos paradas, SOC 90 % 2`] = `"56bad049e27152bd"`;
+exports[`caracterización del pipeline con proveedores sintéticos > menos paradas, SOC 90 % 2`] = `"17e44feb6c6896b3"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 1`] = `
 {
@@ -184,7 +548,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > modo más r
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 2`] = `"3f95ca6cb5dcf9e4"`;
+exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 2`] = `"25307ed3e4be6a90"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 1`] = `
 {
@@ -279,7 +643,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > más segura
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 2`] = `"82b2cb96adf5abc6"`;
+exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 2`] = `"b6c446a5d9627a37"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > planificador v2: menos paradas, SOC 90 % 1`] = `
 {

@@ -23,6 +23,12 @@ function toLatLon([lon, lat]: [number, number]): LatLon {
   return { lat, lon };
 }
 
+/** Límite de Mapbox ({speed, unit} | {unknown} | {none}) en km/h; null si no se sabe o no hay. */
+export function maxspeedKmh(m: { speed?: number; unit?: string; unknown?: boolean; none?: boolean }): number | null {
+  if (m.speed == null || !(m.speed > 0)) return null;
+  return m.unit === "mph" ? m.speed * 1.609344 : m.speed;
+}
+
 /** Una ruta en formato Directions (Mapbox y OSRM usan el mismo) → ProviderRoute. */
 export function toProviderRoute(route: OsrmRoute, provider: string, profile: string): ProviderRoute {
   return {
@@ -35,7 +41,11 @@ export function toProviderRoute(route: OsrmRoute, provider: string, profile: str
       summary: leg.summary,
       distanceM: leg.distance,
       annotation: leg.annotation
-        ? { distanceM: leg.annotation.distance, durationS: leg.annotation.duration }
+        ? {
+            distanceM: leg.annotation.distance,
+            durationS: leg.annotation.duration,
+            ...(leg.annotation.maxspeed ? { maxspeedKmh: leg.annotation.maxspeed.map(maxspeedKmh) } : {}),
+          }
         : undefined,
       steps: leg.steps?.map((step) => ({
         distanceM: step.distance,

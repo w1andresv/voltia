@@ -15,7 +15,9 @@ import type {
   Vehicle,
   WeatherSnapshot,
 } from "../types";
+import type { EnergyEngine } from "./energy-v2";
 
+export type { EnergyEngine };
 export type PlannerEngine = "legacy" | "v2";
 
 /** Lo que el plan necesita del mundo exterior. Mismas entradas ⇒ mismo resultado. */
@@ -39,6 +41,7 @@ export function buildPlans(
   vehicle: Vehicle,
   conditions: TripConditions,
   engine: PlannerEngine = "legacy",
+  energyEngine: EnergyEngine = "legacy",
 ): RoutePlan[] {
   return inputs.routes.map((raw) =>
     buildPlan({
@@ -50,6 +53,7 @@ export function buildPlans(
       origin: inputs.origin,
       destination: inputs.destination,
       engine,
+      energyEngine,
     }),
   );
 }
@@ -59,7 +63,8 @@ export function computePlans(
   vehicle: Vehicle,
   conditions: TripConditions,
   engine: PlannerEngine = "legacy",
+  energyEngine: EnergyEngine = "legacy",
 ): ComputedPlans {
-  const plans = rankPlans(buildPlans(inputs, vehicle, conditions, engine), conditions.planningMode);
+  const plans = rankPlans(buildPlans(inputs, vehicle, conditions, engine, energyEngine), conditions.planningMode);
   return { plans, selectedId: plans[0]?.id ?? "" };
 }

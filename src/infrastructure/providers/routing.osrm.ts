@@ -28,6 +28,19 @@ export const OsrmRouteSchema = z.object({
             .object({
               distance: z.array(z.number()).optional(),
               duration: z.array(z.number()).optional(),
+              // Solo Mapbox con annotations=…,maxspeed: límite legal por par de puntos.
+              maxspeed: z
+                .array(
+                  z
+                    .object({
+                      speed: z.number().optional(),
+                      unit: z.string().optional(),
+                      unknown: z.boolean().optional(),
+                      none: z.boolean().optional(),
+                    })
+                    .passthrough(),
+                )
+                .optional(),
             })
             .passthrough()
             .optional(),

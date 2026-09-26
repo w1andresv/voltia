@@ -11,6 +11,16 @@ import {
   formatPct,
 } from "@/lib/format";
 
+const ENERGY_PARAM_LABEL: Record<string, string> = {
+  dragAreaM2: "aerodinámica",
+  rollingResistance: "rodadura",
+  rotationalInertiaFactor: "inercia",
+  drivetrainEfficiency: "eficiencia del tren motriz",
+  regenEfficiency: "eficiencia de regeneración",
+  maxRegenPowerKw: "potencia de regeneración",
+  baseAuxPowerKw: "consumo auxiliar",
+};
+
 export function PlanStats({ plan }: { plan: RoutePlan }) {
   const next = plan.stops[0];
   const engineHint = plan.engine ? ROUTING_ENGINE_LABEL[plan.engine] : undefined;
@@ -53,6 +63,17 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
         <Stat label="Tiempo de carga" value={formatMinutes(plan.chargeMinutes)} />
         <Stat label="Energía a cargar" value={formatKwh(chargeKwh)} className="col-span-2" />
       </div>
+      {plan.energyEngine === "v2" ? (
+        <p className="text-xs leading-relaxed text-muted">
+          Consumo con física por tramo y perfil de velocidad (modelo v2).
+          {plan.providerDriveMinutes != null
+            ? ` Manejo ${formatMinutes(plan.driveMinutes)} (el mapa estima ${formatMinutes(plan.providerDriveMinutes)}).`
+            : ""}
+          {plan.energyAssumptions?.length
+            ? ` Datos del vehículo estimados: ${plan.energyAssumptions.map((k) => ENERGY_PARAM_LABEL[k] ?? k).join(", ")}.`
+            : ""}
+        </p>
+      ) : null}
       {plan.verification ? (
         <p
           className={`text-xs leading-relaxed ${plan.verification.status === "failed" ? "text-warn" : "text-muted"}`}

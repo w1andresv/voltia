@@ -64,7 +64,16 @@ function mapboxRoute(bend: number, summary: string, minorFrom = -1, minorTo = -1
       {
         summary,
         distance: totalM,
-        annotation: { distance, duration },
+        // Límite legal: 80 km/h en llano, 60 en la montaña (mitad de la ruta), sin dato en el último tramo.
+        annotation: {
+          distance,
+          duration,
+          maxspeed: distance.map((_, i) => {
+            const t = (i + 1) / distance.length;
+            if (t > 0.9) return { unknown: true };
+            return { speed: t > 0.35 && t < 0.65 ? 60 : 80, unit: "km/h" };
+          }),
+        },
         steps: [
           {
             distance: totalM,

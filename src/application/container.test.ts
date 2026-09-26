@@ -82,6 +82,26 @@ describe("createPlanningService", () => {
     expect(response.plans.every((p) => p.planner === "v2")).toBe(true);
   });
 
+  it("ENERGY_ENGINE elige el modelo de energía (inválido = legacy)", async () => {
+    vi.stubEnv("MAPBOX_ACCESS_TOKEN", "pk.synthetic.token");
+    vi.stubEnv("ENERGY_ENGINE", "v2");
+    const { createPlanningService } = await import("./container");
+    const { response } = await createPlanningService({
+      stations: { getDataset: async () => syntheticStations() },
+    }).plan(request);
+    expect(response.geo.energyEngine).toBe("v2");
+    vi.resetModules();
+    vi.stubEnv("ENERGY_ENGINE", "otro");
+    const again = await (
+      await import("./container")
+    )
+      .createPlanningService({
+        stations: { getDataset: async () => syntheticStations() },
+      })
+      .plan(request);
+    expect(again.response.geo.energyEngine).toBe("legacy");
+  });
+
   it("el geocodificador busca y hace geocodificación inversa", async () => {
     const { createGeocoder } = await import("./container");
     const geocoder = createGeocoder();

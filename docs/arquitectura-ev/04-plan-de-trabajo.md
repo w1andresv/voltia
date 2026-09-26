@@ -119,16 +119,16 @@ Dividida en dos (ADR-0006).
 
 ### F5 · Energía v2 y perfil de velocidad
 
-- **Objetivo:** física sin multiplicadores y con parámetros con fuente, detrás del modo sombra.
+- **Objetivo:** física sin multiplicadores y con parámetros con fuente, detrás del modo sombra (ADR-0012).
 - **Tareas:**
-  - [ ] `engines/energy/vehicle-params.ts`: cada parámetro como `SourcedValue` (Cd·A y Crr ya están en el vehículo).
-  - [ ] `PhysicsEnergyModel` y `ManualConsumptionModel` intercambiables.
-  - [ ] `engines/speed/engine.ts`: límites, curvatura, aceleración y frenado por modo; velocidad 0 en origen, destino y paradas.
-  - [ ] Pedir a Mapbox las anotaciones `maxspeed` y `speed` (verificar formato vigente); los proveedores sintéticos las simulan (sin cassette, P1 omitido).
-  - [ ] `PLANNER_ENGINE=shadow` en producción: registrar las diferencias en el log `[plan-trip]`.
-- **Decisión previa:** datos físicos por vehículo (EPA para los Tesla, ficha para el resto). Se pueden cargar en el seed sin tocar código.
-- **Tests:** llano `E = (Crr·m·g + ½ρCdAv²)·d/η`; pendiente `= m·g·Δh`; ciclo 0 → v → 0.
-- **Cierre:** tests analíticos en verde; ADR con las diferencias de sombra explicadas.
+  - [x] `engines/energy/vehicle-params.ts`: cada parámetro como `SourcedValue`; campos físicos opcionales en el vehículo.
+  - [x] `engines/energy/physics.ts`: física por tramo (§5.4) y ajuste al consumo manual (`calibrateToManual`) en vez de multiplicar.
+  - [x] `engines/speed/engine.ts`: velocidad típica o fija, curvatura, límite legal, aceleración y frenado por modo; 0 en origen y destino.
+  - [x] Anotación `maxspeed` de Mapbox hasta las muestras (`speedLimitKmh`); los proveedores sintéticos la simulan.
+  - [x] `ENERGY_ENGINE = legacy | shadow | v2` y registro `[plan-trip:energy-shadow]`.
+  - [ ] `ENERGY_ENGINE=shadow` en producción y revisar las diferencias.
+  - [ ] 0 km/h en puntos intermedios y paradas; desvío con la energía local del perfil; velocidad por clase vial sin límite.
+- **Tests:** llano `E = (Crr·m·g + ½ρCdAv²)·d/η`; pendiente `= m·g·Δh` para cualquier tamaño de tramo; ciclo 0 → v → 0; tope de regeneración; auxiliares en bajada; curva de 90°; límites; caracterización v2 en cuatro escenarios.
 - **Especificación:** F2 (EnergyEngine) y F4 (SpeedProfileEngine).
 
 ### F6 · Sin multiplicadores
@@ -229,7 +229,7 @@ Dividida en dos (ADR-0006).
 | F2 | F2a ✅ hecha (sin cambio de resultados). F2b: fuente configurable ✅ (ADR-0011); falta elegir la fuente, limpieza y error tipado | ver `git log --grep "^F2"` |
 | F3 | ✅ Hecha | ver `git log --grep "^F3:"` |
 | F4 | ✅ Hecha (desvío por matriz pendiente) | ver `git log --grep "^F4:"` |
-| F5 | Pendiente | — |
+| F5 | ✅ Hecha detrás de `ENERGY_ENGINE` (por defecto `legacy`); falta medir en sombra | ver `git log --grep "^F5:"` |
 | F6 | Pendiente | — |
 | F7 | ✅ Hecha detrás de `PLANNER_ENGINE` (por defecto `legacy`) | ver `git log --grep "^F7:"` |
 | F8 | ✅ Hecha salvo `legacy-adapter` (pasa a F9), la verificación al guardar y el paso a `v2` | ver `git log --grep "^F8:"` |

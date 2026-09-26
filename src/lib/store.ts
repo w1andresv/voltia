@@ -147,6 +147,7 @@ export function rankedPlansFor(
     vehicle,
     conditions,
     geo.plannerEngine,
+    geo.energyEngine,
   ).plans;
 }
 

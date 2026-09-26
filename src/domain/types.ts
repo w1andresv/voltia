@@ -47,6 +47,8 @@ export interface RouteSample {
   elevM: number;
   slopePct: number;
   speedKmh: number;
+  /** Límite legal del tramo que llega a esta muestra (el menor), si el proveedor lo informa (F5). */
+  speedLimitKmh?: number;
   energyKwh: number;
   energyGrossKwh: number;
   energyRegenKwh: number;
@@ -272,6 +274,12 @@ export interface RoutePlan {
   firstChargerUnreachable?: boolean;
   /** Motor de planificación que armó el plan (PLANNER_ENGINE). */
   planner?: "legacy" | "v2";
+  /** Modelo de energía (ENERGY_ENGINE, F5). */
+  energyEngine?: "legacy" | "v2";
+  /** Con el v2: parámetros físicos del vehículo que son valores por defecto (estimated). */
+  energyAssumptions?: string[];
+  /** Con el v2: tiempo de manejo del proveedor, para comparar con el del perfil de velocidad. */
+  providerDriveMinutes?: number;
   /** Estado de viabilidad (solo planificador v2, especificación §5.9). */
   feasibilityStatus?: FeasibilityStatus;
   infeasibilityCode?: InfeasibilityReason;
@@ -312,6 +320,8 @@ export interface GeoBundle {
   stationsVersion?: string;
   /** Planificador con que respondió el servidor; el navegador recalcula con el mismo. */
   plannerEngine?: "legacy" | "v2";
+  /** Modelo de energía con que respondió el servidor (F5); el navegador recalcula con el mismo. */
+  energyEngine?: "legacy" | "v2";
 }
 
 export interface PlanRequest {

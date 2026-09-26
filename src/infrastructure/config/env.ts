@@ -15,6 +15,8 @@ const EnvSchema = z.object({
    * open-meteo-adaptive (malla gruesa y densa donde cambia la altura) o
    * mapbox-terrain (teselas cada 100 m, con caché; necesita el token de Mapbox).
    */
+  /** Modelo de energía (ADR-0012): legacy (actual), shadow (ambos, responde el actual y registra diferencias) o v2. */
+  ENERGY_ENGINE: z.enum(["legacy", "shadow", "v2"]).default("legacy").catch("legacy"),
   ELEVATION_SOURCE: z
     .enum(["open-meteo", "open-meteo-adaptive", "mapbox-terrain"])
     .default("open-meteo")
@@ -38,6 +40,7 @@ export function getEnv(): AppEnv {
     ADMIN_EMAILS: process.env.ADMIN_EMAILS ?? "",
     PLANNER_ENGINE: process.env.PLANNER_ENGINE?.trim() || undefined,
     ELEVATION_SOURCE: process.env.ELEVATION_SOURCE?.trim() || undefined,
+    ENERGY_ENGINE: process.env.ENERGY_ENGINE?.trim() || undefined,
   });
   return cached;
 }

@@ -3,7 +3,13 @@ import type { RoutingProvider } from "@/domain/ports/routing";
 import type { StationCatalog } from "@/domain/ports/station-catalog";
 import type { WeatherProvider } from "@/domain/ports/weather";
 import type { ModelParameters } from "@/domain/ev/core/params";
-import { buildPlans, computePlans, type PlanInputs, type PlannerEngine } from "@/domain/ev/compute-plan";
+import {
+  buildPlans,
+  computePlans,
+  type EnergyEngine,
+  type PlanInputs,
+  type PlannerEngine,
+} from "@/domain/ev/compute-plan";
 import { rankPlans } from "@/domain/planner";
 import { stationsNearRoutes } from "@/domain/ev/engines/corridor/engine";
 import { toPlanningCharger } from "@/domain/stations/to-charger";
@@ -11,6 +17,7 @@ import type { PlanRequest, PlanResponse, RawRoute, RoutePlan, RoutingEngine, Tri
 import { SNAPSHOT_SCHEMA_VERSION, type PlanningSnapshot } from "@/domain/ev/contracts/snapshot";
 import { elevationSourceLabel, profileRoute, type ElevationReport, type ElevationSampling } from "./elevation-profile";
 import { selectRoutes } from "./route-selection";
+import { buildEnergyShadowReport, formatEnergyShadowReport } from "./energy-shadow-report";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
 import { verifyPlan } from "./verify-plan";
 
@@ -19,6 +26,9 @@ import { verifyPlan } from "./verify-plan";
  * `shadow`: calcula los dos, responde con el actual y registra las diferencias (plan §6).
  */
 export type PlannerEngineMode = "legacy" | "shadow" | "v2";
+
+/** Mismo esquema para el modelo de energía (ENERGY_ENGINE, F5). */
+export type EnergyEngineMode = "legacy" | "shadow" | "v2";
 
 export interface PlanningDeps {
   routing: RoutingProvider;
@@ -31,6 +41,8 @@ export interface PlanningDeps {
   stations: StationCatalog;
   params: ModelParameters;
   engineMode: PlannerEngineMode;
+  /** Modelo de energía; por defecto el actual. */
+  energyMode?: EnergyEngineMode;
   /** Reloj inyectable (tests deterministas). */
   clock?: () => Date;
 }
@@ -67,6 +79,19 @@ function logShadow(
     else console.log(formatShadowReport(report));
   } catch (error) {
     console.error("[plan-trip:shadow] v2 falló", error instanceof Error ? error.message : String(error));
+  }
+}
+
+/** Modo sombra de energía: mismo planificador con el modelo actual y el v2. Un error del v2 solo se registra. */
+function logEnergyShadow(trip: string, current: RoutePlan[], runV2: () => RoutePlan[]): void {
+  try {
+    const t0 = Date.now();
+    const v2 = runV2();
+    const report = buildEnergyShadowReport({ trip, ms: Date.now() - t0, legacy: current, v2 });
+    if (process.env.NODE_ENV === "production") console.log("[plan-trip:energy-shadow]", JSON.stringify(report));
+    else console.log(formatEnergyShadowReport(report));
+  } catch (error) {
+    console.error("[plan-trip:energy-shadow] v2 falló", error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -131,11 +156,15 @@ export class EVRoutePlanningService {
     const vehicle = data.vehicle as Vehicle;
     const conditions = data.conditions as TripConditions;
     const responding: PlannerEngine = mode === "v2" ? "v2" : "legacy";
-    let { plans: ranked, selectedId } = computePlans(inputs, vehicle, conditions, responding);
+    const energyMode = this.deps.energyMode ?? "legacy";
+    const energy: EnergyEngine = energyMode === "v2" ? "v2" : "legacy";
+    const trip = `${data.origin.label} → ${data.destination.label}`;
+    let { plans: ranked, selectedId } = computePlans(inputs, vehicle, conditions, responding, energy);
     if (mode === "shadow") {
-      logShadow(`${data.origin.label} → ${data.destination.label}`, ranked, conditions.planningMode, () =>
-        buildPlans(inputs, vehicle, conditions, "v2"),
-      );
+      logShadow(trip, ranked, conditions.planningMode, () => buildPlans(inputs, vehicle, conditions, "v2", energy));
+    }
+    if (energyMode === "shadow") {
+      logEnergyShadow(trip, ranked, () => buildPlans(inputs, vehicle, conditions, responding, "v2"));
     }
     // Pasada 2 solo con el v2: una a tres rutas más por plan, y solo para el recomendado.
     if (mode === "v2" && ranked[0]?.stops.length) {
@@ -145,7 +174,7 @@ export class EVRoutePlanningService {
           withElevation: (r) => this.withElevation(r),
           maxIterations: params.planner.maxVerifyIterations,
         },
-        { plan: ranked[0], inputs, userWaypoints: data.waypoints, vehicle, conditions, engine: "v2" },
+        { plan: ranked[0], inputs, userWaypoints: data.waypoints, vehicle, conditions, engine: "v2", energyEngine: energy },
       );
       console.log(
         `[plan-trip:verify] ${verified.verification?.status ?? "sin paradas"} en ${verified.verification?.iterations ?? 0} ruta(s):` +
@@ -162,6 +191,7 @@ export class EVRoutePlanningService {
           createdAt: (this.deps.clock ?? (() => new Date()))().toISOString(),
           modelVersion: params.modelVersion,
           plannerEngine: responding,
+          energyEngine: energy,
           providers: {
             routing: routed.engine,
             // La fuente que de verdad dio el perfil (con respaldo puede no ser la configurada).

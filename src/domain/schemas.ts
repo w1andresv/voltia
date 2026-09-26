@@ -57,6 +57,20 @@ export const VehicleSchema = z.object({
   dragAreaM2: z.number().positive().optional(),
   /** Coeficiente de rodadura. Si falta, sale de la tabla por carrocería. */
   rollingResistance: z.number().positive().optional(),
+  /**
+   * Física del motor de energía v2 (F5). Todos opcionales: si faltan se usan los
+   * valores por defecto de ModelParameters.energy (marcados "estimated").
+   */
+  /** Eficiencia batería → rueda en tracción (0,5–1). */
+  drivetrainEfficiency: z.number().min(0.5).max(1).optional(),
+  /** Eficiencia rueda → batería al regenerar (0–1). */
+  regenEfficiency: z.number().min(0).max(1).optional(),
+  /** Potencia máxima de regeneración, kW. */
+  maxRegenPowerKw: z.number().positive().optional(),
+  /** Factor de masa equivalente por inercia rotacional (1–1,2). */
+  rotationalInertiaFactor: z.number().min(1).max(1.2).optional(),
+  /** Consumo de electrónica, luces y bombas sin climatización, kW. */
+  baseAuxPowerKw: z.number().min(0).optional(),
 });
 
 export const PlaceSchema = z.object({

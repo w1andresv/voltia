@@ -16,7 +16,12 @@ import {
 import { mapboxServerToken } from "@/infrastructure/providers/routing.mapbox";
 import { DatasetStationCatalog } from "@/infrastructure/stations/catalog.adapter";
 import type { ElevationSampling } from "./plan-trip/elevation-profile";
-import { EVRoutePlanningService, type PlannerEngineMode, type PlanningDeps } from "./plan-trip/service";
+import {
+  EVRoutePlanningService,
+  type EnergyEngineMode,
+  type PlannerEngineMode,
+  type PlanningDeps,
+} from "./plan-trip/service";
 
 type ElevationDeps = Pick<PlanningDeps, "elevation" | "elevationSampling" | "elevationFallback">;
 
@@ -51,6 +56,7 @@ export function createPlanningService(overrides: Partial<PlanningDeps> = {}): EV
     stations: new DatasetStationCatalog(),
     params: MODEL_PARAMETERS,
     engineMode: getEnv().PLANNER_ENGINE as PlannerEngineMode,
+    energyMode: getEnv().ENERGY_ENGINE as EnergyEngineMode,
     ...overrides,
   });
 }

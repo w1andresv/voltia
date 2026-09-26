@@ -1,4 +1,5 @@
-import { downsample, haversineKm, lerp } from "@/domain/geo";
+import { downsample, lerp } from "@/domain/geo";
+import { pointAtKm, routeLine, type AxisPoint } from "@/domain/ev/core/axis";
 import type { LatLon, RawRoute } from "@/domain/types";
 import { MODEL_PARAMETERS, type ModelParameters } from "@/domain/ev/core/params";
 
@@ -98,33 +99,8 @@ export interface ElevationProbe extends LatLon {
   km: number;
 }
 
-/**
- * La línea más detallada que tiene la ruta (geometría o muestras), con el km
- * acumulado escalado a `distanceKm` para que coincida con el eje de las muestras.
- */
-function routeLine(route: RawRoute): ElevationProbe[] {
-  const pts: LatLon[] = route.geometry.length > route.samples.length ? route.geometry : route.samples;
-  if (pts.length < 2) return [];
-  const cum = [0];
-  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1]! + haversineKm(pts[i - 1]!, pts[i]!));
-  const total = cum[cum.length - 1]!;
-  const k = total > 0 ? route.distanceKm / total : 1;
-  return pts.map((p, i) => ({ lat: p.lat, lon: p.lon, km: cum[i]! * k }));
-}
-
-/** Punto de la línea en el km dado (interpolación lineal). */
-function pointAtKm(line: ElevationProbe[], km: number, from = 0): { probe: ElevationProbe; index: number } {
-  let i = Math.max(1, from);
-  while (i < line.length - 1 && line[i]!.km < km) i++;
-  const a = line[i - 1]!;
-  const b = line[i]!;
-  const span = b.km - a.km;
-  const t = span > 0 ? Math.min(1, Math.max(0, (km - a.km) / span)) : 0;
-  return { probe: { lat: lerp(a.lat, b.lat, t), lon: lerp(a.lon, b.lon, t), km }, index: i };
-}
-
 /** Puntos cada `spacingM` entre `fromKm` y `toKm` (incluye los extremos). */
-function meshBetween(line: ElevationProbe[], fromKm: number, toKm: number, spacingM: number): ElevationProbe[] {
+function meshBetween(line: AxisPoint[], fromKm: number, toKm: number, spacingM: number): ElevationProbe[] {
   const step = spacingM / 1000;
   const n = Math.max(1, Math.ceil((toKm - fromKm) / step - 1e-9));
   const out: ElevationProbe[] = [];
@@ -133,7 +109,7 @@ function meshBetween(line: ElevationProbe[], fromKm: number, toKm: number, spaci
     const km = i === n ? toKm : fromKm + i * step;
     const hit = pointAtKm(line, km, index);
     index = hit.index;
-    out.push(hit.probe);
+    out.push(hit.point);
   }
   return out;
 }

@@ -14,7 +14,7 @@
  * de la pasada 1 marcado `failed` (sus desvíos son estimados).
  */
 import { buildPlan } from "@/domain/planner";
-import type { PlanInputs, PlannerEngine } from "@/domain/ev/compute-plan";
+import type { EnergyEngine, PlanInputs, PlannerEngine } from "@/domain/ev/compute-plan";
 import { projectOnRoute } from "@/domain/ev/engines/corridor/engine";
 import { toRawRoute } from "@/domain/ev/engines/route/normalize";
 import type { RoutingProvider } from "@/domain/ports/routing";
@@ -43,6 +43,7 @@ export interface VerifyArgs {
   vehicle: Vehicle;
   conditions: TripConditions;
   engine: PlannerEngine;
+  energyEngine?: EnergyEngine;
 }
 
 /** Puntos intermedios del usuario y paradas, ordenados por su km sobre la ruta. */
@@ -115,6 +116,7 @@ export async function verifyPlan(deps: VerifyDeps, args: VerifyArgs): Promise<Ro
         origin: inputs.origin,
         destination: inputs.destination,
         engine,
+        energyEngine: args.energyEngine,
       });
     const verification = (status: "verified" | "changed") => ({
       status,

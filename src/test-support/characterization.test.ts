@@ -89,11 +89,16 @@ function summary(res: PlanResponse) {
  * proveedores de producción (Mapbox, Open-Meteo) sobre fetch simulado, y las
  * estaciones sintéticas. El snapshot se grabó con el pipeline anterior a F1.
  */
-async function plan(req: PlanRequest, engineMode: "legacy" | "v2" = "legacy"): Promise<PlanResponse> {
+async function plan(
+  req: PlanRequest,
+  engineMode: "legacy" | "v2" = "legacy",
+  energyMode: "legacy" | "v2" = "legacy",
+): Promise<PlanResponse> {
   const { createPlanningService } = await import("@/application/container");
   const { response } = await createPlanningService({
     stations: { getDataset: async () => syntheticStations() },
     engineMode,
+    energyMode,
     clock: () => new Date("2026-09-01T12:00:00Z"),
   }).plan(req);
   return response;
@@ -135,6 +140,19 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
     ["más segura, SOC 15 %", { planningMode: "safer", initialSoc: 15, safetyMode: "conservative" }],
   ] as [string, Partial<TripConditions>][])("planificador v2: %s", async (_name, over) => {
     const res = await plan(request(over), "v2");
+    expect(summary(res)).toMatchSnapshot();
+  });
+
+  // Modelo de energía v2 (F5): física sin multiplicadores y perfil de velocidad,
+  // con el planificador actual. Referencia para el modo sombra de energía.
+  it.each([
+    ["modo más rápido, SOC 35 %", {}],
+    ["menos paradas, SOC 90 %, sport", { planningMode: "fewer_stops", initialSoc: 90, drivingStyle: "sport" }],
+    ["más segura, SOC 15 %", { planningMode: "safer", initialSoc: 15, safetyMode: "conservative" }],
+    ["eficiente, SOC 60 %", { planningMode: "efficient", initialSoc: 60, drivingStyle: "efficient" }],
+  ] as [string, Partial<TripConditions>][])("energía v2: %s", async (_name, over) => {
+    const res = await plan(request(over), "legacy", "v2");
+    expect(res.plans.every((p) => p.energyEngine === "v2")).toBe(true);
     expect(summary(res)).toMatchSnapshot();
   });
 

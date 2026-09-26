@@ -20,7 +20,12 @@ export interface ProviderLeg {
   summary?: string;
   distanceM?: number;
   /** Metros y segundos entre cada par de puntos consecutivos de la geometría. */
-  annotation?: { distanceM?: number[]; durationS?: number[] };
+  annotation?: {
+    distanceM?: number[];
+    durationS?: number[];
+    /** Límite legal por par de puntos, km/h; null donde el proveedor no lo sabe (F5). */
+    maxspeedKmh?: (number | null)[];
+  };
   steps?: ProviderStep[];
 }
 
