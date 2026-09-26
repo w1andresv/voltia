@@ -14,6 +14,14 @@ export interface ModelParameters {
     /** Carrocería supuesta cuando el vehículo no declara una. */
     defaultBodyType: BodyType;
   };
+  elevation: {
+    /** Puntos de elevación consultados por ruta (hasta 100 por consulta en Open-Meteo). */
+    probesPerRoute: number;
+    /** Ventana de la media móvil sobre las muestras, en muestras. */
+    smoothingWindow: number;
+    /** Desnivel mínimo entre muestras para contar como subida o bajada, m. */
+    gainThresholdM: number;
+  };
   corridor: {
     /** Distancia máxima de una estación a la ruta para considerarla. */
     maxFromRouteKm: number;
@@ -51,6 +59,11 @@ export const MODEL_PARAMETERS: ModelParameters = {
       { reference: "docs/adr/0002-cda-crr-por-carroceria.md" },
     ),
     defaultBodyType: "suv_compact",
+  },
+  elevation: {
+    probesPerRoute: 96,
+    smoothingWindow: 5,
+    gainThresholdM: 2,
   },
   corridor: {
     maxFromRouteKm: 12,

@@ -1,26 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
 import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import type { StationDataset } from "@/domain/stations/model";
-import type { PlanRequest, RawRoute } from "@/domain/types";
+import type { ProviderRoute } from "@/domain/ev/contracts/route";
+import type { RoutingProvider } from "@/domain/ports/routing";
+import type { PlanRequest } from "@/domain/types";
 import { catalogVehicle } from "@/test-support/scenarios";
 import { syntheticStations } from "@/test-support/synthetic-providers";
 import { EVRoutePlanningService, type PlanningDeps } from "./service";
 
-function straight(distanceKm: number, elevM = 0): RawRoute {
-  const n = Math.round(distanceKm / 2) + 1;
-  const samples = Array.from({ length: n }, (_, i) => {
-    const km = Math.min(distanceKm, i * 2);
-    return { km, lat: 6.9877 - (km / distanceKm) * 0.977, lon: -73.0495 - (km / distanceKm) * 0.624, elevM, slopePct: 0, speedKmh: 70 };
-  });
+/** Ruta recta de Piedecuesta a Vélez, un punto cada ~1 km, a 70 km/h. */
+function straight(): ProviderRoute {
+  const n = 130;
+  const geometry = Array.from({ length: n + 1 }, (_, i) => ({
+    lat: 6.9877 - (i / n) * 0.977,
+    lon: -73.0495 - (i / n) * 0.624,
+  }));
+  return { provider: "fake", profile: "driving", geometry, distanceM: 130_000, durationS: (130 / 70) * 3600, legs: [] };
+}
+
+function routing(routes: ProviderRoute[] = [straight()], notice?: string): RoutingProvider {
   return {
-    id: "route-0",
-    label: "Ruta recomendada",
-    geometry: samples.map((s) => ({ lat: s.lat, lon: s.lon })),
-    samples,
-    distanceKm,
-    driveMinutes: (distanceKm / 70) * 60,
-    elevation: { gainM: 0, lossM: 0, minM: elevM, maxM: elevM },
+    id: "fake",
+    label: "Fake",
     engine: "mapbox",
+    capabilities: { alternatives: false, avoidTolls: false, avoidPoints: false, roadClasses: false },
+    notice,
+    calculateRoutes: async () => ({ routes, waypointSnapKm: [] }),
   };
 }
 
@@ -48,8 +53,8 @@ const request: PlanRequest = {
 
 function deps(overrides: Partial<PlanningDeps> = {}): PlanningDeps {
   return {
-    routing: { id: "fake", routes: async () => ({ routes: [straight(130, 1000)], engine: "mapbox", warnings: ["aviso de ruta"] }) },
-    elevation: { id: "fake", applyTo: async (routes) => routes },
+    routing: routing([straight()], "aviso de ruta"),
+    elevation: { id: "fake", getElevations: async (points) => points.map((p) => 1000 + 100 * p.lat) },
     weather: { id: "fake", current: async () => ({ temperatureC: 20, windKmh: 5, windDirDeg: 0 }) },
     stations: { getDataset: async () => syntheticStations() },
     params: MODEL_PARAMETERS,
@@ -60,9 +65,10 @@ function deps(overrides: Partial<PlanningDeps> = {}): PlanningDeps {
 
 describe("EVRoutePlanningService", () => {
   it("compone el plan con los puertos y conserva los avisos de la ruta", async () => {
-    const routes = vi.fn(deps().routing.routes);
-    const { response, engine, chargerCount } = await new EVRoutePlanningService(deps({ routing: { id: "fake", routes } })).plan(request);
-    expect(routes).toHaveBeenCalledWith([request.origin, request.destination]);
+    const provider = routing([straight()], "aviso de ruta");
+    const calculateRoutes = vi.spyOn(provider, "calculateRoutes");
+    const { response, engine, chargerCount } = await new EVRoutePlanningService(deps({ routing: provider })).plan(request);
+    expect(calculateRoutes).toHaveBeenCalledWith({ waypoints: [request.origin, request.destination], alternatives: true });
     expect(engine).toBe("mapbox");
     expect(response.geo.warnings).toEqual(["aviso de ruta"]);
     expect(response.geo.weather?.temperatureC).toBe(20);
@@ -78,11 +84,24 @@ describe("EVRoutePlanningService", () => {
     expect(response.geo.weather).toBeNull();
   });
 
-  it("avisa si la elevación no llegó (ruta plana a 0 m)", async () => {
-    const flat = deps({
-      routing: { id: "fake", routes: async () => ({ routes: [straight(130, 0)], engine: "mapbox", warnings: [] }) },
+  it("aplica la elevación del proveedor a las muestras", async () => {
+    const { response } = await new EVRoutePlanningService(deps()).plan(request);
+    const route = response.geo.routes[0]!;
+    expect(route.elevation.maxM).toBeGreaterThan(route.elevation.minM);
+    expect(route.samples.every((s) => s.elevM > 1000)).toBe(true);
+  });
+
+  it("si el proveedor de elevación falla, la ruta sigue plana y el plan lo avisa", async () => {
+    const failing = deps({
+      elevation: {
+        id: "fake",
+        getElevations: async () => {
+          throw new Error("caído");
+        },
+      },
     });
-    const { response } = await new EVRoutePlanningService(flat).plan(request);
+    const { response } = await new EVRoutePlanningService(failing).plan(request);
+    expect(response.geo.routes[0]!.elevation).toEqual({ gainM: 0, lossM: 0, minM: 0, maxM: 0 });
     expect(response.geo.warnings).toContain("No se obtuvo el perfil de elevación. El consumo puede estar subestimado en montaña.");
   });
 
@@ -110,7 +129,7 @@ describe("EVRoutePlanningService", () => {
   });
 
   it("sin rutas no hay planes", async () => {
-    const none = deps({ routing: { id: "fake", routes: async () => ({ routes: [], engine: "mapbox", warnings: [] }) } });
+    const none = deps({ routing: routing([]) });
     const { response } = await new EVRoutePlanningService(none).plan(request);
     expect(response.plans).toEqual([]);
     expect(response.selectedId).toBe("");

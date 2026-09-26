@@ -3,10 +3,12 @@ import type { RoutingProvider } from "@/domain/ports/routing";
 import type { StationCatalog } from "@/domain/ports/station-catalog";
 import type { WeatherProvider } from "@/domain/ports/weather";
 import type { ModelParameters } from "@/domain/ev/core/params";
+import { applyElevationProfile, elevationProbes } from "@/domain/ev/engines/elevation/engine";
 import { buildPlan, rankPlans } from "@/domain/planner";
 import { findStationsNearRoute } from "@/domain/stations/spatial";
 import { toPlanningCharger } from "@/domain/stations/to-charger";
-import type { PlanRequest, PlanResponse, RoutingEngine, TripConditions, Vehicle } from "@/domain/types";
+import type { PlanRequest, PlanResponse, RawRoute, RoutingEngine, TripConditions, Vehicle } from "@/domain/types";
+import { selectRoutes } from "./route-selection";
 
 /** `legacy`: motor actual. `shadow` y `v2` llegan con el motor nuevo (plan §6); hasta entonces se usa `legacy`. */
 export type PlannerEngineMode = "legacy" | "shadow" | "v2";
@@ -34,10 +36,10 @@ export class EVRoutePlanningService {
   constructor(private readonly deps: PlanningDeps) {}
 
   async plan(data: PlanRequest): Promise<PlanResult> {
-    const { routing, elevation, weather, stations, params } = this.deps;
+    const { routing, weather, stations, params } = this.deps;
     const waypoints = [data.origin, ...data.waypoints, data.destination];
     const warnings: string[] = [];
-    const routed = await routing.routes(waypoints);
+    const routed = await selectRoutes(routing, waypoints);
     const rawRoutes = routed.routes;
     warnings.push(...routed.warnings);
     const mid = rawRoutes[0]?.samples[Math.floor((rawRoutes[0].samples.length || 1) / 2)];
@@ -45,7 +47,7 @@ export class EVRoutePlanningService {
     // alternativa puede planear sus paradas.
     const chargerQuery = rawRoutes.flatMap((r) => r.samples);
     const [routes, snapshot, dataset] = await Promise.all([
-      elevation.applyTo(rawRoutes),
+      Promise.all(rawRoutes.map((route) => this.withElevation(route))),
       mid && weather ? weather.current(mid) : Promise.resolve(null),
       stations.getDataset(),
     ]);
@@ -82,5 +84,18 @@ export class EVRoutePlanningService {
       engine: routed.engine,
       chargerCount: chargers.length,
     };
+  }
+
+  /** Elevación de una ruta. Si el proveedor no responde, la ruta sigue plana y el plan lo avisa. */
+  private async withElevation(route: RawRoute): Promise<RawRoute> {
+    const { elevation, params } = this.deps;
+    const probes = elevationProbes(route, params.elevation);
+    if (!probes) return route;
+    try {
+      const heights = await elevation.getElevations(probes);
+      return applyElevationProfile(route, probes, heights, params.elevation);
+    } catch {
+      return route;
+    }
   }
 }

@@ -43,7 +43,7 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 - Ningún test usa red: los proveedores se prueban con respuestas grabadas (`src/test-support/cassette.ts`).
 - Nada de secretos en el repo: la grabación los verifica antes de escribir, pero revisar el diff igual.
 - Si una fase cambia números que ve el usuario, el commit lo dice con antes y después sobre el fixture, y actualiza el snapshot de caracterización (`src/test-support/characterization.test.ts`) a propósito.
-- Las fases que no deben cambiar resultados (F1, F2) dejan el snapshot de caracterización intacto.
+- Las fases que no deben cambiar resultados (F1, F2a) dejan el snapshot de caracterización intacto.
 
 ## 4. Fases
 
@@ -66,18 +66,27 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 - **Especificación:** F1 (tipos, `SourcedValue`, unidades).
 - **Hecho:** puertos transitorios (ADR-0005); los contratos de `domain/ev/contracts` se crean con cada engine. Igualdad probada con el test de caracterización (snapshot sin cambios); la igualdad sobre la cassette real queda para cuando se grabe (P1).
 
-### F2 · Snapshot y datos crudos
+### F2 · Datos crudos (F2a) y malla de elevación (F2b)
 
-- **Objetivo:** que los proveedores solo traigan datos y el dominio muestree.
-- **Tareas:**
-  - [ ] Los proveedores devuelven `ProviderRoute` y elevaciones crudas (plan §3.1). Esquema de Mapbox separado del de OSRM (A3).
-  - [ ] `engines/route/normalize.ts` (eje canónico) y `engines/elevation/engine.ts` (malla por distancia, limpieza, error tipado `ELEVATION_UNAVAILABLE`).
-  - [ ] `PlanningSnapshot` (plan §3.2) reemplaza `GeoBundle`, con migración del store persistido (`lib/store.ts` ya versiona).
-  - [ ] Grabación: la cassette pasa a guardar también el `PlanningSnapshot`.
+Dividida en dos (ADR-0006).
+
+**F2a · Proveedores crudos — hecha**
+- [x] `domain/ev/contracts/route.ts`: `ProviderRoute`, `RouteRequest`, `ProviderRouteSet`, `RoutingError`.
+- [x] Puertos con datos crudos: `RoutingProvider.calculateRoutes` y `ElevationProvider.getElevations`.
+- [x] `engines/route/normalize.ts` (muestreo y velocidad por tramo) y `engines/route/classify.ts` (clase vial), con la misma aritmética de antes.
+- [x] `engines/elevation/engine.ts`: qué puntos consultar y cómo aplicar las alturas (parámetros en `ModelParameters.elevation`).
+- [x] `application/plan-trip/route-selection.ts`: alternativas, sin peajes, corrección de atajos, deduplicación, tolerancias y avisos de ubicación.
+- [x] Proveedores reducidos a clientes HTTP; adaptadores traducen Directions → `ProviderRoute`. Se borraron `routing.ts` y `routing.classify.ts`.
+- **Cierre cumplido:** snapshot de caracterización sin cambios.
+
+**F2b · Malla y limpieza de elevación — pendiente de B6**
 - **Decisión previa (B6):** presupuesto de elevación. Teselas de terreno de Mapbox con caché, o malla adaptativa en Open-Meteo. Va en un ADR.
-- **Tests:** contratos de adaptadores con respuestas grabadas; limpieza de elevación (túnel, puente, pendiente máxima); sin elevación → error, no ruta plana.
-- **Cierre:** el caso Piedecuesta → Vélez sale del snapshot sin red.
-- **Especificación:** F3 (providers con fixtures, RouteEngine y ElevationEngine).
+- [ ] Malla por distancia (100 m) en `engines/elevation`, limpieza de túneles y puentes, pendiente máxima, conteo de puntos corregidos.
+- [ ] Error tipado `ELEVATION_UNAVAILABLE` en vez de ruta plana.
+- [ ] Túneles y puentes en `ProviderRoute` (desde los pasos de Mapbox).
+- **Tests:** limpieza (túnel, puente, pendiente máxima); sin elevación → error, no ruta plana.
+- **Cierre:** diferencias con el modelo anterior explicadas en el commit (cambia el consumo en montaña).
+- `PlanningSnapshot` pasa a F8 (ADR-0006).
 
 ### F3 · SOC separado de la energía
 
@@ -141,7 +150,8 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
   - [ ] `application/plan-trip/verify-plan.ts`: reruteo por las paradas, máximo 3 replanificaciones.
   - [ ] `engines/chart/series.ts`: ventanas con prorrateo; `consumption-chart.tsx` solo dibuja.
   - [ ] `legacy-adapter.ts` (`EVRoutePlan → RoutePlan`) para la UI actual.
-  - [ ] Viajes guardados con su snapshot y `modelVersion`.
+  - [ ] `PlanningSnapshot` (plan §3.2) en lugar de `GeoBundle`, con migración del store persistido (ADR-0006).
+- [ ] Viajes guardados con su snapshot y `modelVersion`.
   - [ ] `PLANNER_ENGINE=v2`.
 - **Cierre:** Piedecuesta → Vélez de extremo a extremo (plan §7) con las invariantes de la especificación §8.4 y el informe §8.5.
 - **Especificación:** F7 y F8.
@@ -174,7 +184,7 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 |---|---|---|
 | F0 | ✅ Hecha salvo la cassette (P1) | commits en `engine-v2` |
 | F1 | ✅ Hecha (igualdad con proveedores sintéticos; con la cassette real al grabarla) | ver `git log --grep "^F1:"` |
-| F2 | Pendiente (decidir B6) | — |
+| F2 | F2a ✅ hecha (sin cambio de resultados). F2b pendiente de B6 | ver `git log --grep "^F2"` |
 | F3 | Pendiente | — |
 | F4 | Pendiente | — |
 | F5 | Pendiente | — |

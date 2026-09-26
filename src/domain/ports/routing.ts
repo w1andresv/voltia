@@ -1,20 +1,25 @@
-import type { LatLon, RawRoute, RoutingEngine } from "../types";
-
-/** Rutas candidatas con la política actual (alternativas, sin peajes, atajos). */
-export interface RoutingResult {
-  routes: RawRoute[];
-  engine: RoutingEngine;
-  warnings: string[];
-}
+import type { ProviderRouteSet, RouteRequest } from "../ev/contracts/route";
+import type { RoutingEngine } from "../types";
 
 /**
- * Proveedor de rutas.
- *
- * Transitorio (F1, ADR-0005): devuelve rutas ya muestreadas (`RawRoute`), como
- * el código actual. En F2 pasa a devolver la respuesta cruda (`ProviderRoute`,
- * plan §3.1) y el muestreo se muda al dominio.
+ * Proveedor de rutas: trae las rutas crudas (plan §3.1). El muestreo lo hace el
+ * dominio (engines/route) y la política de selección, la aplicación
+ * (plan-trip/route-selection). Falla con `RoutingError`.
  */
 export interface RoutingProvider {
   readonly id: string;
-  routes(waypoints: LatLon[]): Promise<RoutingResult>;
+  /** Nombre para los mensajes al usuario ("Mapbox"). */
+  readonly label: string;
+  /** Con qué motor quedan rotuladas las rutas. */
+  readonly engine: RoutingEngine;
+  readonly capabilities: {
+    alternatives: boolean;
+    avoidTolls: boolean;
+    avoidPoints: boolean;
+    /** Clase vial por tramo (base de la jerarquía de vías). */
+    roadClasses: boolean;
+  };
+  /** Aviso fijo al usar este proveedor (p. ej. OSRM sin token de Mapbox). */
+  readonly notice?: string;
+  calculateRoutes(request: RouteRequest): Promise<ProviderRouteSet>;
 }

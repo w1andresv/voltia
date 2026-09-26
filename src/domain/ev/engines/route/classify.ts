@@ -1,11 +1,7 @@
 import { haversineKm } from "@/domain/geo";
 import { tierOfClass, type RoadSegment, type RoadTier } from "@/domain/road-hierarchy";
 import type { LatLon } from "@/domain/types";
-import type { OsrmRoute } from "./routing.osrm";
-
-function toLatLon([lon, lat]: [number, number]): LatLon {
-  return { lat, lon };
-}
+import type { ProviderRoute } from "@/domain/ev/contracts/route";
 
 function nearestIndex(line: LatLon[], p: LatLon, from: number): number {
   let best = from;
@@ -21,41 +17,41 @@ function nearestIndex(line: LatLon[], p: LatLon, from: number): number {
 }
 
 /**
- * Parte cada paso de Mapbox en tramos por clase vial: la clase de una
- * intersección aplica a la vía que sale de ella hasta la siguiente
- * intersección. Duración repartida según la longitud. Sin pasos (OSRM o
- * steps=false) devuelve [] y la ruta queda "sin clasificar".
+ * Parte cada paso en tramos por clase vial: la clase de una intersección aplica
+ * a la vía que sale de ella hasta la siguiente intersección. Duración repartida
+ * según la longitud. Sin pasos (OSRM o steps=false) devuelve [] y la ruta queda
+ * "sin clasificar".
  */
-export function classifyRoute(route: OsrmRoute): RoadSegment[] {
+export function classifyRoute(route: ProviderRoute): RoadSegment[] {
   const segments: RoadSegment[] = [];
   let km = 0;
   let lastTier: RoadTier = "unknown";
-  for (const leg of route.legs ?? []) {
+  for (const leg of route.legs) {
     for (const step of leg.steps ?? []) {
-      const stepKm = step.distance / 1000;
-      const line = (step.geometry?.coordinates ?? []).map(toLatLon);
+      const stepKm = step.distanceM / 1000;
+      // Copia: al unir tramos contiguos se le agregan puntos, y no debe tocar la ruta del proveedor.
+      const line = [...(step.geometry ?? [])];
       const inters = step.intersections ?? [];
       if (stepKm <= 0) continue;
       if (line.length < 2 || inters.length === 0) {
-        const firstClass = inters[0]?.mapbox_streets_v8?.class;
+        const firstClass = inters[0]?.roadClass;
         const tier: RoadTier = firstClass ? tierOfClass(firstClass) : lastTier;
-        segments.push({ tier, startKm: km, endKm: km + stepKm, durationS: step.duration, line });
+        segments.push({ tier, startKm: km, endKm: km + stepKm, durationS: step.durationS, line });
         km += stepKm;
         lastTier = tier;
         continue;
       }
       // Longitud acumulada de la geometría del paso, escalada a su distancia oficial.
       const cum = [0];
-      for (let i = 1; i < line.length; i++)
-        cum.push(cum[i - 1]! + haversineKm(line[i - 1]!, line[i]!));
+      for (let i = 1; i < line.length; i++) cum.push(cum[i - 1]! + haversineKm(line[i - 1]!, line[i]!));
       const geomKm = cum[cum.length - 1]! || stepKm;
       const scale = stepKm / geomKm;
 
       const cuts: { idx: number; tier: RoadTier }[] = [];
       let from = 0;
       for (const it of inters) {
-        const idx = nearestIndex(line, toLatLon(it.location), from);
-        const cls = it.mapbox_streets_v8?.class;
+        const idx = nearestIndex(line, it.location, from);
+        const cls = it.roadClass;
         const tier: RoadTier = cls ? tierOfClass(cls) : (cuts[cuts.length - 1]?.tier ?? lastTier);
         cuts.push({ idx, tier });
         from = idx;
@@ -73,7 +69,7 @@ export function classifyRoute(route: OsrmRoute): RoadSegment[] {
           tier,
           startKm: km + cum[a]! * scale,
           endKm: km + cum[a]! * scale + partKm,
-          durationS: step.duration * (partKm / stepKm),
+          durationS: step.durationS * (partKm / stepKm),
           line: line.slice(a, b + 1),
         };
         // Tramos contiguos de la misma clase se unen.
@@ -93,13 +89,13 @@ export function classifyRoute(route: OsrmRoute): RoadSegment[] {
 }
 
 /** Km desde el origen donde está cada punto intermedio (fin de cada tramo salvo el último). */
-export function legBoundariesKm(route: OsrmRoute): number[] {
-  const legs = route.legs ?? [];
+export function legBoundariesKm(route: ProviderRoute): number[] {
+  const legs = route.legs;
   const out: number[] = [];
   let acc = 0;
   for (let i = 0; i < legs.length - 1; i++) {
     const leg = legs[i]!;
-    acc += (leg.distance ?? (leg.steps ?? []).reduce((a, s) => a + s.distance, 0)) / 1000;
+    acc += (leg.distanceM ?? (leg.steps ?? []).reduce((a, s) => a + s.distanceM, 0)) / 1000;
     out.push(acc);
   }
   return out;

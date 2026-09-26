@@ -1,13 +1,11 @@
-import type { RawRoute } from "../types";
+import type { LatLon } from "../types";
 
 /**
- * Proveedor de elevación.
- *
- * Transitorio (F1, ADR-0005): aplica la elevación a las rutas (interpolación,
- * suavizado y pendientes, como hoy). En F2 pasa a `getElevations(points)` con
- * datos crudos y la limpieza se muda al ElevationEngine.
+ * Proveedor de elevación: alturas crudas (m) para los puntos pedidos, en el
+ * mismo orden (plan §3.1). Qué puntos pedir y cómo aplicarlas es del dominio
+ * (engines/elevation). Si no puede responder, lanza.
  */
 export interface ElevationProvider {
   readonly id: string;
-  applyTo(routes: RawRoute[]): Promise<RawRoute[]>;
+  getElevations(points: LatLon[]): Promise<number[]>;
 }

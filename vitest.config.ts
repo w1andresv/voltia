@@ -18,7 +18,7 @@ export default defineConfig({
         // Catálogo de datos estático (presets de vehículos), no lógica de dominio.
         "src/domain/vehicles.ts",
         // Catálogo v2 congelado, solo para la migración del store (datos, no lógica).
-        "src/domain/legacy-catalog.ts", "src/infrastructure/providers/mapbox-fixtures.ts",
+        "src/domain/legacy-catalog.ts",
         // Esquemas Zod y tipos de puertos, no lógica que probar por sí misma
         // (types.ts ya los ejercita al importar VehicleSchema/PlaceSchema/etc.).
         "src/domain/schemas.ts",

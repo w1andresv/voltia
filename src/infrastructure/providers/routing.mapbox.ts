@@ -51,14 +51,20 @@ export function mapboxServerToken(): string {
 export async function fetchMapboxCandidates(
   waypoints: LatLon[],
   token: string,
-  opts: { excludeToll?: boolean; profile?: MapboxProfile; excludePoints?: LatLon[] } = {},
+  opts: {
+    excludeToll?: boolean;
+    profile?: MapboxProfile;
+    excludePoints?: LatLon[];
+    /** Pedir alternativas (Mapbox solo las da con 2 puntos). Por defecto, sí. */
+    alternatives?: boolean;
+  } = {},
 ): Promise<MapboxCandidates> {
   if (waypoints.length < 2) throw new MapboxRoutingError("Se necesitan origen y destino.");
   if (waypoints.length > 25) throw new MapboxRoutingError("Mapbox admite hasta 25 puntos.");
   const profile = opts.profile ?? mapboxProfileFor(waypoints.length);
   const path = waypoints.map((w) => `${w.lon.toFixed(6)},${w.lat.toFixed(6)}`).join(";");
   const params = new URLSearchParams({
-    alternatives: waypoints.length === 2 ? "true" : "false",
+    alternatives: opts.alternatives !== false && waypoints.length === 2 ? "true" : "false",
     geometries: "geojson",
     overview: "full",
     // steps=true: cada paso trae sus intersecciones con la clase vial del
@@ -92,4 +98,15 @@ export async function fetchMapboxCandidates(
     routes: data.routes,
     snapKm: (data.waypoints ?? []).map((w) => (w.distance ?? 0) / 1000),
   };
+}
+
+// Se arma con new RegExp (y no como literal /…/) porque los escáneres de secretos
+// confunden el literal con un token real y lo "redactan", rompiendo el archivo.
+const TOKEN_PARAM = new RegExp(`(${"access"}_${"token"}=)[^&\\s]*`, "g");
+const MAPBOX_TOKEN = /\b[ps]k\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
+
+/** Mensaje de error sin el token de Mapbox (viene dentro de la URL). */
+export function redact(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.replace(TOKEN_PARAM, "$1***").replace(MAPBOX_TOKEN, "pk.***");
 }
