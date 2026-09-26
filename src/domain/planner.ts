@@ -1,11 +1,15 @@
 import { compareByHierarchy } from "./road-hierarchy";
-import { FLAT_CURVE, chargeTimeMinutes } from "./ev/engines/charging/curve";
-import { routePlugs, routeSocket } from "./ev/engines/compatibility/engine";
+import { FLAT_CURVE, chargeTimeMinutes, lerpFactor } from "./ev/engines/charging/curve";
+import { routePlugs, routeSocket, type RoutePlug } from "./ev/engines/compatibility/engine";
+import { planCharging, requiredInitialCharge, type PlannerInput, type PlannerNode } from "./ev/engines/charging/planner";
+import { classifyFeasibility, type FeasibilityStatus, type InfeasibilityReason } from "./ev/engines/feasibility/engine";
+import { toTripConfiguration } from "./ev/core/trip-config";
+import { kwhToSocPct } from "./ev/core/units";
 import { placeOnRoute } from "./ev/engines/corridor/engine";
 import { STYLE_SPEED_FACTOR, annotateEnergy, energyMode, segmentEnergyKwh } from "./energy";
 import type { EnergySample } from "./ev/contracts/energy";
 import type { SocEvent } from "./ev/contracts/soc";
-import { legSoc, requiredStartSoc, simulateSoc } from "./ev/engines/soc/simulate";
+import { legSoc, requiredStartSoc, simulateSoc, walkSoc } from "./ev/engines/soc/simulate";
 import type {
   ChargeChoice,
   ChargeStop,
@@ -24,6 +28,7 @@ import {
   extraWeightKg,
   FIRST_CHARGER_UNREACHABLE_REASON,
   isVerifiedForPlanning,
+  INFEASIBILITY_TEXT,
   NO_VERIFIED_STOP_REASON,
 } from "./types";
 import { MODEL_PARAMETERS } from "./ev/core/params";
@@ -728,31 +733,28 @@ function assessFirstCharger(args: {
   };
 }
 
-export function buildPlan(args: {
-  raw: RawRoute;
+interface StopsChoice {
+  stops: ChargeStop[];
+  feasible: boolean;
+  reason?: string;
+  planningSoc: number;
+  departureCharge?: RoutePlan["departureCharge"];
+  firstChargerUnreachable?: boolean;
+  feasibilityStatus?: FeasibilityStatus;
+  infeasibilityCode?: InfeasibilityReason;
+}
+
+type StopsArgs = {
+  samples: EnergySample[];
+  chargers: Charger[];
   vehicle: Vehicle;
   conditions: TripConditions;
-  chargers: Charger[];
   weather: WeatherSnapshot | null;
-  origin: Place;
-  destination: Place;
-}): RoutePlan {
-  const { raw, vehicle, conditions, weather, origin, destination } = args;
-  const { reservePct: safety, arrivalTargetPct } = socFloors(vehicle, conditions);
-  const ctx = { vehicle, conditions, weather, originAltitudeM: raw.samples[0]?.elevM };
+};
 
-  const styleSpeed = STYLE_SPEED_FACTOR[conditions.drivingStyle];
-  const samplesPre = raw.samples.map((s) => ({
-    ...s,
-    speedKmh: hasFixedSpeed(conditions)
-      ? (conditions.avgSpeedKmh as number)
-      : s.speedKmh * styleSpeed,
-  }));
-
-  const attached = placeChargers(args.chargers, samplesPre);
-  // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
-  const energySamples = annotateEnergy(samplesPre, ctx);
-  const cap = Math.max(vehicle.batteryKwh, 1);
+/** Planificador actual: carga previa hasta la primera estación y paradas por puntaje. */
+function planStopsLegacy(args: StopsArgs): StopsChoice {
+  const { samples: energySamples, chargers: attached, vehicle, conditions, weather } = args;
   const gate = assessFirstCharger({
     samples: energySamples,
     chargers: attached,
@@ -783,12 +785,250 @@ export function buildPlan(args: {
           chargerName: gate.charger.name,
         }
       : undefined;
-  const stops = picked.stops.map((st) => ({
+  return {
+    stops: picked.stops,
+    feasible: picked.feasible,
+    reason: picked.reason,
+    planningSoc,
+    departureCharge,
+    firstChargerUnreachable: gate.kind === "impossible" ? true : undefined,
+  };
+}
+
+
+/**
+ * Minutos de carga por estación, precalculados sobre la malla de integración:
+ * la programación dinámica los consulta miles de veces.
+ */
+function chargeMinutesTable(plug: RoutePlug, vehicle: Vehicle, capacityKwh: number): PlannerNode["chargeMinutes"] {
+  const step = MODEL_PARAMETERS.charging.integrationStepPct;
+  const overhead = MODEL_PARAMETERS.charging.connectionOverheadMin.value;
+  const peak = plug.dc ? vehicle.dcMaxKw : vehicle.acMaxKw;
+  const curve = plug.dc ? vehicle.chargeCurve : FLAT_CURVE;
+  const n = Math.round(100 / step);
+  const cum = new Float64Array(n + 1);
+  const energy = (capacityKwh * step) / 100;
+  for (let k = 0; k < n; k++) {
+    const power = Math.min(peak * lerpFactor(curve, (k + 0.5) * step), plug.powerKw);
+    cum[k + 1] = cum[k]! + (energy / Math.max(power, 1.5)) * 60;
+  }
+  const at = (soc: number) => {
+    const x = Math.max(0, Math.min(100, soc)) / step;
+    const k = Math.min(n - 1, Math.floor(x));
+    return cum[k]! + (cum[k + 1]! - cum[k]!) * (x - k);
+  };
+  return (from, to) => (to > from ? at(to) - at(from) + overhead : 0);
+}
+
+/**
+ * Planificador v2 (F7): paradas por programación dinámica con costo
+ * lexicográfico según la estrategia, carga previa sobre el mismo planificador
+ * y viabilidad con códigos. Sin reglas de puntaje ni tope fijo de paradas.
+ */
+function planStopsV2(args: StopsArgs): StopsChoice {
+  const { samples, vehicle, conditions, weather } = args;
+  const cfg = toTripConfiguration(vehicle, conditions, weather);
+  const cap = Math.max(vehicle.batteryKwh, 1);
+  const destIdx = samples.length - 1;
+  const floor = cfg.minimumSocPercent;
+  // Con "permitir bajar del margen" el destino pide lo que eligió el usuario, sin subirlo a la reserva.
+  const destReserve = conditions.allowBelowSafety
+    ? Math.max(conditions.arrivalSoc, floor)
+    : cfg.destinationReserveSocPercent;
+  const ctx: EnergyCtx = { vehicle, conditions, weather, originAltitudeM: samples[0]?.elevM };
+
+  const usable = args.chargers.filter((c) => {
+    if (!isVerifiedForPlanning(c) || isOffline(c)) return false;
+    const sIdx = c.nearestSampleIndex ?? 0;
+    return sIdx > 0 && sIdx < destIdx && routeSocket(c, vehicle) != null;
+  });
+  const plugs = usable.map((c) => routeSocket(c, vehicle)!);
+  const nodes: PlannerNode[] = usable.map((c, i) => {
+    const sIdx = c.nearestSampleIndex ?? 0;
+    const detourKm = c.detourKm ?? fromRouteKmOf(c) * 2;
+    const detourKwh = segmentEnergyKwh(detourKm, 0, DETOUR_SPEED_KMH, ctx, { altitudeM: samples[sIdx]?.elevM });
+    return {
+      sIdx,
+      detourPct: kwhToSocPct(detourKwh, cap),
+      detourKm,
+      detourKwh,
+      detourMin: detourMinutesOf(detourKm),
+      waitMin: c.availability === "occupied" ? MODEL_PARAMETERS.planner.occupiedWaitMin.value : 0,
+      chargeMinutes: chargeMinutesTable(plugs[i]!, vehicle, cap),
+    };
+  });
+  const input: PlannerInput = {
+    samples,
+    initialSocPct: conditions.initialSoc,
+    floorPct: floor,
+    destinationReservePct: destReserve,
+    maxChargePct: cfg.maxChargeTargetSocPercent,
+    nodes,
+    objective: conditions.planningMode,
+    walk: (from, start, visit) => walkSoc(samples, from, start, cap, visit),
+    gridPct: MODEL_PARAMETERS.planner.socGridPct,
+    tolerancePct: ARRIVE_TOLERANCE,
+  };
+
+  const now = planCharging(input);
+  const pre = now.feasible ? null : requiredInitialCharge(input);
+  const result = pre?.result ?? now;
+  const planningSoc = pre?.startSoc ?? conditions.initialSoc;
+  const full = !now.feasible && !pre ? planCharging({ ...input, initialSocPct: 100 }) : null;
+
+  const planned = result.feasible ? result.stops : [];
+  const stops: ChargeStop[] = planned.map((p, i) => {
+    const charger = usable[p.node]!;
+    const node = nodes[p.node]!;
+    const plug = plugs[p.node]!;
+    const next = planned[i + 1];
+    const nextNode = next ? nodes[next.node]! : null;
+    const need = requiredStartSoc(samples, node.sIdx, nextNode ? nextNode.sIdx : destIdx, cap, {
+      arrivalTargetPct: nextNode ? floor : destReserve,
+      floorPct: floor,
+      extraKwh: nextNode ? nextNode.detourKwh : 0,
+      tolerancePct: ARRIVE_TOLERANCE,
+    });
+    const minDepartSoc = Math.min(cfg.maxChargeTargetSocPercent, Math.max(need, p.arriveSoc));
+    const options: ChargeChoice[] = routePlugs(charger, vehicle).map((o) => {
+      const minutes = chargeTimeMinutes(
+        cap,
+        p.arriveSoc,
+        p.departSoc,
+        o.dc ? vehicle.dcMaxKw : vehicle.acMaxKw,
+        o.powerKw,
+        o.dc ? vehicle.chargeCurve : FLAT_CURVE,
+      );
+      const energyAddedKwh = ((p.departSoc - p.arriveSoc) / 100) * cap;
+      return {
+        mode: o.adapter ? ("adapter" as const) : o.dc ? ("direct" as const) : ("ac" as const),
+        socket: o.socket,
+        adapter: o.adapter ?? undefined,
+        nominalKw: o.socket.powerKw,
+        chargeKw: o.powerKw,
+        arriveSoc: p.arriveSoc,
+        minDepartSoc,
+        departSoc: p.departSoc,
+        energyAddedKwh,
+        chargeMinutes: minutes,
+        rangeGainKm: rangeFromEnergy(vehicle, energyAddedKwh),
+        reachesNext: true,
+      };
+    });
+    const chosenOption = options.find((o) => o.socket === plug.socket && o.chargeKw === plug.powerKw) ?? options[0]!;
+    const acOpt = options.find((o) => o.mode === "ac" && o.socket !== chosenOption.socket);
+    return {
+      charger,
+      arriveSoc: p.arriveSoc,
+      departSoc: p.departSoc,
+      minDepartSoc,
+      chargeMinutes: chosenOption.chargeMinutes,
+      energyAddedKwh: chosenOption.energyAddedKwh,
+      bestSocket: plug.socket,
+      adapter: plug.adapter ?? undefined,
+      alternative: acOpt
+        ? {
+            mode: "ac" as const,
+            socket: acOpt.socket,
+            arriveSoc: acOpt.arriveSoc,
+            minDepartSoc: acOpt.minDepartSoc,
+            departSoc: acOpt.departSoc,
+            energyAddedKwh: acOpt.energyAddedKwh,
+            chargeKw: acOpt.chargeKw,
+            chargeMinutes: acOpt.chargeMinutes,
+            rangeGainKm: acOpt.rangeGainKm,
+          }
+        : undefined,
+      options,
+      rangeGainKm: chosenOption.rangeGainKm,
+      kmAlongRoute: charger.nearestKm ?? samples[node.sIdx]!.km,
+      fromRouteKm: fromRouteKmOf(charger),
+      detourKm: node.detourKm,
+      detourMinutes: node.detourMin,
+      detourEnergyKwh: node.detourKwh,
+      chargeKw: plug.powerKw,
+      kmToNext: (next ? (usable[next.node]!.nearestKm ?? 0) : (samples[destIdx]?.km ?? 0)) - (charger.nearestKm ?? 0),
+      nextLabel: next ? usable[next.node]!.name : "",
+    };
+  });
+
+  // Verificación final: la curva completa respeta el piso y la reserva (§5.9).
+  let validated = result.feasible;
+  if (validated) {
+    const sim = simulateSoc(samples, { initialSocPct: planningSoc, capacityKwh: cap, events: stopEvents(samples, stops) });
+    validated = sim.minSoc >= floor - ARRIVE_TOLERANCE && sim.arrivalSoc >= destReserve - ARRIVE_TOLERANCE;
+  }
+  const verdict = classifyFeasibility({
+    feasibleNow: now.feasible,
+    stops: stops.length,
+    feasibleWithPrecharge: pre != null,
+    compatibleStations: nodes.length,
+    destinationShort: (full ?? result).destinationShort,
+    validated,
+  });
+  const firstChargerUnreachable =
+    full != null && nodes.length > 0 && full.reachable.length === 0 && !full.destinationShort ? true : undefined;
+  const departureCharge =
+    pre && verdict.feasible
+      ? {
+          currentSoc: conditions.initialSoc,
+          additionalPct: pre.additionalPct,
+          requiredStartSoc: pre.startSoc,
+          chargerId: stops[0]?.charger.id ?? "",
+          chargerName: stops[0]?.charger.name ?? "",
+        }
+      : undefined;
+  return {
+    stops: verdict.feasible ? stops : [],
+    feasible: verdict.feasible,
+    reason: verdict.feasible
+      ? undefined
+      : firstChargerUnreachable
+        ? FIRST_CHARGER_UNREACHABLE_REASON
+        : INFEASIBILITY_TEXT[verdict.reasonCode ?? "GAP_BETWEEN_STATIONS_EXCEEDS_RANGE"],
+    planningSoc,
+    departureCharge,
+    firstChargerUnreachable,
+    feasibilityStatus: verdict.status,
+    infeasibilityCode: verdict.reasonCode,
+  };
+}
+export function buildPlan(args: {
+  raw: RawRoute;
+  vehicle: Vehicle;
+  conditions: TripConditions;
+  chargers: Charger[];
+  weather: WeatherSnapshot | null;
+  origin: Place;
+  destination: Place;
+  /** Planificador de paradas: el actual (por defecto) o el v2 por programación dinámica (F7). */
+  engine?: "legacy" | "v2";
+}): RoutePlan {
+  const { raw, vehicle, conditions, weather, origin, destination } = args;
+  const { reservePct: safety, arrivalTargetPct } = socFloors(vehicle, conditions);
+  const ctx = { vehicle, conditions, weather, originAltitudeM: raw.samples[0]?.elevM };
+
+  const styleSpeed = STYLE_SPEED_FACTOR[conditions.drivingStyle];
+  const samplesPre = raw.samples.map((s) => ({
+    ...s,
+    speedKmh: hasFixedSpeed(conditions)
+      ? (conditions.avgSpeedKmh as number)
+      : s.speedKmh * styleSpeed,
+  }));
+
+  const attached = placeChargers(args.chargers, samplesPre);
+  // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
+  const energySamples = annotateEnergy(samplesPre, ctx);
+  const cap = Math.max(vehicle.batteryKwh, 1);
+  const chosen =
+    args.engine === "v2"
+      ? planStopsV2({ samples: energySamples, chargers: attached, vehicle, conditions, weather })
+      : planStopsLegacy({ samples: energySamples, chargers: attached, vehicle, conditions, weather });
+  const { planningSoc, departureCharge, feasible, reason } = chosen;
+  const stops = chosen.stops.map((st) => ({
     ...st,
     nextLabel: st.nextLabel || destination.label,
   }));
-  const feasible = picked.feasible;
-  const reason = picked.reason;
 
   // La curva de batería sale del SOCEngine: regeneración recortada según el SOC
   // real, y desvíos y cargas como eventos (C2, C6).
@@ -888,7 +1128,10 @@ export function buildPlan(args: {
     feasible,
     infeasibleReason: reason,
     departureCharge,
-    firstChargerUnreachable: gate.kind === "impossible" ? true : undefined,
+    firstChargerUnreachable: chosen.firstChargerUnreachable,
+    planner: args.engine === "v2" ? "v2" : "legacy",
+    feasibilityStatus: chosen.feasibilityStatus,
+    infeasibilityCode: chosen.infeasibilityCode,
     stops,
     itinerary,
     elevation: raw.elevation,

@@ -33,6 +33,28 @@ function stepSoc(
   return { soc: socPct - kwhToSocPct(netKwh, capacityKwh), netKwh, acceptedKwh };
 }
 
+/**
+ * Recorre el perfil desde `fromIdx` saliendo con `startSoc` y avisa en cada
+ * muestra el SOC y el mínimo hasta ahí. Si `visit` devuelve false, se detiene.
+ * El planificador lo recibe inyectado para no duplicar el cálculo del SOC.
+ */
+export function walkSoc(
+  samples: EnergySample[],
+  fromIdx: number,
+  startSoc: number,
+  capacityKwh: number,
+  visit: (idx: number, soc: number, lowest: number) => boolean,
+  params: RegenAcceptance = MODEL_PARAMETERS.soc.regenAcceptance,
+): void {
+  let soc = startSoc;
+  let lowest = startSoc;
+  for (let i = Math.max(0, fromIdx) + 1; i < samples.length; i++) {
+    soc = stepSoc(samples[i]!, soc, capacityKwh, params).soc;
+    if (soc < lowest) lowest = soc;
+    if (!visit(i, soc, lowest)) return;
+  }
+}
+
 export interface LegSoc {
   /** SOC al llegar a `toIdx`. */
   endSoc: number;

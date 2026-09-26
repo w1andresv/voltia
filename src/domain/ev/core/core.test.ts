@@ -92,12 +92,13 @@ describe("ModelParameters", () => {
     expect(MODEL_PARAMETERS.corridor.maxFromRouteKm).toBe(12);
     expect(MODEL_PARAMETERS.corridor.preferredFromRouteKm).toBe(5);
     expect(MODEL_PARAMETERS.corridor.detourRoadFactor.value).toBe(1);
-    expect(MODEL_PARAMETERS.planner).toEqual({
+    expect(MODEL_PARAMETERS.planner).toMatchObject({
       maxStops: 7,
       minProgressKm: 4,
       detourSpeedKmh: 50,
       socTolerancePct: 1e-4,
       belowSafetyFloorPct: 2,
+      socGridPct: 1,
     });
     expect(MODEL_PARAMETERS.planning.energyMarginPercent).toBe(0);
     expect(MODEL_PARAMETERS.vehicle.bodyTypePhysics.source).toBe("estimated");

@@ -151,6 +151,7 @@ export function rankedPlansFor(
       weather: geo.weather,
       origin,
       destination,
+      engine: geo.plannerEngine,
     }),
   );
   return rankPlans(built, conditions.planningMode);

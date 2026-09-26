@@ -16,17 +16,6 @@ import { mapboxServerToken } from "@/infrastructure/providers/routing.mapbox";
 import { DatasetStationCatalog } from "@/infrastructure/stations/catalog.adapter";
 import { EVRoutePlanningService, type PlannerEngineMode, type PlanningDeps } from "./plan-trip/service";
 
-let warnedEngine = false;
-
-/** Por ahora solo existe el motor actual: `shadow` y `v2` se atienden con `legacy` y se avisa una vez. */
-function engineMode(requested: PlannerEngineMode): PlannerEngineMode {
-  if (requested !== "legacy" && !warnedEngine) {
-    warnedEngine = true;
-    console.warn(`[plan-trip] PLANNER_ENGINE=${requested} todavía no está disponible; se usa legacy.`);
-  }
-  return "legacy";
-}
-
 /** Servicio de planificación con los proveedores de producción. `overrides` reemplaza piezas (tests, grabación). */
 export function createPlanningService(overrides: Partial<PlanningDeps> = {}): EVRoutePlanningService {
   const token = mapboxServerToken();
@@ -36,7 +25,7 @@ export function createPlanningService(overrides: Partial<PlanningDeps> = {}): EV
     weather: new OpenMeteoWeatherProvider(),
     stations: new DatasetStationCatalog(),
     params: MODEL_PARAMETERS,
-    engineMode: engineMode(getEnv().PLANNER_ENGINE),
+    engineMode: getEnv().PLANNER_ENGINE as PlannerEngineMode,
     ...overrides,
   });
 }

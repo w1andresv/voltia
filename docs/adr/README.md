@@ -10,6 +10,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0004](./0004-se-conserva-el-viento.md) | Se conserva el modelo de viento aunque la especificación lo deja fuera de v1 | Aceptada |
 | [0005](./0005-puertos-transitorios-en-f1.md) | Puertos transitorios en F1 (rutas y elevación todavía muestreadas) | Cumplida en F2a |
 | [0006](./0006-f2-en-dos-partes.md) | F2 en dos partes: estructura ahora, malla de elevación y snapshot después | Aceptada |
+| [0007](./0007-planificador-v2-detras-del-flag.md) | El planificador v2 entra detrás de PLANNER_ENGINE | Aceptada |
 
 ## Plantilla
 

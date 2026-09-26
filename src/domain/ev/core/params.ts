@@ -52,6 +52,10 @@ export interface ModelParameters {
     socTolerancePct: number;
     /** Piso de SOC con "permitir bajar del margen". */
     belowSafetyFloorPct: number;
+    /** Planificador v2: resolución del SOC de salida, en puntos. */
+    socGridPct: number;
+    /** Planificador v2: minutos de espera supuestos en una estación reportada ocupada. */
+    occupiedWaitMin: SourcedValue<number>;
   };
   planning: {
     /** Margen de energía extra al planificar (0 hasta calibrar; plan §3.4). */
@@ -96,6 +100,8 @@ export const MODEL_PARAMETERS: ModelParameters = {
     detourSpeedKmh: 50,
     socTolerancePct: 1e-4,
     belowSafetyFloorPct: 2,
+    socGridPct: 1,
+    occupiedWaitMin: sourced(15, "estimated", { notes: "Sin datos de ocupación; calibrar." }),
   },
   planning: {
     energyMarginPercent: 0,

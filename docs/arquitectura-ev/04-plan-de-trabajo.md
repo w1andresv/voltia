@@ -137,13 +137,15 @@ Dividida en dos (ADR-0006).
 
 - **Objetivo:** reemplazar la selección voraz por puntaje.
 - **Tareas:**
-  - [ ] `engines/charging/planner.ts`: tabla de tramos más programación dinámica sobre (nodo, SOC), con costo lexicográfico por `planningMode` (plan §4.9).
-  - [ ] Carga previa por búsqueda binaria sobre la tabla de tramos.
-  - [ ] `engines/feasibility/engine.ts`: los cinco estados y códigos de motivo. Los textos en español van a presentación.
-  - [ ] `occupied` suma espera configurable; `offline` se excluye.
+  - [x] `engines/charging/planner.ts`: tabla de tramos más programación dinámica sobre (nodo, SOC), con costo lexicográfico por `planningMode` (plan §4.9).
+  - [x] Carga previa por búsqueda binaria sobre la tabla de tramos.
+  - [x] `engines/feasibility/engine.ts`: los cinco estados y códigos de motivo. Los textos en español van a presentación.
+  - [x] `occupied` suma espera configurable; `offline` se excluye.
 - **Tests:** ejemplo A/B/C de la especificación; los cinco estados con perfiles sintéticos; SOC actual 20 % y requerido 34 % dan +14 %.
 - **Cierre:** menos de 150 ms por ruta con el fixture (medido en el test).
 - **Especificación:** F6.
+- **Hecho (detrás de `PLANNER_ENGINE`, ADR-0007):** `engines/charging/planner.ts` (programación dinámica sobre estación × SOC de salida al 1 %, costo lexicográfico por estrategia, carga previa por búsqueda binaria), `engines/feasibility/engine.ts` (cinco estados, códigos y textos), `buildPlan({ engine: "v2" })`, servicio con `legacy | shadow | v2` y registro `[plan-trip:shadow]`. Caracterización del v2 en `characterization.test.ts`. La tabla de tramos con malla gruesa no hizo falta: 30 estaciones en 220 muestras corren en pocos ms en los tests.
+- **Pendiente:** decidir `connectionOverheadMin` antes de poner `v2` en producción.
 
 ### F8 · Composición, gráficas y pasada 2
 
@@ -191,7 +193,7 @@ Dividida en dos (ADR-0006).
 | F4 | ✅ Hecha (desvío por matriz pendiente) | ver `git log --grep "^F4:"` |
 | F5 | Pendiente | — |
 | F6 | Pendiente | — |
-| F7 | Pendiente | — |
+| F7 | ✅ Hecha detrás de `PLANNER_ENGINE` (por defecto `legacy`) | ver `git log --grep "^F7:"` |
 | F8 | Pendiente | — |
 | F9 | Pendiente | — |
 

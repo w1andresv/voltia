@@ -7,10 +7,21 @@ import { applyElevationProfile, elevationProbes } from "@/domain/ev/engines/elev
 import { buildPlan, rankPlans } from "@/domain/planner";
 import { stationsNearRoutes } from "@/domain/ev/engines/corridor/engine";
 import { toPlanningCharger } from "@/domain/stations/to-charger";
-import type { PlanRequest, PlanResponse, RawRoute, RoutingEngine, TripConditions, Vehicle } from "@/domain/types";
+import type {
+  PlanRequest,
+  PlanResponse,
+  RawRoute,
+  RoutePlan,
+  RoutingEngine,
+  TripConditions,
+  Vehicle,
+} from "@/domain/types";
 import { selectRoutes } from "./route-selection";
 
-/** `legacy`: motor actual. `shadow` y `v2` llegan con el motor nuevo (plan §6); hasta entonces se usa `legacy`. */
+/**
+ * `legacy`: planificador actual. `v2`: planificador por programación dinámica (F7).
+ * `shadow`: calcula los dos, responde con el actual y registra las diferencias (plan §6).
+ */
 export type PlannerEngineMode = "legacy" | "shadow" | "v2";
 
 export interface PlanningDeps {
@@ -26,6 +37,36 @@ export interface PlanResult {
   response: PlanResponse;
   engine: RoutingEngine;
   chargerCount: number;
+}
+
+const r1 = (n: number) => Math.round(n * 10) / 10;
+
+/**
+ * Modo sombra: el planificador v2 corre al lado del actual y se registra en qué
+ * difieren, sin afectar la respuesta. Un error del v2 solo se registra.
+ */
+function logShadow(legacy: RoutePlan[], mode: TripConditions["planningMode"], runV2: () => RoutePlan[]): void {
+  try {
+    const t0 = Date.now();
+    const v2 = runV2();
+    const routes = legacy.map((a, i) => {
+      const b = v2[i]!;
+      return {
+        id: a.id,
+        feasible: [a.feasible, b.feasible],
+        stops: [a.stops.length, b.stops.length],
+        totalMinutes: [Math.round(a.totalMinutes), Math.round(b.totalMinutes)],
+        arrivalSoc: [r1(a.arrivalSoc), r1(b.arrivalSoc)],
+        minSoc: [r1(a.minSoc), r1(b.minSoc)],
+        status: b.feasibilityStatus,
+      };
+    });
+    const bestLegacy = rankPlans(legacy, mode)[0]?.id;
+    const bestV2 = rankPlans(v2, mode)[0]?.id;
+    console.log("[plan-trip:shadow]", JSON.stringify({ ms: Date.now() - t0, selected: [bestLegacy, bestV2], routes }));
+  } catch (error) {
+    console.error("[plan-trip:shadow] v2 falló", error instanceof Error ? error.message : String(error));
+  }
 }
 
 /**
@@ -65,22 +106,28 @@ export class EVRoutePlanningService {
       .filter((s) => s.planning.eligible)
       .map(toPlanningCharger);
 
-    const built = routes.map((raw) =>
-      buildPlan({
-        raw,
-        vehicle: data.vehicle as Vehicle,
-        conditions: data.conditions as TripConditions,
-        chargers,
-        weather: snapshot,
-        origin: data.origin,
-        destination: data.destination,
-      }),
-    );
+    const mode = this.deps.engineMode;
+    const build = (engine: "legacy" | "v2") =>
+      routes.map((raw) =>
+        buildPlan({
+          raw,
+          vehicle: data.vehicle as Vehicle,
+          conditions: data.conditions as TripConditions,
+          chargers,
+          weather: snapshot,
+          origin: data.origin,
+          destination: data.destination,
+          engine,
+        }),
+      );
+    const responding: "legacy" | "v2" = mode === "v2" ? "v2" : "legacy";
+    const built = build(responding);
+    if (mode === "shadow") logShadow(built, data.conditions.planningMode, () => build("v2"));
     const ranked = rankPlans(built, data.conditions.planningMode);
 
     return {
       response: {
-        geo: { routes, chargers, weather: snapshot, warnings, stationsVersion: dataset.version },
+        geo: { routes, chargers, weather: snapshot, warnings, stationsVersion: dataset.version, plannerEngine: responding },
         plans: ranked,
         selectedId: ranked[0]?.id ?? "",
       },

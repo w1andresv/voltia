@@ -134,4 +134,22 @@ describe("EVRoutePlanningService", () => {
     expect(response.plans).toEqual([]);
     expect(response.selectedId).toBe("");
   });
+
+  it("modo sombra: responde con el actual y registra las diferencias con v2", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { response } = await new EVRoutePlanningService(deps({ engineMode: "shadow" })).plan(request);
+    expect(response.geo.plannerEngine).toBe("legacy");
+    expect(response.plans.every((p) => p.planner === "legacy")).toBe(true);
+    const shadow = log.mock.calls.find(([tag]) => tag === "[plan-trip:shadow]");
+    expect(shadow).toBeDefined();
+    const payload = JSON.parse(String(shadow![1])) as { routes: { stops: number[] }[] };
+    expect(payload.routes).toHaveLength(response.plans.length);
+    log.mockRestore();
+  });
+
+  it("modo v2: responde con el planificador nuevo", async () => {
+    const { response } = await new EVRoutePlanningService(deps({ engineMode: "v2" })).plan(request);
+    expect(response.geo.plannerEngine).toBe("v2");
+    expect(response.plans[0]?.feasibilityStatus).toBeDefined();
+  });
 });

@@ -925,3 +925,162 @@ describe("buildPlan — la regeneración depende del SOC real después de cargar
     expect(plan.arrivalSoc).toBeLessThan(optimistic);
   });
 });
+
+describe("buildPlan con el planificador v2 (F7)", () => {
+  const dest = (km: number): Place => ({ label: "Destino", lat: 4 + km / 111, lon: -74 });
+
+  it("sin paradas si alcanza, con estado FEASIBLE_NO_CHARGING", () => {
+    const p = buildPlan({
+      raw: straightRoute(100),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 90 }),
+      chargers: [],
+      weather: null,
+      origin: ORIGIN,
+      destination: DESTINATION_100,
+      engine: "v2",
+    });
+    expect(p.planner).toBe("v2");
+    expect(p.feasible).toBe(true);
+    expect(p.stops).toHaveLength(0);
+    expect(p.feasibilityStatus).toBe("FEASIBLE_NO_CHARGING");
+  });
+
+  it("C1: respeta la reserva en todo el tramo de montaña", () => {
+    const distance = 60;
+    const elev = (km: number) => (km <= 40 ? 500 + (1500 * km) / 40 : 2000 - (1500 * (km - 40)) / 20);
+    const base = straightRoute(distance, 1);
+    const raw = { ...base, samples: base.samples.map((s) => ({ ...s, elevM: elev(s.km), speedKmh: 60 })) };
+    const cond = conditions({ initialSoc: 31, arrivalSoc: 10, safetyMode: "low", regenLevel: "high", avgSpeedKmh: null });
+    const none = buildPlan({ raw, vehicle: vehicle(), conditions: cond, chargers: [], weather: null, origin: ORIGIN, destination: dest(distance), engine: "v2" });
+    // Sin cargadores, v2 busca el SOC inicial con el que el tramo es seguro (§5.8.6).
+    expect(none.feasibilityStatus).toBe("INFEASIBLE_WITH_CURRENT_SOC");
+    expect(none.departureCharge?.additionalPct).toBeGreaterThan(0);
+    expect(none.minSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+    const one = buildPlan({ raw, vehicle: vehicle(), conditions: cond, chargers: [chargerAt(5)], weather: null, origin: ORIGIN, destination: dest(distance), engine: "v2" });
+    expect(one.feasible).toBe(true);
+    expect(one.stops).toHaveLength(1);
+    expect(one.minSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+  });
+
+  it("C2: la curva tras la parada sale con el SOC de salida del plan, desvío incluido", () => {
+    const p = buildPlan({
+      raw: straightRoute(300),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 80, arrivalSoc: 10, safetyMode: "low" }),
+      chargers: [chargerAt(150, { lon: -74 + 0.09 })],
+      weather: null,
+      origin: ORIGIN,
+      destination: dest(300),
+      engine: "v2",
+    });
+    const stop = p.stops[0]!;
+    expect(stop.detourEnergyKwh).toBeGreaterThan(0);
+    const at = p.samples.find((s) => s.km >= stop.kmAlongRoute)!;
+    expect(at.soc).toBeCloseTo(stop.departSoc, 6);
+    expect(p.arrivalSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+  });
+
+  it("carga lo mínimo para llegar con la reserva (no llena de más en 'más rápida')", () => {
+    const p = buildPlan({
+      raw: straightRoute(300),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 80, arrivalSoc: 10, safetyMode: "low" }),
+      chargers: [chargerAt(150)],
+      weather: null,
+      origin: ORIGIN,
+      destination: dest(300),
+      engine: "v2",
+    });
+    expect(p.arrivalSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+    expect(p.arrivalSoc).toBeLessThan(11.5);
+  });
+
+  it("C8: con mínimo del vehículo 15 %, no llega a ninguna estación con menos", () => {
+    const p = buildPlan({
+      raw: straightRoute(400),
+      vehicle: vehicle({ minSocRecommended: 15 }),
+      conditions: conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 }),
+      chargers: [100, 150, 200, 250, 300].map((km) => chargerAt(km)),
+      weather: null,
+      origin: ORIGIN,
+      destination: dest(400),
+      engine: "v2",
+    });
+    expect(p.feasible).toBe(true);
+    expect(p.minSoc).toBeGreaterThanOrEqual(15 - 1e-6);
+    expect(p.stops.every((s) => s.arriveSoc >= 15 - 1e-6)).toBe(true);
+  });
+
+  it("pide cargar antes de salir cuando con el SOC actual no hay plan", () => {
+    const p = buildPlan({
+      raw: straightRoute(300),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 10, arrivalSoc: 10, safetyMode: "low" }),
+      chargers: [chargerAt(160)],
+      weather: null,
+      origin: ORIGIN,
+      destination: dest(300),
+      engine: "v2",
+    });
+    expect(p.feasible).toBe(true);
+    expect(p.feasibilityStatus).toBe("INFEASIBLE_WITH_CURRENT_SOC");
+    expect(p.departureCharge?.additionalPct).toBeGreaterThan(0);
+    expect(p.initialSoc).toBe(10 + p.departureCharge!.additionalPct);
+  });
+
+  it("ni al 100 % llega a la primera estación: lo marca como inalcanzable", () => {
+    const p = buildPlan({
+      raw: straightRoute(900),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 80 }),
+      chargers: [chargerAt(600)],
+      weather: null,
+      origin: ORIGIN,
+      destination: dest(900),
+      engine: "v2",
+    });
+    expect(p.feasible).toBe(false);
+    expect(p.firstChargerUnreachable).toBe(true);
+    expect(p.feasibilityStatus).toBe("INFEASIBLE_EVEN_AT_FULL_SOC");
+  });
+
+  it("adaptadores: solo los que el usuario lleva (C4)", () => {
+    const sockets = [
+      { connector: "gb_t" as const, powerKw: 50, count: 1, current: "DC" as const, currentOrigin: "reported" as const },
+      { connector: "type2" as const, powerKw: 11, count: 1 },
+    ];
+    const run = (adapters?: Vehicle["adapters"]) =>
+      buildPlan({
+        raw: straightRoute(250),
+        vehicle: vehicle({ adapters }),
+        conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+        chargers: [chargerAt(100, { sockets })],
+        weather: null,
+        origin: ORIGIN,
+        destination: dest(250),
+        engine: "v2",
+      });
+    const withAdapter = run([{ from: "gb_t", to: "ccs2" }]);
+    expect(withAdapter.feasible).toBe(true);
+    expect(withAdapter.stops[0]?.adapter).toEqual({ from: "gb_t", to: "ccs2" });
+    const without = run();
+    expect(without.stops.every((s) => !s.adapter)).toBe(true);
+    // Sin adaptador solo queda la carga lenta: tarda más.
+    expect(without.chargeMinutes).toBeGreaterThan(withAdapter.chargeMinutes);
+  });
+
+  it("ignora estaciones fuera de servicio", () => {
+    const p = buildPlan({
+      raw: straightRoute(300),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 80, arrivalSoc: 10, safetyMode: "low" }),
+      chargers: [chargerAt(150, { availability: "offline" }), chargerAt(160)],
+      weather: null,
+      origin: ORIGIN,
+      destination: dest(300),
+      engine: "v2",
+    });
+    expect(p.stops.map((s) => s.charger.id)).toEqual(["chg-160"]);
+  });
+});

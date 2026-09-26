@@ -88,10 +88,11 @@ function summary(res: PlanResponse) {
  * proveedores de producción (Mapbox, Open-Meteo) sobre fetch simulado, y las
  * estaciones sintéticas. El snapshot se grabó con el pipeline anterior a F1.
  */
-async function plan(req: PlanRequest): Promise<PlanResponse> {
+async function plan(req: PlanRequest, engineMode: "legacy" | "v2" = "legacy"): Promise<PlanResponse> {
   const { createPlanningService } = await import("@/application/container");
   const { response } = await createPlanningService({
     stations: { getDataset: async () => syntheticStations() },
+    engineMode,
   }).plan(req);
   return response;
 }
@@ -122,6 +123,16 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
     const res = await plan(request({ planningMode: "safer", initialSoc: 15, safetyMode: "conservative" }));
     expect(summary(res)).toMatchSnapshot();
     expect(digest(res)).toMatchSnapshot();
+  });
+
+  // Planificador v2 (F7) en los mismos escenarios: referencia para el modo sombra.
+  it.each([
+    ["modo más rápido, SOC 35 %", {}],
+    ["menos paradas, SOC 90 %", { planningMode: "fewer_stops", initialSoc: 90, drivingStyle: "sport" }],
+    ["más segura, SOC 15 %", { planningMode: "safer", initialSoc: 15, safetyMode: "conservative" }],
+  ] as [string, Partial<TripConditions>][])("planificador v2: %s", async (_name, over) => {
+    const res = await plan(request(over), "v2");
+    expect(summary(res)).toMatchSnapshot();
   });
 
   it("es determinista", async () => {

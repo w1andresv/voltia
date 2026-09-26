@@ -1,4 +1,5 @@
 import type { RoadMix } from "./road-hierarchy";
+import type { FeasibilityStatus, InfeasibilityReason } from "./ev/engines/feasibility/engine";
 import type {
   VehicleShape,
   PlaceShape,
@@ -253,6 +254,11 @@ export interface RoutePlan {
   departureCharge?: DepartureCharge;
   /** Ni saliendo al 100 % se alcanza la primera electrolinera verificada. */
   firstChargerUnreachable?: boolean;
+  /** Motor de planificación que armó el plan (PLANNER_ENGINE). */
+  planner?: "legacy" | "v2";
+  /** Estado de viabilidad (solo planificador v2, especificación §5.9). */
+  feasibilityStatus?: FeasibilityStatus;
+  infeasibilityCode?: InfeasibilityReason;
   stops: ChargeStop[];
   itinerary: ItineraryNode[];
   elevation: ElevationStats;
@@ -266,6 +272,8 @@ export interface GeoBundle {
   warnings: string[];
   /** Versión del dataset consolidado de electrolineras usado para este plan. */
   stationsVersion?: string;
+  /** Planificador con que respondió el servidor; el navegador recalcula con el mismo. */
+  plannerEngine?: "legacy" | "v2";
 }
 
 export interface PlanRequest {
@@ -350,6 +358,17 @@ export const NO_VERIFIED_STOP_REASON =
 /** Ni al 100 % de batería se llega a la primera electrolinera verificada. */
 export const FIRST_CHARGER_UNREACHABLE_REASON =
   "No es posible realizar esta ruta con la autonomía disponible. El vehículo no puede alcanzar el primer punto de carga desde el punto de partida, incluso iniciando con el 100% de batería.";
+
+/** Textos para cada motivo de no viabilidad del planificador v2. */
+export const INFEASIBILITY_TEXT: Record<InfeasibilityReason, string> = {
+  INITIAL_SOC_INSUFFICIENT: "Con la batería actual no alcanza: hay que cargar antes de salir.",
+  GAP_BETWEEN_STATIONS_EXCEEDS_RANGE: NO_VERIFIED_STOP_REASON,
+  NO_COMPATIBLE_STATIONS_IN_CORRIDOR:
+    "No hay electrolineras verificadas y compatibles con el vehículo cerca de la ruta.",
+  DESTINATION_RESERVE_UNREACHABLE:
+    "Se llega al último tramo, pero no con la reserva pedida al destino. Baja la reserva o busca una ruta con más cargadores.",
+  PLAN_VALIDATION_FAILED: "El plan calculado no pasó la verificación final. Intenta de nuevo o cambia las condiciones.",
+};
 
 export function departureChargeAdvice(additionalPct: number): string {
   const pct = Math.max(0, Math.round(additionalPct));

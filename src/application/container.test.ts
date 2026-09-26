@@ -62,15 +62,13 @@ describe("createPlanningService", () => {
     expect(urls.some((u) => u.includes("api.mapbox.com"))).toBe(false);
   });
 
-  it("PLANNER_ENGINE distinto de legacy avisa una vez y sigue con legacy", async () => {
+  it("PLANNER_ENGINE elige el planificador que responde", async () => {
     vi.stubEnv("MAPBOX_ACCESS_TOKEN", "pk.synthetic.token");
     vi.stubEnv("PLANNER_ENGINE", "v2");
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { createPlanningService } = await import("./container");
-    createPlanningService();
-    createPlanningService();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0]?.[0])).toContain("PLANNER_ENGINE=v2");
+    const { response } = await createPlanningService({ stations: { getDataset: async () => syntheticStations() } }).plan(request);
+    expect(response.geo.plannerEngine).toBe("v2");
+    expect(response.plans.every((p) => p.planner === "v2")).toBe(true);
   });
 
   it("el geocodificador busca y hace geocodificación inversa", async () => {
