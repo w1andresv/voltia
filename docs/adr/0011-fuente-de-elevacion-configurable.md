@@ -30,3 +30,10 @@ B6: hoy se piden 96 puntos por ruta a Open-Meteo, uno cada ~3 km en 300 km, y en
 
 ## Decisión del dueño del producto (2026-09-26, D1)
 La fuente por defecto pasa a ser **`mapbox-terrain`**. Queda por hacer el cambio de código (guía 05, §5.1.1) y verificar con `npm run elevation:compare` que el tileset responde y que el costo cabe en el plan de Mapbox (O4, O6).
+
+## Sesión B (2026-09-26)
+- **Fuente por defecto:** `ELEVATION_SOURCE` es `mapbox-terrain` (D1).
+- **Caché sin vencimiento (D12):** la elevación no cambia, así que las teselas y las consultas de Open-Meteo quedan en la Data Cache de Next con `revalidate: false`, compartidas por todos los usuarios y entre despliegues. Se pidió "caché en cookies", pero las cookies no sirven: ~4 KB cada una, viajan en cada petición y el navegador no consulta la elevación.
+- **Limpieza:** túneles desde `intersections[].classes` de Mapbox (la altura es la recta entre sus extremos) y pendiente máxima del 15 % entre puntos del perfil denso. Mapbox no marca puentes; la pendiente máxima recorta el hueco del valle.
+- **Sin elevación:** error tipado `ELEVATION_UNAVAILABLE`, con `dataQuality` en la respuesta y un aviso claro, sin bloquear el plan.
+

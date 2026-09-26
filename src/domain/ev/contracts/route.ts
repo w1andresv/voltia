@@ -34,7 +34,7 @@ export interface ProviderStep {
   durationS: number;
   geometry?: LatLon[];
   /** Intersecciones con la clase vial del proveedor (base de la jerarquía de vías). */
-  intersections?: { location: LatLon; roadClass?: string }[];
+  intersections?: { location: LatLon; roadClass?: string; classes?: string[] }[];
 }
 
 export interface RouteRequest {

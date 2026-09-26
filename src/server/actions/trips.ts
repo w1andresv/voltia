@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { PlanRequestSchema, TripSummarySchema } from "@/domain/schemas";
+import { createPlanningService } from "@/application/container";
 import { parsePlanningSnapshot } from "@/domain/ev/contracts/snapshot";
 import type { SavedTrip } from "@/domain/user/types";
 import { requireUser } from "@/infrastructure/auth/server-actor";
@@ -72,7 +73,8 @@ export async function saveTripFn(input: { data: unknown }): Promise<SavedTrip> {
     .insert({ owner_id: actor.id, client_id: clientId ?? null, payload: data })
     .select("id, payload, shared, share_id, created_at")
     .single();
-  if (error || !row) throw new Error(`No se pudo guardar el viaje: ${error?.message ?? "sin fila"}`);
+  if (error || !row)
+    throw new Error(`No se pudo guardar el viaje: ${error?.message ?? "sin fila"}`);
   return toSavedTrip(row as TripRow);
 }
 
@@ -93,7 +95,11 @@ export async function deleteTripFn(input: { data: { id: string } }): Promise<voi
   const actor = await requireUser();
   const id = z.string().min(1).parse(input.data.id);
   const supabase = await createServerSupabase();
-  const { error } = await supabase.from("voltia_trips").delete().eq("id", id).eq("owner_id", actor.id);
+  const { error } = await supabase
+    .from("voltia_trips")
+    .delete()
+    .eq("id", id)
+    .eq("owner_id", actor.id);
   if (error) throw new Error(`No se pudo borrar el viaje: ${error.message}`);
 }
 
@@ -103,7 +109,42 @@ function randomShareId(): string {
   return Array.from({ length: 10 }, () => Math.floor(Math.random() * 36).toString(36)).join("");
 }
 
-/** Activa (o reutiliza) el link público de un viaje del usuario con sesión. */
+/** Tiempo máximo de la verificación al compartir: después de esto se comparte sin verificar. */
+const SHARE_VERIFY_TIMEOUT_MS = 8000;
+
+/**
+ * Pasada 2 al compartir (D6): si el viaje trae snapshot y todavía no está
+ * verificado, verifica el plan recomendado contra la ruta real y devuelve el
+ * payload con la verificación. null si no aplica, falla o tarda demasiado:
+ * compartir nunca se bloquea por esto.
+ */
+async function verifiedPayload(payload: unknown): Promise<Record<string, unknown> | null> {
+  const parsed = PayloadSchema.safeParse(payload);
+  if (!parsed.success) return null;
+  const snapshot = parsePlanningSnapshot(parsed.data.snapshot);
+  if (!snapshot || snapshot.verifiedRoutes) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const verified = await Promise.race([
+      createPlanningService().verifySnapshot(snapshot, parsed.data.request),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), SHARE_VERIFY_TIMEOUT_MS);
+      }),
+    ]);
+    if (!verified) return null;
+    return { ...parsed.data, snapshot: { ...snapshot, verifiedRoutes: verified } };
+  } catch (error) {
+    console.error(
+      "[share] no se pudo verificar el viaje:",
+      error instanceof Error ? error.message : String(error),
+    );
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Activa (o reutiliza) el link público de un viaje del usuario con sesión, verificando el plan (D6). */
 export async function shareTripFn(input: { data: { id: string } }): Promise<{ shareId: string }> {
   const actor = await requireUser();
   const id = z.string().min(1).parse(input.data.id);
@@ -111,17 +152,19 @@ export async function shareTripFn(input: { data: { id: string } }): Promise<{ sh
 
   const { data: existing, error: readError } = await supabase
     .from("voltia_trips")
-    .select("share_id")
+    .select("share_id, payload")
     .eq("id", id)
     .eq("owner_id", actor.id)
     .single();
   if (readError || !existing) throw new Error("No se encontró ese viaje.");
-  if (existing.share_id) return { shareId: existing.share_id as string };
 
-  const shareId = randomShareId();
+  const payload = await verifiedPayload((existing as { payload?: unknown }).payload);
+  const shareId = (existing.share_id as string | null) ?? randomShareId();
+  if (existing.share_id && !payload) return { shareId };
+
   const { error } = await supabase
     .from("voltia_trips")
-    .update({ shared: true, share_id: shareId })
+    .update({ shared: true, share_id: shareId, ...(payload ? { payload } : {}) })
     .eq("id", id)
     .eq("owner_id", actor.id);
   if (error) throw new Error(`No se pudo compartir el viaje: ${error.message}`);
@@ -134,7 +177,9 @@ export async function shareTripFn(input: { data: { id: string } }): Promise<{ sh
  * que de verdad limita esto a filas con shared = true; este cliente usa la
  * cookie de sesión si existe, o la del rol anon si no hay ninguna.
  */
-export async function getSharedTripFn(input: { data: { shareId: string } }): Promise<SavedTrip | null> {
+export async function getSharedTripFn(input: {
+  data: { shareId: string };
+}): Promise<SavedTrip | null> {
   const shareId = z.string().min(1).parse(input.data.shareId);
   const supabase = await createServerSupabase();
   const { data, error } = await supabase

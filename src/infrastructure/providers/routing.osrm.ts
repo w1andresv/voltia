@@ -60,6 +60,8 @@ export const OsrmRouteSchema = z.object({
                       z
                         .object({
                           location: z.tuple([z.number(), z.number()]),
+                          // Mapbox: "tunnel", "toll", "motorway"… de la vía que sale de la intersección.
+                          classes: z.array(z.string()).optional(),
                           mapbox_streets_v8: z
                             .object({ class: z.string().optional() })
                             .passthrough()

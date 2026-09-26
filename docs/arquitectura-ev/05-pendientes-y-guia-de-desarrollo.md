@@ -42,13 +42,13 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | F0 | Caracterización, CI, hook de sesión | ✅ | — (la cassette real se omitió por decisión, P1) |
 | F1 | Contratos, puertos, servicio | ✅ | — |
 | F2a | Datos crudos del proveedor; muestreo y elevación en el dominio | ✅ | — |
-| F2b | Elevación configurable (`ELEVATION_SOURCE`) | 🟡 | Elegir la fuente, limpiar túneles y puentes, pendiente máxima, error tipado |
+| F2b | Elevación configurable (`ELEVATION_SOURCE`) | ✅ | `mapbox-terrain` por defecto, caché sin vencimiento, túneles, pendiente máxima y error tipado. Solo falta verificar el tileset y el costo con datos reales (O4, O6) |
 | F3 | SOC separado de la energía | ✅ | — |
 | F4 | Corredor, compatibilidad, curva de carga | 🟡 | Desvíos medidos con la matriz de Mapbox |
 | F5 | Energía v2 y perfil de velocidad (`ENERGY_ENGINE`) | 🟡 | Medir en sombra, datos físicos por vehículo y calibración (0 km/h en tramos, desvío local, tope por vía y frío: ✅ sesión A) |
 | F6 | Quitar los multiplicadores | ⏳ | Todo (depende de F5 medido) |
 | F7 | Planificador por programación dinámica (`PLANNER_ENGINE`) | 🟡 | Medir en sombra y activar `v2` |
-| F8 | Composición, gráficas, pasada 2, snapshot | 🟡 | Verificar al guardar y compartir; activar `v2` |
+| F8 | Composición, gráficas, pasada 2, snapshot | 🟡 | Activar `v2` (D2). La verificación al compartir está hecha |
 | FB | Blaze como fuente única | ⏳ | Todo (bloqueado por la documentación) |
 | F9 | Limpieza y paso a `main` | ⏳ | Todo |
 
@@ -154,6 +154,7 @@ Cada una desbloquea algo. Cuando se tome, va a un ADR (o se actualiza el que se 
 | D8 | 2026-09-26 | **Tope por tipo de vía cuando no hay límite:** primaria 90, secundaria 80, terciaria 60, local/urbana 50, sin pavimentar 40 km/h; fuente `configurable`, ajustable en `ModelParameters.speed.defaultByRoadTier` | §5.3.4 tiene los valores; sigue pendiente confirmar contra la normativa vigente al implementarlo |
 | D9 | 2026-09-26 | **Blaze solo para electrolineras:** un endpoint con el listado y otro con el detalle de cada una, que se pide solo para las estaciones usadas en la ruta cuando haga falta. Rutas, elevación, clima, geocodificación y vehículos siguen con los proveedores actuales | §5.7 se reduce a `BlazeStationCatalog` (listado) y un puerto de detalle; ya no hacen falta `VehicleCatalog` ni adaptadores de rutas o clima. Falta el formato exacto de los dos endpoints (O5) |
 | D10 | 2026-09-26 | **Merge commit** para unir `engine-v2` a `main` | Se conserva un commit por fase; §5.10 paso 10 usa merge commit |
+| D12 | 2026-09-26 | **Caché de elevación por el máximo tiempo posible** (pedido: "en cookies"). Se implementó en el servidor, sin vencimiento: la Data Cache de Next con `revalidate: false`, que persiste entre peticiones y despliegues y es compartida por todos los usuarios. Las cookies no sirven: ~4 KB cada una frente a ~100–150 KB por tesela, viajan en cada petición y el navegador no consulta la elevación (lo hace el servidor) | Teselas de Mapbox y consultas de Open-Meteo sin vencimiento (`CACHE_FOREVER` en `http.ts`). Los viajes guardados ya llevan la elevación en su snapshot |
 | D11 | 2026-09-26 | **Espera en estación ocupada: 15 min (estimado)** hasta tener datos | Cuando el detalle de Blaze dé estado por conector, se revisa (p. ej. sin espera si hay otro conector compatible libre) |
 
 **Todas las decisiones de esta sección están tomadas.** Lo que queda abierto depende de datos o de acciones: el tileset y el costo de Mapbox (O4, O6), el cierre del periodo de sombra (O3 → D2), cuándo activar la energía v2 (el dueño, D3) y el formato de los endpoints de Blaze (O5).
@@ -213,7 +214,17 @@ Cada pendiente sigue el mismo formato: **Contexto → Pasos → Archivos → Tes
 
 ### 5.1 F2b · Elevación
 
-#### 5.1.1 Elegir la fuente por defecto
+> **Sesión B (2026-09-26):**
+> - **Fuente por defecto:** `ELEVATION_SOURCE` es `mapbox-terrain` (sin token de Mapbox cae a Open-Meteo), y el fetch sintético sirve teselas terrain-RGB.
+> - **Caché (D12):** teselas de Mapbox y elevación de Open-Meteo sin vencimiento (`CACHE_FOREVER`).
+> - **Túneles:** salen de `intersections[].classes` de Mapbox (`RawRoute.structures`); dentro de un túnel la altura es la recta entre sus extremos.
+> - **Pendiente máxima:** 15 % entre puntos del perfil denso (`ModelParameters.elevation.maxGradePct`); `elevation.correctedPoints` cuenta los puntos corregidos.
+> - **Sin elevación:** `dataQuality.elevation = "unavailable"` más un aviso claro (`ELEVATION_UNAVAILABLE_TEXT`); el plan no se bloquea.
+> - **Verificar al compartir:** `shareTripFn` llama a `verifySnapshot` (máximo 8 s, nunca bloquea) y guarda `snapshot.verifiedRoutes`. `/v/[shareId]` usa `computePlansFromSnapshot`.
+>
+> Con los datos sintéticos, cambiar a `mapbox-terrain` movió la energía unas décimas de kWh. En montaña real la diferencia será mayor.
+
+#### 5.1.1 Elegir la fuente por defecto — ✅ hecho (sesión B: `mapbox-terrain`, D1)
 - **Contexto:** hoy `ELEVATION_SOURCE` es configurable y por defecto `open-meteo` (96 puntos por ruta). Hay que elegir con datos (D1, O4).
 - **Pasos:**
   1. Correr O4 en al menos dos rutas de montaña y una de llano.
@@ -225,7 +236,7 @@ Cada pendiente sigue el mismo formato: **Contexto → Pasos → Archivos → Tes
 - **Cierre:** la fuente está elegida, el ADR actualizado y CI en verde.
 - **Depende de:** O4, D1.
 
-#### 5.1.2 Túneles y puentes en `ProviderRoute`
+#### 5.1.2 Túneles y puentes en `ProviderRoute` — ✅ túneles hechos (sesión B); Mapbox no marca puentes: los cubre la pendiente máxima
 - **Contexto:** el modelo de terreno (DEM) da la altura del **terreno**, no de la vía. En un túnel "sube la montaña" y en un puente "baja al río". Hay que saber qué tramos son túnel o puente para limpiarlos.
 - **Pasos:**
   1. Revisar en una respuesta real de Mapbox Directions (con `steps=true`) cómo vienen los túneles. Normalmente es `intersections[].classes` con `"tunnel"`. Revisar también si vienen puentes: Mapbox no siempre los marca. Guardar un ejemplo recortado, **sin token**, en `src/test-support/fixtures/mapbox-tunnel.json`.
@@ -236,7 +247,7 @@ Cada pendiente sigue el mismo formato: **Contexto → Pasos → Archivos → Tes
 - **Tests:** normalización con el fixture (km de inicio y fin del túnel), adaptador con `classes`, y un snapshot viejo sin `structures` que sigue siendo válido.
 - **Cierre:** una ruta con túnel llega al dominio con su tramo marcado.
 
-#### 5.1.3 Limpieza de la elevación y pendiente máxima
+#### 5.1.3 Limpieza de la elevación y pendiente máxima — ✅ hecho (sesión B)
 - **Contexto:** con los tramos marcados, la elevación dentro de un túnel o puente se reemplaza por una recta entre sus extremos. Además se limitan las pendientes imposibles (errores del DEM).
 - **Pasos:**
   1. En `src/domain/ev/engines/elevation/engine.ts`, nueva función pura `cleanElevationProfile(probes, heights, structures, params)` que:
@@ -249,7 +260,7 @@ Cada pendiente sigue el mismo formato: **Contexto → Pasos → Archivos → Tes
 - **Tests:** un túnel (perfil con una montaña encima → recta), un puente (valle → recta), un pico de DEM (pendiente del 40 % → recortada), y ninguna corrección sin estructuras ni picos (resultado idéntico).
 - **Cierre:** tests en verde; en la caracterización, cambios solo si hay estructuras.
 
-#### 5.1.4 Error tipado `ELEVATION_UNAVAILABLE`
+#### 5.1.4 Error tipado `ELEVATION_UNAVAILABLE` — ✅ hecho (sesión B: aviso y `dataQuality`, sin bloquear el plan)
 - **Contexto:** hoy, si ninguna fuente responde, la ruta queda plana y se agrega un aviso. La especificación pide un error de datos explícito (no un estado de viabilidad).
 - **Pasos:**
   1. En `src/application/plan-trip/elevation-profile.ts`, cuando todo falla, devolver `report.source = null` (ya pasa) y además `report.errorCode = "ELEVATION_UNAVAILABLE"`.
@@ -384,7 +395,7 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
 
 ### 5.6 F8 · Pasada 2 al guardar y compartir; activar v2
 
-#### 5.6.1 Verificar al compartir (D6)
+#### 5.6.1 Verificar al compartir (D6) — ✅ hecho (sesión B)
 - **Contexto:** la pasada 2 solo corre al planificar con `v2`. Un viaje guardado conserva los datos de la pasada 1 (ADR-0010). Por D6, se verifica **al compartir**: el link público muestra el plan verificado; guardar no gasta consultas extra.
 - **Pasos:**
   1. En `EVRoutePlanningService` (`src/application/plan-trip/service.ts`), nuevo método `verify(snapshot, planId, request)`:
@@ -528,7 +539,7 @@ O3 activar sombra en Vercel          Dueño decide ─► ENERGY v2 (D3) ─► 
    - 5.3.5 (frío, D4).
 
    Mejoran la energía v2 mientras corre la sombra.
-3. **Sesión B (sin red, con fixtures):** 5.1.1 (`mapbox-terrain` por defecto, D1), 5.1.2–5.1.4 (túneles, pendiente, error tipado) y 5.6.1 (verificar al compartir, D6).
+3. ~~**Sesión B (sin red, con fixtures):** 5.1.1–5.1.4 y 5.6.1, más la caché sin vencimiento (D12).~~ ✅ Hecha (2026-09-26).
 4. **Sesión C:** 5.9 (invariantes e informe).
 5. **Al cerrar la sombra (D2):** `PLANNER_ENGINE=v2`. **Cuando lo decidas (D3):** `ENERGY_ENGINE=v2` y luego F6.
 6. **FB** cuando lleguen los dos endpoints de Blaze (O5); puede ir en paralelo desde el paso 3.

@@ -1,11 +1,13 @@
 /**
  * Proveedores sintéticos y deterministas para tests del pipeline sin red:
- * respuestas con la forma de Mapbox Directions y Open-Meteo, y estaciones
+ * respuestas con la forma de Mapbox Directions, teselas de terreno de Mapbox
+ * (terrain-RGB) y Open-Meteo, y estaciones
  * consolidadas a lo largo de la ruta. No pretenden ser realistas, solo
  * ejercitar el camino completo (alternativas, sin peajes, elevación, clima,
  * corredor y paradas) con datos fijos.
  */
 import { haversineKm } from "@/domain/geo";
+import { encodePng, terrainRgb } from "./png-encoder";
 import type { ConsolidatedStation, StationDataset } from "@/domain/stations/model";
 import type { LatLon } from "@/domain/types";
 
@@ -95,6 +97,28 @@ function elevationAt(lat: number, lon: number): number {
   return 900 + 700 * Math.sin(lat * 9) + 300 * Math.cos(lon * 7);
 }
 
+/** Teselas terrain-RGB sintéticas (256 px), con la misma elevación que el Open-Meteo sintético. */
+const tileCache = new Map<string, Uint8Array>();
+function terrainTile(z: number, x: number, y: number): Uint8Array {
+  const key = `${z}/${x}/${y}`;
+  const hit = tileCache.get(key);
+  if (hit) return hit;
+  const size = 256;
+  const n = 2 ** z;
+  const px = new Uint8Array(size * size * 3);
+  for (let row = 0; row < size; row++) {
+    const yf = (y + (row + 0.5) / size) / n;
+    const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * yf))) * 180) / Math.PI;
+    for (let col = 0; col < size; col++) {
+      const lon = ((x + (col + 0.5) / size) / n) * 360 - 180;
+      px.set(terrainRgb(elevationAt(lat, lon)), (row * size + col) * 3);
+    }
+  }
+  const png = encodePng(size, size, px);
+  tileCache.set(key, png);
+  return png;
+}
+
 type FetchInput = Parameters<typeof fetch>[0];
 
 function urlOf(input: FetchInput): string {
@@ -129,6 +153,11 @@ export function syntheticFetch(): typeof fetch {
         routes: [mapboxRoute(0, "Ruta 45A, Ruta 62", 100, 140), mapboxRoute(-0.35, "Ruta 66")],
         waypoints: [{ distance: 20 }, { distance: 40 }],
       });
+    }
+    const tile = url.hostname === "api.mapbox.com" && url.pathname.match(/^\/v4\/[^/]+\/(\d+)\/(\d+)\/(\d+)\.pngraw$/);
+    if (tile) {
+      const [, z, x, y] = tile.map(Number) as [number, number, number, number];
+      return new Response(Buffer.from(terrainTile(z, x, y)), { status: 200, headers: { "content-type": "image/png" } });
     }
     if (url.hostname === "api.open-meteo.com" && url.pathname === "/v1/elevation") {
       const lats = (url.searchParams.get("latitude") ?? "").split(",").map(Number);

@@ -175,6 +175,8 @@ export interface ElevationStats {
   lossM: number;
   minM: number;
   maxM: number;
+  /** Puntos de elevación corregidos (túneles, pendientes imposibles), si hubo (F2b). */
+  correctedPoints?: number;
 }
 
 export interface WeatherSnapshot {
@@ -214,6 +216,8 @@ export interface RawRoute {
    * puntos intermedios.
    */
   legBoundariesKm?: number[];
+  /** Túneles (km en el eje de las muestras): ahí la elevación se limpia (F2b). */
+  structures?: { kind: "tunnel" | "bridge"; fromKm: number; toKm: number }[];
 }
 
 export interface DepartureCharge {
@@ -313,6 +317,9 @@ export interface PlanVerification {
   baseDistanceKm: number;
 }
 
+export const ELEVATION_UNAVAILABLE_TEXT =
+  "No se pudo obtener la elevación de la ruta: el consumo se calculó como si fuera plana y puede estar muy subestimado en montaña. Vuelve a planificar en unos minutos.";
+
 export const VERIFICATION_TEXT: Record<PlanVerification["status"], string> = {
   verified: "Verificado con la ruta real hasta cada parada.",
   changed: "Paradas ajustadas al recalcular con la ruta real hasta cada una.",
@@ -330,6 +337,12 @@ export interface GeoBundle {
   plannerEngine?: "legacy" | "v2";
   /** Modelo de energía con que respondió el servidor (F5); el navegador recalcula con el mismo. */
   energyEngine?: "legacy" | "v2";
+  /**
+   * Calidad de los datos (solo si algo faltó, F2b). `elevation: "unavailable"`:
+   * ninguna fuente de elevación respondió y alguna ruta quedó plana; es un error
+   * de datos, no de viabilidad.
+   */
+  dataQuality?: { elevation?: "unavailable" };
 }
 
 export interface PlanRequest {

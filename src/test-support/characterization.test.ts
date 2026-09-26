@@ -174,6 +174,36 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
     expect(again.selectedId).toBe(res.selectedId);
   });
 
+  it("al compartir (D6): la pasada 2 queda en el snapshot y el link muestra el plan verificado", async () => {
+    const req = request();
+    const { createPlanningService } = await import("@/application/container");
+    const service = createPlanningService({
+      stations: { getDataset: async () => syntheticStations() },
+      engineMode: "v2",
+      clock: () => new Date("2026-09-01T12:00:00Z"),
+    });
+    const { response } = await service.plan(req);
+    const { parsePlanningSnapshot } = await import("@/domain/ev/contracts/snapshot");
+    const { computePlansFromSnapshot } = await import("@/domain/ev/compute-plan");
+    const snapshot = parsePlanningSnapshot(JSON.parse(JSON.stringify(response.geo)))!;
+    const verified = await service.verifySnapshot(snapshot, req);
+    expect(verified).not.toBeNull();
+    const [id] = Object.keys(verified!);
+    expect(verified![id!]!.verification.status).toBe("verified");
+
+    // Guardado y leído como JSON, con la verificación: sin consultar proveedores.
+    const stored = parsePlanningSnapshot(JSON.parse(JSON.stringify({ ...snapshot, verifiedRoutes: verified })))!;
+    const shared = computePlansFromSnapshot(stored, req, req.vehicle as Vehicle, req.conditions as TripConditions);
+    const plan = shared.plans.find((p) => p.id === id)!;
+    expect(plan.verification?.status).toBe("verified");
+    // El mismo plan verificado que respondió el servidor al planificar.
+    const live = response.plans.find((p) => p.id === id)!;
+    expect(normalized(plan.stops.map((s) => [s.charger.id, s.arriveSoc, s.departSoc]))).toBe(
+      normalized(live.stops.map((s) => [s.charger.id, s.arriveSoc, s.departSoc])),
+    );
+    expect(plan.distanceKm).toBeCloseTo(live.distanceKm, 9);
+  });
+
   it("es determinista", async () => {
     const a = await plan(request());
     const b = await plan(request());

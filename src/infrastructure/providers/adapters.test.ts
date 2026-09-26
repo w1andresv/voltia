@@ -172,3 +172,25 @@ describe("maxspeedKmh (anotación de Mapbox)", () => {
     expect(out.legs[0]!.annotation?.maxspeedKmh).toEqual([60, null]);
   });
 });
+
+describe("clases de intersección (túneles)", () => {
+  it("toProviderRoute conserva classes solo cuando vienen", () => {
+    const raw = fakeMapboxRoute([["primary", 2, 2]]);
+    const withTunnel = {
+      ...raw,
+      legs: raw.legs.map((l) => ({
+        ...l,
+        steps: l.steps.map((st) => ({
+          ...st,
+          intersections: st.intersections.map((it, i) =>
+            i === 1 ? { ...it, classes: ["tunnel"] } : it,
+          ),
+        })),
+      })),
+    };
+    const out = toProviderRoute(withTunnel, "mapbox", "driving");
+    const inters = out.legs[0]!.steps![0]!.intersections!;
+    expect(inters[0]).not.toHaveProperty("classes");
+    expect(inters[1]!.classes).toEqual(["tunnel"]);
+  });
+});

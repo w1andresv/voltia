@@ -71,7 +71,10 @@ export function scoreCandidate(route: ProviderRoute, noTolls: boolean): ScoredCa
 }
 
 /** Dentro de la tolerancia frente a la más rápida (+15 % tiempo, +10 % km). */
-export function withinTolerance(c: { route: ProviderRoute }, fastest: { route: ProviderRoute }): boolean {
+export function withinTolerance(
+  c: { route: ProviderRoute },
+  fastest: { route: ProviderRoute },
+): boolean {
   return (
     c.route.durationS <= fastest.route.durationS * MAX_EXTRA_TIME_RATIO &&
     c.route.distanceM <= fastest.route.distanceM * MAX_EXTRA_DISTANCE_RATIO
@@ -79,15 +82,18 @@ export function withinTolerance(c: { route: ProviderRoute }, fastest: { route: P
 }
 
 /** La mejor por jerarquía entre las que no se desvían demasiado. */
-export function pickByHierarchy<T extends { route: ProviderRoute; costS: number; minorScore?: number }>(
-  all: T[],
-): T | undefined {
+export function pickByHierarchy<
+  T extends { route: ProviderRoute; costS: number; minorScore?: number },
+>(all: T[]): T | undefined {
   if (!all.length) return undefined;
   const fastest = all.reduce((f, c) => (c.route.durationS < f.route.durationS ? c : f));
   return all
     .filter((c) => withinTolerance(c, fastest))
     .sort((a, b) =>
-      compareByHierarchy({ minorScore: a.minorScore, cost: a.costS }, { minorScore: b.minorScore, cost: b.costS }),
+      compareByHierarchy(
+        { minorScore: a.minorScore, cost: a.costS },
+        { minorScore: b.minorScore, cost: b.costS },
+      ),
     )[0];
 }
 
@@ -103,7 +109,9 @@ export function buildRouteSet(candidates: RouteCandidate[], engine?: RoutingEngi
   for (const c of candidates) {
     const line = c.route.geometry;
     const same = kept.find(
-      (k) => routeOverlap(k.line, line) >= SAME_ROUTE_OVERLAP && routeOverlap(line, k.line) >= SAME_ROUTE_OVERLAP,
+      (k) =>
+        routeOverlap(k.line, line) >= SAME_ROUTE_OVERLAP &&
+        routeOverlap(line, k.line) >= SAME_ROUTE_OVERLAP,
     );
     if (same) {
       same.noTolls ||= c.noTolls;
@@ -208,7 +216,11 @@ async function hierarchySelection(
     if (!shortcuts.length) break;
     excluded.push(...shortcuts.map((sc) => sc.point));
     try {
-      const retry = await provider.calculateRoutes({ waypoints, alternatives: true, avoid: { points: excluded } });
+      const retry = await provider.calculateRoutes({
+        waypoints,
+        alternatives: true,
+        avoid: { points: excluded },
+      });
       all.push(...retry.routes.map((r) => scoreCandidate(r, false)));
       corrected++;
     } catch {
@@ -216,7 +228,11 @@ async function hierarchySelection(
     }
   }
 
-  return { routes: buildRouteSet(all, provider.engine), snapKm: main.value.waypointSnapKm, corrected };
+  return {
+    routes: buildRouteSet(all, provider.engine),
+    snapKm: main.value.waypointSnapKm,
+    corrected,
+  };
 }
 
 function messageOf(error: unknown): string {
@@ -228,7 +244,10 @@ function messageOf(error: unknown): string {
  * la política completa y NO cae a otro proveedor: si falla, el motivo llega al
  * usuario. Con uno sin esas capacidades (OSRM), pide una vez y ordena.
  */
-export async function selectRoutes(provider: RoutingProvider, waypoints: LatLon[]): Promise<RoutingResult> {
+export async function selectRoutes(
+  provider: RoutingProvider,
+  waypoints: LatLon[],
+): Promise<RoutingResult> {
   const notice = provider.notice ? [provider.notice] : [];
   if (!provider.capabilities.avoidTolls) {
     const set = await provider.calculateRoutes({ waypoints, alternatives: true });
@@ -246,7 +265,8 @@ export async function selectRoutes(provider: RoutingProvider, waypoints: LatLon[
   try {
     const { routes, snapKm, corrected } = await hierarchySelection(provider, waypoints);
     if (routes.length) {
-      if (corrected) console.log(`[routing] ${corrected} ronda(s) de corrección de atajos por vías menores`);
+      if (corrected)
+        console.log(`[routing] ${corrected} ronda(s) de corrección de atajos por vías menores`);
       return { routes, engine: provider.engine, warnings: [...notice, ...snapWarnings(snapKm)] };
     }
   } catch (error) {

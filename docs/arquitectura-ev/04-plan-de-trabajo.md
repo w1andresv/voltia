@@ -83,10 +83,10 @@ Dividida en dos (ADR-0006).
 - **B6 resuelta como configurable (ADR-0011):** `ELEVATION_SOURCE = open-meteo | open-meteo-adaptive | mapbox-terrain`, por defecto la de siempre. La fuente definitiva se elige con `npm run elevation:compare` y el modo sombra.
 - [x] Malla por distancia (100 m) y malla adaptativa en `engines/elevation`; perfil denso con suavizado por distancia y desnivel con histéresis.
 - [x] `MapboxTerrainElevationProvider` (terrain-RGB con caché) y Open-Meteo en lotes de 100; respaldo a Open-Meteo si la fuente elegida falla.
-- [ ] Elegir la fuente por defecto con los datos de `elevation:compare` (rutas de montaña).
-- [ ] Limpieza de túneles y puentes, pendiente máxima, conteo de puntos corregidos.
-- [ ] Error tipado `ELEVATION_UNAVAILABLE` en vez de ruta plana.
-- [ ] Túneles y puentes en `ProviderRoute` (desde los pasos de Mapbox).
+- [x] Fuente por defecto: `mapbox-terrain` (D1). Caché sin vencimiento (D12).
+- [x] Túneles desde `intersections[].classes` de Mapbox; pendiente máxima (15 %) y conteo de puntos corregidos. Mapbox no marca puentes: los cubre la pendiente máxima.
+- [x] Error tipado `ELEVATION_UNAVAILABLE` (`dataQuality` y aviso, sin bloquear el plan).
+- [ ] Verificar el tileset y el costo con `npm run elevation:compare` (O4, O6).
 - **Tests:** limpieza (túnel, puente, pendiente máxima); sin elevación → error, no ruta plana.
 - **Cierre:** diferencias con el modelo anterior explicadas en el commit (cambia el consumo en montaña).
 - `PlanningSnapshot` pasa a F8 (ADR-0006).
@@ -161,7 +161,7 @@ Dividida en dos (ADR-0006).
   - [x] `PlanningSnapshot` (`contracts/snapshot.ts`) como `geo` de la respuesta. El store no persiste `geo`: no hizo falta migrarlo (ADR-0010).
   - [x] Viajes de la cuenta guardados con su snapshot y `modelVersion`; `/v/[shareId]` recalcula con el snapshot, sin consultar proveedores, y ofrece recalcular con los datos de hoy.
   - [ ] `PLANNER_ENGINE=v2`: decisión del dueño del producto después de mirar el modo sombra en producción.
-  - [ ] Verificar (pasada 2) también al guardar o compartir, y guardar la ruta verificada en el snapshot.
+  - [x] Verificar (pasada 2) al compartir (D6) y guardar la ruta verificada en el snapshot (`verifiedRoutes`).
 - **Cierre:** Piedecuesta → Vélez de extremo a extremo (plan §7) con las invariantes de la especificación §8.4 y el informe §8.5. Sin cassette real (P1 omitido): la caracterización con proveedores sintéticos cubre pasada 1, pasada 2 y reproducción desde el snapshot, y es la referencia de cierre.
 - **Especificación:** F7 y F8.
 
@@ -227,7 +227,7 @@ Dividida en dos (ADR-0006).
 |---|---|---|
 | F0 | ✅ Hecha (cassette omitida, P1) | commits en `engine-v2` |
 | F1 | ✅ Hecha (igualdad con proveedores sintéticos) | ver `git log --grep "^F1:"` |
-| F2 | F2a ✅ hecha (sin cambio de resultados). F2b: fuente configurable ✅ (ADR-0011); falta elegir la fuente, limpieza y error tipado | ver `git log --grep "^F2"` |
+| F2 | F2a ✅. F2b ✅ (`mapbox-terrain` por defecto, túneles, pendiente máxima, error tipado); falta verificar el tileset con datos reales | ver `git log --grep "^F2"` |
 | F3 | ✅ Hecha | ver `git log --grep "^F3:"` |
 | F4 | ✅ Hecha (desvío por matriz pendiente) | ver `git log --grep "^F4:"` |
 | F5 | ✅ Hecha detrás de `ENERGY_ENGINE` (por defecto `legacy`); falta medir en sombra | ver `git log --grep "^F5:"` |

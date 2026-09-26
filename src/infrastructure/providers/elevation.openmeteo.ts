@@ -1,5 +1,5 @@
 import type { LatLon } from "@/domain/types";
-import { fetchJson } from "./http";
+import { CACHE_FOREVER, fetchJson } from "./http";
 
 interface MeteoElev {
   elevation?: number[];
@@ -16,7 +16,8 @@ async function fromOpenTopo(lats: number[], lons: number[]): Promise<number[]> {
   const url = `https://api.opentopodata.org/v1/aster30m?locations=${locs}`;
   const data = await fetchJson<OpenTopo>(url, {
     timeoutMs: 14000,
-    cacheTtlMs: 24 * 3600_000,
+    // La elevación no cambia: sin vencimiento.
+    cacheTtlMs: CACHE_FOREVER,
     headers: { "user-agent": "Voltia/1.0 (EV trip planner)" },
   });
   if (data.status !== "OK" || !data.results) throw new Error("opentopo");
@@ -27,7 +28,7 @@ async function fromOpenMeteo(lats: number[], lons: number[]): Promise<number[]> 
   const url = `https://api.open-meteo.com/v1/elevation?latitude=${lats.join(",")}&longitude=${lons.join(",")}`;
   const data = await fetchJson<MeteoElev>(url, {
     timeoutMs: 8000,
-    cacheTtlMs: 24 * 3600_000,
+    cacheTtlMs: CACHE_FOREVER,
   });
   if (data.error || !data.elevation?.length) throw new Error("open-meteo elevation");
   return data.elevation;

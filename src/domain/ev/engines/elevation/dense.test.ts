@@ -4,6 +4,7 @@ import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import {
   adaptiveRefinement,
   applyDenseElevationProfile,
+  cleanElevationProfile,
   elevationMesh,
   hysteresisGainLoss,
   type ElevationProbe,
@@ -32,9 +33,9 @@ function route(km: number, stepKm = 1): RawRoute {
   };
 }
 
-/** Un cerro: sube 400 m del km 4 al 6 y baja al km 8; plano el resto. */
+/** Un cerro: sube 200 m del km 4 al 6 (10 %) y baja al km 8; plano el resto. */
 const hill = (km: number) =>
-  km < 4 || km > 8 ? 1000 : km <= 6 ? 1000 + 200 * (km - 4) : 1400 - 200 * (km - 6);
+  km < 4 || km > 8 ? 1000 : km <= 6 ? 1000 + 100 * (km - 4) : 1200 - 100 * (km - 6);
 
 describe("elevationMesh", () => {
   it("un punto cada spacingM sobre la geometría, con el km en el eje de la ruta", () => {
@@ -94,7 +95,7 @@ describe("hysteresisGainLoss", () => {
 });
 
 describe("applyDenseElevationProfile", () => {
-  it("con una malla de 100 m el cerro da ~400 m de subida y de bajada, y cada muestra su altura", () => {
+  it("con una malla de 100 m el cerro da ~200 m de subida y de bajada, y cada muestra su altura", () => {
     const r = route(12);
     const mesh = elevationMesh(r, 100);
     const out = applyDenseElevationProfile(
@@ -103,15 +104,17 @@ describe("applyDenseElevationProfile", () => {
       mesh.map((p) => hill(p.km)),
       MODEL_PARAMETERS.elevation,
     );
-    expect(out.elevation.gainM).toBeGreaterThan(380);
-    expect(out.elevation.gainM).toBeLessThanOrEqual(400);
-    expect(out.elevation.lossM).toBeCloseTo(out.elevation.gainM, 6);
+    expect(out.elevation.gainM).toBeGreaterThan(185);
+    expect(out.elevation.gainM).toBeLessThanOrEqual(200);
+    // La histéresis puede dejar unos metros de diferencia entre subida y bajada.
+    expect(Math.abs(out.elevation.lossM - out.elevation.gainM)).toBeLessThan(5);
     expect(out.elevation.minM).toBeCloseTo(1000, 6);
-    expect(out.elevation.maxM).toBeGreaterThan(1370);
-    expect(out.samples[5]!.elevM).toBeCloseTo(1200, 6);
-    // Del km 4 al 5 sube 200 m; el suavizado de 300 m redondea el quiebre del km 4.
-    expect(out.samples[5]!.slopePct).toBeGreaterThan(19);
-    expect(out.samples[5]!.slopePct).toBeLessThanOrEqual(20);
+    expect(out.elevation.maxM).toBeGreaterThan(1185);
+    expect(out.elevation.correctedPoints).toBeUndefined();
+    expect(out.samples[5]!.elevM).toBeCloseTo(1100, 6);
+    // Del km 4 al 5 sube 100 m; el suavizado de 300 m redondea el quiebre del km 4.
+    expect(out.samples[5]!.slopePct).toBeGreaterThan(9.5);
+    expect(out.samples[5]!.slopePct).toBeLessThanOrEqual(10);
     expect(out.samples[0]!.elevM).toBeCloseTo(1000, 6);
   });
 
@@ -129,5 +132,44 @@ describe("applyDenseElevationProfile", () => {
     expect(out.samples.map((s) => s.elevM)).toEqual([1000, 1100, 1200, 1300, 1400]);
     const empty = { ...r, samples: r.samples.slice(0, 1) };
     expect(applyDenseElevationProfile(empty, probes, [1, 2, 3])).toBe(empty);
+  });
+});
+
+describe("cleanElevationProfile (F2b)", () => {
+  const km = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+
+  it("en un túnel la altura es la recta entre la entrada y la salida", () => {
+    // La montaña encima del túnel sube 60 m; la vía va de 1000 a 1006.
+    const h = [1000, 1001, 1030, 1060, 1030, 1006, 1006];
+    const out = cleanElevationProfile(km, h, [{ kind: "tunnel", fromKm: 0.1, toKm: 0.5 }], 15);
+    expect(out.heights.map((v) => Math.round(v * 10) / 10)).toEqual([
+      1000, 1001, 1002.3, 1003.5, 1004.8, 1006, 1006,
+    ]);
+    expect(out.corrected).toBe(3);
+  });
+
+  it("recorta una pendiente imposible (pico o hueco del terreno)", () => {
+    const h = [1000, 1000, 960, 1000, 1000, 1000, 1000]; // hueco de 40 m en 100 m (40 %)
+    const out = cleanElevationProfile(km, h, [], 15);
+    expect(out.heights[2]).toBeCloseTo(985, 9);
+    expect(out.heights[3]).toBeCloseTo(1000, 9);
+    expect(out.corrected).toBe(1);
+  });
+
+  it("sin túneles ni pendientes imposibles no cambia nada", () => {
+    const h = [1000, 1005, 1010, 1012, 1008, 1004, 1000];
+    expect(cleanElevationProfile(km, h, [], 15)).toEqual({ heights: h, corrected: 0 });
+    expect(cleanElevationProfile(km, h, undefined, 0).corrected).toBe(0);
+  });
+
+  it("applyDenseElevationProfile limpia y cuenta los puntos corregidos", () => {
+    const r = { ...route(2), structures: [{ kind: "tunnel" as const, fromKm: 0.5, toKm: 1.5 }] };
+    const mesh = elevationMesh(r, 100);
+    const mountain = mesh.map((p) =>
+      p.km > 0.5 && p.km < 1.5 ? 1000 + 100 * Math.sin(Math.PI * (p.km - 0.5)) : 1000,
+    );
+    const out = applyDenseElevationProfile(r, mesh, mountain, MODEL_PARAMETERS.elevation);
+    expect(out.elevation.maxM).toBeCloseTo(1000, 6);
+    expect(out.elevation.correctedPoints).toBeGreaterThan(0);
   });
 });

@@ -2,7 +2,7 @@ import { downsample, interpolatePoint, polylineLengthKm } from "@/domain/geo";
 import type { LatLon, RawRoute } from "@/domain/types";
 import type { ProviderRoute } from "@/domain/ev/contracts/route";
 import type { RoadTier } from "@/domain/road-hierarchy";
-import { classifyRoute, legBoundariesKm } from "./classify";
+import { classifyRoute, legBoundariesKm, tunnelStretchesKm } from "./classify";
 
 /**
  * Ruta del proveedor → RawRoute: muestras a lo largo de la ruta con la
@@ -275,6 +275,22 @@ export function toRawRoute(
     driveMinutes,
     elevation: { gainM: 0, lossM: 0, minM: 0, maxM: 0 },
     ...legStops(route, distanceKm),
+    ...tunnels(route, distanceKm),
+  };
+}
+
+/** Túneles escalados a `distanceKm`. Sin túneles, no agrega el campo. */
+function tunnels(route: ProviderRoute, distanceKm: number): Pick<RawRoute, "structures"> {
+  const raw = tunnelStretchesKm(route);
+  const totalKm = route.distanceM / 1000;
+  if (!raw.length || !(totalKm > 0)) return {};
+  const k = distanceKm / totalKm;
+  return {
+    structures: raw.map((t) => ({
+      kind: "tunnel" as const,
+      fromKm: t.fromKm * k,
+      toKm: t.toKm * k,
+    })),
   };
 }
 

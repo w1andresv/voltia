@@ -43,7 +43,8 @@ export function classifyRoute(route: ProviderRoute): RoadSegment[] {
       }
       // Longitud acumulada de la geometría del paso, escalada a su distancia oficial.
       const cum = [0];
-      for (let i = 1; i < line.length; i++) cum.push(cum[i - 1]! + haversineKm(line[i - 1]!, line[i]!));
+      for (let i = 1; i < line.length; i++)
+        cum.push(cum[i - 1]! + haversineKm(line[i - 1]!, line[i]!));
       const geomKm = cum[cum.length - 1]! || stepKm;
       const scale = stepKm / geomKm;
 
@@ -86,6 +87,45 @@ export function classifyRoute(route: ProviderRoute): RoadSegment[] {
     }
   }
   return segments;
+}
+
+/**
+ * Tramos en túnel (km desde el origen del proveedor): una intersección con la
+ * clase "tunnel" marca la vía que sale de ella hasta la siguiente intersección
+ * (o el fin del paso). Mapbox no marca puentes.
+ */
+export function tunnelStretchesKm(route: ProviderRoute): { fromKm: number; toKm: number }[] {
+  const out: { fromKm: number; toKm: number }[] = [];
+  let km = 0;
+  for (const leg of route.legs) {
+    for (const step of leg.steps ?? []) {
+      const stepKm = step.distanceM / 1000;
+      const line = step.geometry ?? [];
+      const inters = step.intersections ?? [];
+      if (stepKm > 0 && line.length >= 2 && inters.some((it) => it.classes?.includes("tunnel"))) {
+        const cum = [0];
+        for (let i = 1; i < line.length; i++)
+          cum.push(cum[i - 1]! + haversineKm(line[i - 1]!, line[i]!));
+        const scale = stepKm / (cum[cum.length - 1]! || stepKm);
+        let from = 0;
+        const at = inters.map((it) => {
+          from = nearestIndex(line, it.location, from);
+          return km + cum[from]! * scale;
+        });
+        inters.forEach((it, i) => {
+          if (!it.classes?.includes("tunnel")) return;
+          const a = at[i]!;
+          const b = i + 1 < at.length ? at[i + 1]! : km + stepKm;
+          if (!(b > a)) return;
+          const prev = out[out.length - 1];
+          if (prev && Math.abs(prev.toKm - a) < 0.01) prev.toKm = b;
+          else out.push({ fromKm: a, toKm: b });
+        });
+      }
+      km += Math.max(0, stepKm);
+    }
+  }
+  return out;
 }
 
 /** Km desde el origen donde está cada punto intermedio (fin de cada tramo salvo el último). */

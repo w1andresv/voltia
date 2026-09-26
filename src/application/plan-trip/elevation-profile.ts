@@ -32,6 +32,8 @@ export interface ElevationReport {
   ms: number;
   /** Motivo si el principal falló. */
   error?: string;
+  /** Error de datos: ninguna fuente respondió y la ruta quedó plana (F2b). */
+  errorCode?: "ELEVATION_UNAVAILABLE";
 }
 
 /** Nombre del perfil para el snapshot y los logs ("open-meteo", "mapbox-terrain/mesh"). */
@@ -112,5 +114,14 @@ export async function profileRoute(
       // sigue plana
     }
   }
-  return { route, report: { source: null, points: 0, ms: Date.now() - t0, error } };
+  return {
+    route,
+    report: {
+      source: null,
+      points: 0,
+      ms: Date.now() - t0,
+      error,
+      errorCode: "ELEVATION_UNAVAILABLE",
+    },
+  };
 }

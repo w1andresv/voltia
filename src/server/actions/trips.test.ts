@@ -13,6 +13,9 @@ vi.mock("@/infrastructure/auth/server-actor", () => ({
 const { createServerSupabase } = vi.hoisted(() => ({ createServerSupabase: vi.fn() }));
 vi.mock("@/infrastructure/supabase/server", () => ({ createServerSupabase }));
 
+const { verifySnapshot } = vi.hoisted(() => ({ verifySnapshot: vi.fn() }));
+vi.mock("@/application/container", () => ({ createPlanningService: () => ({ verifySnapshot }) }));
+
 /** Ver la nota en vehicles.test.ts: el cliente no debe ser "thenable" él mismo. */
 function chain(result: unknown) {
   const builder: Record<string, unknown> = {};
@@ -267,6 +270,68 @@ describe("shareTripFn", () => {
     const { shareTripFn } = await import("./trips");
     const result = await shareTripFn({ data: { id: "trip-1" } });
     expect(result.shareId).toHaveLength(10);
+  });
+
+  it("al compartir verifica el plan (D6) y guarda la ruta verificada en el snapshot", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const snapshot = minimalSnapshot();
+    const verified = {
+      "route-0": {
+        route: snapshot.routes[0]!,
+        chargerIds: ["c1"],
+        verification: { status: "verified", iterations: 1, baseDistanceKm: 10 },
+      },
+    };
+    verifySnapshot.mockResolvedValueOnce(verified);
+    const c = client({
+      data: { share_id: null, payload: { request: REQUEST, summary: SUMMARY, snapshot } },
+      error: null,
+    });
+    createServerSupabase.mockResolvedValueOnce(c);
+    const { shareTripFn } = await import("./trips");
+    const result = await shareTripFn({ data: { id: "trip-1" } });
+    expect(result.shareId).toHaveLength(10);
+    expect(verifySnapshot).toHaveBeenCalledWith(snapshot, REQUEST);
+    expect(c._builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shared: true,
+        payload: expect.objectContaining({
+          snapshot: expect.objectContaining({ verifiedRoutes: verified }),
+        }),
+      }),
+    );
+  });
+
+  it("si la verificación falla, comparte igual sin tocar el payload", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    verifySnapshot.mockRejectedValueOnce(new Error("sin red"));
+    const c = client({
+      data: {
+        share_id: null,
+        payload: { request: REQUEST, summary: SUMMARY, snapshot: minimalSnapshot() },
+      },
+      error: null,
+    });
+    createServerSupabase.mockResolvedValueOnce(c);
+    const { shareTripFn } = await import("./trips");
+    const result = await shareTripFn({ data: { id: "trip-1" } });
+    expect(result.shareId).toHaveLength(10);
+    expect(c._builder.update).toHaveBeenCalledWith({ shared: true, share_id: result.shareId });
+  });
+
+  it("un viaje ya verificado o sin snapshot no se vuelve a verificar", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const snapshot = { ...minimalSnapshot(), verifiedRoutes: {} };
+    createServerSupabase.mockResolvedValueOnce(
+      client({
+        data: { share_id: "abc1234567", payload: { request: REQUEST, summary: SUMMARY, snapshot } },
+        error: null,
+      }),
+    );
+    const { shareTripFn } = await import("./trips");
+    expect((await shareTripFn({ data: { id: "trip-1" } })).shareId).toBe("abc1234567");
+    expect(verifySnapshot).not.toHaveBeenCalled();
   });
 
   it("reutiliza el share_id si el viaje ya estaba compartido", async () => {

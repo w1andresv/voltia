@@ -54,6 +54,7 @@ export function toProviderRoute(route: OsrmRoute, provider: string, profile: str
         intersections: step.intersections?.map((it) => ({
           location: toLatLon(it.location),
           roadClass: it.mapbox_streets_v8?.class,
+          ...(it.classes?.length ? { classes: it.classes } : {}),
         })),
       })),
     })),

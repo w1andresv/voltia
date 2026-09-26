@@ -1,5 +1,17 @@
 import { z } from "zod";
-import type { GeoBundle } from "../../types";
+import type { GeoBundle, PlanVerification, RawRoute } from "../../types";
+
+/**
+ * Pasada 2 guardada con el viaje (D6: al compartir): la ruta real por las
+ * paradas y con qué estaciones se armó el plan, para que el link muestre el
+ * plan verificado sin volver a consultar proveedores.
+ */
+export interface VerifiedRoute {
+  route: RawRoute;
+  /** Estaciones consideradas; null = todas las del corredor. */
+  chargerIds: string[] | null;
+  verification: PlanVerification;
+}
 
 /**
  * Todo lo externo que usó un plan (plan §3.2): con el mismo snapshot, el mismo
@@ -23,6 +35,8 @@ export interface PlanningSnapshot extends GeoBundle {
   modelVersion: string;
   plannerEngine: "legacy" | "v2";
   providers: { routing: string; elevation: string; weather: string | null; stations: string };
+  /** Por id de ruta. Solo en viajes compartidos cuyo plan se verificó (D6). */
+  verifiedRoutes?: Record<string, VerifiedRoute>;
 }
 
 /** Tope de tamaño de un snapshot guardado (JSON), para no aceptar cualquier cosa. */
@@ -56,6 +70,7 @@ const RawRouteSchema = z
       lossM: z.number(),
       minM: z.number(),
       maxM: z.number(),
+      correctedPoints: z.number().optional(),
     }),
     via: z.string().optional(),
     noTolls: z.boolean().optional(),
@@ -65,6 +80,9 @@ const RawRouteSchema = z
     minorRoadScore: z.number().optional(),
     engine: z.enum(["mapbox-traffic", "mapbox", "osrm"]).optional(),
     legBoundariesKm: z.array(z.number()).optional(),
+    structures: z
+      .array(z.object({ kind: z.enum(["tunnel", "bridge"]), fromKm: z.number(), toKm: z.number() }))
+      .optional(),
   })
   .passthrough();
 
@@ -110,6 +128,21 @@ const SnapshotObjectSchema = z.object({
   weather: WeatherSchema.nullable(),
   warnings: z.array(z.string()),
   stationsVersion: z.string().optional(),
+  dataQuality: z.object({ elevation: z.literal("unavailable").optional() }).optional(),
+  verifiedRoutes: z
+    .record(
+      z.string(),
+      z.object({
+        route: RawRouteSchema,
+        chargerIds: z.array(z.string()).nullable(),
+        verification: z.object({
+          status: z.enum(["verified", "changed", "failed"]),
+          iterations: z.number(),
+          baseDistanceKm: z.number(),
+        }),
+      }),
+    )
+    .optional(),
 });
 
 /**

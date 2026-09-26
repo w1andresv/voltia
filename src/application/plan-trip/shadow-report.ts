@@ -36,7 +36,13 @@ export interface ShadowReport {
   mode: PlanningMode;
   ms: number;
   selected: [string | undefined, string | undefined];
-  routes: { id: string; label: string; legacy: ShadowPlanSide; v2: ShadowPlanSide; v2Status?: string }[];
+  routes: {
+    id: string;
+    label: string;
+    legacy: ShadowPlanSide;
+    v2: ShadowPlanSide;
+    v2Status?: string;
+  }[];
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -72,7 +78,13 @@ export function buildShadowReport(args: {
     selected: args.selected,
     routes: args.legacy.map((a, i) => {
       const b = args.v2[i]!;
-      return { id: a.id, label: a.label, legacy: side(a), v2: side(b), v2Status: b.feasibilityStatus };
+      return {
+        id: a.id,
+        label: a.label,
+        legacy: side(a),
+        v2: side(b),
+        v2Status: b.feasibilityStatus,
+      };
     }),
   };
 }
@@ -96,7 +108,12 @@ function stopsText(s: ShadowPlanSide): string {
   if (!s.feasible) return "no viable";
   const pre = s.preChargePct ? `cargar +${s.preChargePct} % antes · ` : "";
   if (!s.stops.length) return `${pre}sin paradas`;
-  return pre + s.stops.map((x) => `${x.name} (${pct(x.arriveSoc)}→${pct(x.departSoc)}, ${x.minutes} min)`).join(" · ");
+  return (
+    pre +
+    s.stops
+      .map((x) => `${x.name} (${pct(x.arriveSoc)}→${pct(x.departSoc)}, ${x.minutes} min)`)
+      .join(" · ")
+  );
 }
 
 function pad(text: string, width: number): string {
@@ -120,15 +137,38 @@ export function formatShadowReport(r: ShadowReport): string {
       a.arrivalSoc === b.arrivalSoc &&
       stopsText(a) === stopsText(b);
     lines.push("");
-    lines.push(`  ${route.label}${same ? "  (sin diferencias)" : ""}${route.v2Status ? `  · v2: ${STATUS_LABEL[route.v2Status] ?? route.v2Status}` : ""}`);
+    lines.push(
+      `  ${route.label}${same ? "  (sin diferencias)" : ""}${route.v2Status ? `  · v2: ${STATUS_LABEL[route.v2Status] ?? route.v2Status}` : ""}`,
+    );
     if (same) continue;
     const row = (name: string, x: string, y: string, delta = "") =>
       `    ${pad(name, 12)}${pad(x, 16)}→ ${pad(y, 16)}${delta}`;
     lines.push(row("", "actual", "v2"));
     lines.push(row("Viable", a.feasible ? "sí" : "no", b.feasible ? "sí" : "no"));
-    lines.push(row("Paradas", String(a.stops.length), String(b.stops.length), a.stops.length !== b.stops.length ? signed(b.stops.length - a.stops.length, "") : ""));
-    lines.push(row("Tiempo", hm(a.totalMinutes), hm(b.totalMinutes), signed(b.totalMinutes - a.totalMinutes, " min")));
-    lines.push(row("Llega con", pct(a.arrivalSoc), pct(b.arrivalSoc), signed(r1(b.arrivalSoc - a.arrivalSoc), " pts")));
+    lines.push(
+      row(
+        "Paradas",
+        String(a.stops.length),
+        String(b.stops.length),
+        a.stops.length !== b.stops.length ? signed(b.stops.length - a.stops.length, "") : "",
+      ),
+    );
+    lines.push(
+      row(
+        "Tiempo",
+        hm(a.totalMinutes),
+        hm(b.totalMinutes),
+        signed(b.totalMinutes - a.totalMinutes, " min"),
+      ),
+    );
+    lines.push(
+      row(
+        "Llega con",
+        pct(a.arrivalSoc),
+        pct(b.arrivalSoc),
+        signed(r1(b.arrivalSoc - a.arrivalSoc), " pts"),
+      ),
+    );
     lines.push(row("Mínimo", pct(a.minSoc), pct(b.minSoc)));
     lines.push(`    Actual: ${stopsText(a)}`);
     lines.push(`    v2:     ${stopsText(b)}`);

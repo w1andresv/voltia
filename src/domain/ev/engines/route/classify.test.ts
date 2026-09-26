@@ -34,7 +34,11 @@ describe("classifyRoute (pasos → tramos por clase vial)", () => {
   it("pasos sin geometría toman la clase de su primera intersección o la anterior", () => {
     const route = fakeProviderRoute([["primary", 10, 8]]);
     route.legs[0]!.steps!.push(
-      { distanceM: 2000, durationS: 120, intersections: [{ location: { lat: 6.9, lon: -73 }, roadClass: "tertiary" }] },
+      {
+        distanceM: 2000,
+        durationS: 120,
+        intersections: [{ location: { lat: 6.9, lon: -73 }, roadClass: "tertiary" }],
+      },
       { distanceM: 1000, durationS: 60 },
       { distanceM: 0, durationS: 0 },
     );

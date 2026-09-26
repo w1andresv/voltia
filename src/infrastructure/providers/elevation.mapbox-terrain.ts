@@ -1,16 +1,18 @@
 import type { LatLon } from "@/domain/types";
-import { fetchBytes } from "./http";
+import { CACHE_FOREVER, fetchBytes } from "./http";
 import { decodePng, type DecodedPng } from "./png";
 
 /**
  * Elevación desde las teselas de terreno de Mapbox (terrain-RGB): altura =
  * −10000 + (R·65536 + G·256 + B) × 0,1 m. Se descargan solo las teselas que
- * tocan los puntos pedidos y se guardan en la Data Cache de Next (30 días; el
- * terreno no cambia) y en memoria (las últimas `MEMORY_TILES`), así rutas
+ * tocan los puntos pedidos y se guardan en la Data Cache de Next sin
+ * vencimiento (el terreno no cambia; compartida por todos los usuarios y entre
+ * despliegues) y en memoria (las últimas `MEMORY_TILES`), así rutas
  * repetidas o cercanas no vuelven a pedirlas.
  */
 
-const TILE_TTL_MS = 30 * 24 * 3600_000;
+/** El terreno no cambia: las teselas se guardan sin vencimiento. */
+const TILE_TTL_MS = CACHE_FOREVER;
 const MEMORY_TILES = 96;
 const CONCURRENCY = 6;
 

@@ -64,13 +64,30 @@ export function orderedWaypoints(
 
 const stopIds = (plan: RoutePlan) => plan.stops.map((s) => s.charger.id);
 
+/** El plan de la pasada 2 y, si se verificó, la ruta real y las estaciones con que se armó. */
+export interface VerifyResult {
+  plan: RoutePlan;
+  route?: RawRoute;
+  /** Estaciones consideradas en el plan final; null = todas las del corredor. */
+  chargerIds?: string[] | null;
+}
+
 export async function verifyPlan(deps: VerifyDeps, args: VerifyArgs): Promise<RoutePlan> {
+  return (await verifyPlanDetailed(deps, args)).plan;
+}
+
+export async function verifyPlanDetailed(
+  deps: VerifyDeps,
+  args: VerifyArgs,
+): Promise<VerifyResult> {
   const { plan, inputs, vehicle, conditions, engine } = args;
-  const failed = (iterations: number): RoutePlan => ({
-    ...plan,
-    verification: { status: "failed", iterations, baseDistanceKm: plan.distanceKm },
+  const failed = (iterations: number): VerifyResult => ({
+    plan: {
+      ...plan,
+      verification: { status: "failed", iterations, baseDistanceKm: plan.distanceKm },
+    },
   });
-  if (!plan.stops.length) return plan;
+  if (!plan.stops.length) return { plan };
 
   const base = inputs.routes.find((r) => r.id === plan.id);
   let current = plan;
@@ -126,11 +143,19 @@ export async function verifyPlan(deps: VerifyDeps, args: VerifyArgs): Promise<Ro
 
     const restricted = on(chosen);
     if (restricted.feasible) {
-      return { ...restricted, verification: verification(it === 1 ? "verified" : "changed") };
+      return {
+        plan: { ...restricted, verification: verification(it === 1 ? "verified" : "changed") },
+        route: raw,
+        chargerIds: chosen.map((c) => c.id),
+      };
     }
     const full = on(inputs.chargers);
     if (!full.feasible)
-      return { ...full, verification: verification(it === 1 ? "verified" : "changed") };
+      return {
+        plan: { ...full, verification: verification(it === 1 ? "verified" : "changed") },
+        route: raw,
+        chargerIds: null,
+      };
     current = full;
   }
   return failed(deps.maxIterations);

@@ -9,7 +9,10 @@ const legacy: ShadowPlanSide = {
   minSoc: 18.9,
 };
 
-function report(v2: ShadowPlanSide, selected: [string, string] = ["route-0", "route-0"]): ShadowReport {
+function report(
+  v2: ShadowPlanSide,
+  selected: [string, string] = ["route-0", "route-0"],
+): ShadowReport {
   return {
     trip: "Piedecuesta → Vélez",
     mode: "fastest",
@@ -25,7 +28,13 @@ function report(v2: ShadowPlanSide, selected: [string, string] = ["route-0", "ro
 describe("formatShadowReport", () => {
   it("muestra cada ruta como actual → v2 con las diferencias y las paradas", () => {
     const text = formatShadowReport(
-      report({ ...legacy, stops: [{ ...legacy.stops[0]!, departSoc: 58, minutes: 17 }], totalMinutes: 246, arrivalSoc: 15.5, minSoc: 15.5 }),
+      report({
+        ...legacy,
+        stops: [{ ...legacy.stops[0]!, departSoc: 58, minutes: 17 }],
+        totalMinutes: 246,
+        arrivalSoc: 15.5,
+        minSoc: 15.5,
+      }),
     );
     expect(text).toContain("[plan-trip:shadow] Piedecuesta → Vélez · más rápida · v2 en 12 ms");
     expect(text).toContain("Elegida: actual Ruta A · v2 Ruta A");
@@ -37,7 +46,9 @@ describe("formatShadowReport", () => {
   });
 
   it("marca cuando cada planificador elige una ruta distinta, y la carga antes de salir", () => {
-    const text = formatShadowReport(report({ ...legacy, preChargePct: 12, stops: [] }, ["route-0", "route-1"]));
+    const text = formatShadowReport(
+      report({ ...legacy, preChargePct: 12, stops: [] }, ["route-0", "route-1"]),
+    );
     expect(text).toContain("Elegida: actual Ruta A · v2 Ruta B  ← distinta");
     expect(text).toContain("v2:     cargar +12 % antes · sin paradas");
   });

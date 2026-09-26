@@ -1,8 +1,7 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { computePlans } from "@/domain/ev/compute-plan";
-import { snapshotInputs } from "@/domain/ev/contracts/snapshot";
+import { computePlansFromSnapshot } from "@/domain/ev/compute-plan";
 import type { TripConditions, Vehicle } from "@/domain/types";
 import { planTripFn } from "@/server/actions/plan";
 import { getSharedTripFn } from "@/server/actions/trips";
@@ -47,12 +46,11 @@ export default async function SharedTripPage({
 
   const { request, snapshot } = trip;
   if (snapshot && !live) {
-    const { plans, selectedId } = computePlans(
-      { ...snapshotInputs(snapshot), origin: request.origin, destination: request.destination },
+    const { plans, selectedId } = computePlansFromSnapshot(
+      snapshot,
+      { origin: request.origin, destination: request.destination },
       request.vehicle as Vehicle,
       request.conditions as TripConditions,
-      snapshot.plannerEngine,
-      snapshot.energyEngine,
     );
     return (
       <SharedTripView

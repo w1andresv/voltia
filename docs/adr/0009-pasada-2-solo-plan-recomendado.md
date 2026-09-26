@@ -21,3 +21,4 @@ La especificación (§4) pide una segunda pasada: pedir la ruta real que pasa po
 
 ## Decisión del dueño del producto (2026-09-26, D6)
 La pasada 2 se ejecuta también **al compartir** un viaje, no al guardarlo. El resultado verificado queda en el snapshot (`verifiedRoutes`) y el link público lo muestra (guía 05, §5.6.1).
+Implementado en la sesión B: `EVRoutePlanningService.verifySnapshot`, `shareTripFn` con un máximo de 8 s (si falla o tarda, se comparte sin verificar), `snapshot.verifiedRoutes` y `computePlansFromSnapshot` en `/v/[shareId]`.

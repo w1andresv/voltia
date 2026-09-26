@@ -25,7 +25,12 @@ function route(distanceM: number, durationS: number, bend = 0, summary?: string)
   };
 }
 
-function providerRoute(distanceM: number, durationS: number, bend = 0, summary?: string): ProviderRoute {
+function providerRoute(
+  distanceM: number,
+  durationS: number,
+  bend = 0,
+  summary?: string,
+): ProviderRoute {
   return {
     provider: "mapbox",
     profile: "driving",
@@ -37,7 +42,10 @@ function providerRoute(distanceM: number, durationS: number, bend = 0, summary?:
 }
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 async function mapbox(token = "pk.abc.def") {
@@ -64,9 +72,9 @@ describe("buildRouteSet", () => {
 
   it("una sola ruta se llama 'Ruta recomendada'", async () => {
     const { buildRouteSet } = await import("./route-selection");
-    expect(buildRouteSet([{ route: providerRoute(214_000, 16_200), noTolls: false }])[0]?.label).toBe(
-      "Ruta recomendada",
-    );
+    expect(
+      buildRouteSet([{ route: providerRoute(214_000, 16_200), noTolls: false }])[0]?.label,
+    ).toBe("Ruta recomendada");
   });
 
   it("presenta como máximo 4 rutas", async () => {
@@ -98,7 +106,8 @@ describe("selectRoutes con Mapbox", () => {
     const urls: string[] = [];
     vi.stubGlobal("fetch", async (url: string) => {
       urls.push(url);
-      if (url.includes("exclude=toll")) return json({ code: "Ok", routes: [route(240_000, 18_000, 0.5)] });
+      if (url.includes("exclude=toll"))
+        return json({ code: "Ok", routes: [route(240_000, 18_000, 0.5)] });
       if (url.includes("api.mapbox.com"))
         return json({ code: "Ok", routes: [route(214_300, 16_200), route(225_000, 17_000, -0.4)] });
       throw new Error("no debería usar OSRM");
@@ -165,7 +174,9 @@ describe("selectRoutes con Mapbox", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal("fetch", async () => json({ code: "NoRoute", routes: [] }));
     const { selectRoutes } = await import("./route-selection");
-    await expect(selectRoutes(await mapbox(), [A, B])).rejects.toThrow("Mapbox no encontró un camino");
+    await expect(selectRoutes(await mapbox(), [A, B])).rejects.toThrow(
+      "Mapbox no encontró un camino",
+    );
   });
 
   it("no envía `language` a Directions (Mapbox lo rechaza sin steps=true)", async () => {
@@ -185,7 +196,11 @@ describe("selectRoutes con Mapbox", () => {
 
   it("avisa si el origen o el destino quedaron lejos de la vía", async () => {
     vi.stubGlobal("fetch", async () =>
-      json({ code: "Ok", routes: [route(214_300, 16_200)], waypoints: [{ distance: 20 }, { distance: 3400 }] }),
+      json({
+        code: "Ok",
+        routes: [route(214_300, 16_200)],
+        waypoints: [{ distance: 20 }, { distance: 3400 }],
+      }),
     );
     const { selectRoutes } = await import("./route-selection");
     const { warnings } = await selectRoutes(await mapbox(), [A, B]);
@@ -207,7 +222,8 @@ describe("selectRoutes con OSRM", () => {
       return json({ code: "Ok", routes: [route(198_000, 10_800)] });
     });
     const { selectRoutes } = await import("./route-selection");
-    const { OsrmRoutingProvider, OSRM_NO_TOKEN_WARNING } = await import("@/infrastructure/providers/adapters");
+    const { OsrmRoutingProvider, OSRM_NO_TOKEN_WARNING } =
+      await import("@/infrastructure/providers/adapters");
     const { engine, warnings, routes } = await selectRoutes(new OsrmRoutingProvider(), [A, B]);
     expect(engine).toBe("osrm");
     expect(warnings).toEqual([OSRM_NO_TOKEN_WARNING]);
@@ -258,7 +274,9 @@ describe("jerarquía vial en selectRoutes", () => {
     });
     const { selectRoutes } = await import("./route-selection");
     const { routes } = await selectRoutes(await mapbox(), [A, B]);
-    expect(urls.some((u) => /^point\(-73\.\d+ \d/.test(new URL(u).searchParams.get("exclude") ?? ""))).toBe(true);
+    expect(
+      urls.some((u) => /^point\(-73\.\d+ \d/.test(new URL(u).searchParams.get("exclude") ?? "")),
+    ).toBe(true);
     expect(routes[0]?.distanceKm).toBeCloseTo(212, 0);
     expect(routes[0]?.roadMix?.primary).toBeCloseTo(212, 0);
     expect(routes[1]?.roadMix?.tertiary).toBeCloseTo(40, 0);

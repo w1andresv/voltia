@@ -3,7 +3,7 @@ import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import type { StationDataset } from "@/domain/stations/model";
 import type { ProviderRoute } from "@/domain/ev/contracts/route";
 import type { RoutingProvider } from "@/domain/ports/routing";
-import type { PlanRequest } from "@/domain/types";
+import { ELEVATION_UNAVAILABLE_TEXT, type PlanRequest } from "@/domain/types";
 import { catalogVehicle } from "@/test-support/scenarios";
 import { syntheticStations } from "@/test-support/synthetic-providers";
 import { EVRoutePlanningService, type PlanningDeps } from "./service";
@@ -122,9 +122,8 @@ describe("EVRoutePlanningService", () => {
     });
     const { response } = await new EVRoutePlanningService(failing).plan(request);
     expect(response.geo.routes[0]!.elevation).toEqual({ gainM: 0, lossM: 0, minM: 0, maxM: 0 });
-    expect(response.geo.warnings).toContain(
-      "No se obtuvo el perfil de elevación. El consumo puede estar subestimado en montaña.",
-    );
+    expect(response.geo.warnings).toContain(ELEVATION_UNAVAILABLE_TEXT);
+    expect(response.geo.dataQuality).toEqual({ elevation: "unavailable" });
   });
 
   it("avisa de fuentes de electrolineras viejas o caídas", async () => {

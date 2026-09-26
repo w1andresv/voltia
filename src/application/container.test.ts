@@ -173,7 +173,13 @@ describe("ELEVATION_SOURCE de extremo a extremo (proveedores sintéticos)", () =
     vi.stubEnv("ELEVATION_SOURCE", "mapbox-terrain");
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const { createPlanningService } = await import("./container");
-    // El fetch sintético no sirve teselas: el principal falla.
+    // Las teselas fallan (401): el principal cae a Open-Meteo.
+    const base = syntheticFetch();
+    vi.stubGlobal("fetch", async (input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+      String(input instanceof Request ? input.url : input).includes(".pngraw")
+        ? new Response("Unauthorized", { status: 401 })
+        : base(input, init),
+    );
     const { response } = await createPlanningService({
       stations: { getDataset: async () => syntheticStations() },
     }).plan(request);

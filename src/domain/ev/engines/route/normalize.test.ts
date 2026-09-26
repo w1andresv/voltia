@@ -214,3 +214,39 @@ describe("puntos intermedios y clase vial en toRawRoute (F5)", () => {
     expect(applyRoadTiers(samples, route({ legs: [] }), 4)).toBe(samples);
   });
 });
+
+describe("túneles (F2b)", () => {
+  it("una intersección con la clase tunnel marca el tramo hasta la siguiente", () => {
+    const line = [0, 1, 2, 3, 4].map((km) => ({ lat: 7 + km / 111.195, lon: -73 }));
+    const r = route({
+      distanceM: 4000,
+      geometry: line,
+      legs: [
+        {
+          distanceM: 4000,
+          steps: [
+            {
+              distanceM: 4000,
+              durationS: 240,
+              geometry: line,
+              intersections: [
+                { location: line[0]!, roadClass: "primary" },
+                { location: line[1]!, roadClass: "primary", classes: ["tunnel"] },
+                { location: line[3]!, roadClass: "primary" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const raw = toRawRoute(r, { id: "a", label: "A" });
+    expect(raw.structures).toHaveLength(1);
+    expect(raw.structures![0]!.kind).toBe("tunnel");
+    expect(raw.structures![0]!.fromKm).toBeCloseTo(1, 3);
+    expect(raw.structures![0]!.toKm).toBeCloseTo(3, 3);
+  });
+
+  it("sin túneles no agrega el campo", () => {
+    expect(toRawRoute(route(), { id: "a", label: "A" }).structures).toBeUndefined();
+  });
+});

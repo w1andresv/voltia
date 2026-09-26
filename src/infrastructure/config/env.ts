@@ -11,16 +11,16 @@ const EnvSchema = z.object({
   /** Motor de planificación: legacy (actual), shadow (ambos, responde el actual) o v2 (plan §6). */
   PLANNER_ENGINE: z.enum(["legacy", "shadow", "v2"]).default("legacy").catch("legacy"),
   /**
-   * Fuente de elevación (ADR-0011): open-meteo (96 puntos por ruta, la de siempre),
-   * open-meteo-adaptive (malla gruesa y densa donde cambia la altura) o
-   * mapbox-terrain (teselas cada 100 m, con caché; necesita el token de Mapbox).
+   * Fuente de elevación (ADR-0011): mapbox-terrain (por defecto desde D1: teselas
+   * cada 100 m, con caché sin vencimiento; sin token de Mapbox cae a open-meteo),
+   * open-meteo (96 puntos por ruta) u open-meteo-adaptive.
    */
   /** Modelo de energía (ADR-0012): legacy (actual), shadow (ambos, responde el actual y registra diferencias) o v2. */
   ENERGY_ENGINE: z.enum(["legacy", "shadow", "v2"]).default("legacy").catch("legacy"),
   ELEVATION_SOURCE: z
     .enum(["open-meteo", "open-meteo-adaptive", "mapbox-terrain"])
-    .default("open-meteo")
-    .catch("open-meteo"),
+    .default("mapbox-terrain")
+    .catch("mapbox-terrain"),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;

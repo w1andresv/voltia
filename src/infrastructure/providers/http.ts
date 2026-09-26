@@ -21,7 +21,8 @@ export function asciiHeader(value: string): string {
     .replace(/[^\x20-\x7e]/g, "?");
 }
 
-const CONTACT = process.env.PROVIDER_CONTACT?.trim() || "sin contacto configurado - ver PROVIDER_CONTACT";
+const CONTACT =
+  process.env.PROVIDER_CONTACT?.trim() || "sin contacto configurado - ver PROVIDER_CONTACT";
 export const USER_AGENT = asciiHeader(`Voltia/1.0 (EV trip planner; ${CONTACT})`);
 
 /**
@@ -59,7 +60,11 @@ function sleep(ms: number): Promise<void> {
  * fetch con 1 reintento en 429/5xx (respetando `Retry-After` si viene), y
  * el User-Agent del operador salvo que el caller ya haya puesto uno.
  */
-async function fetchWithRetry(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
   const headers = { accept: "application/json", "user-agent": USER_AGENT, ...(init.headers ?? {}) };
   const attempt = () => fetch(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
 
@@ -99,6 +104,17 @@ async function rawJson<T>(url: string, init: RequestInit, timeoutMs: number): Pr
   return (await res.json()) as T;
 }
 
+/**
+ * Sin vencimiento para datos que no cambian (elevación del terreno): la Data
+ * Cache de Next los conserva entre peticiones y despliegues, compartidos por
+ * todos los usuarios (docs de Next: `revalidate: false`).
+ */
+export const CACHE_FOREVER = Number.POSITIVE_INFINITY;
+
+function revalidateOf(ttlMs: number): number | false {
+  return Number.isFinite(ttlMs) ? Math.max(1, Math.round(ttlMs / 1000)) : false;
+}
+
 export async function fetchJson<T>(
   url: string,
   init: RequestInit & { timeoutMs?: number; cacheTtlMs?: number; cacheKey?: string } = {},
@@ -110,8 +126,9 @@ export async function fetchJson<T>(
   const fromMemory = memoryHit<T>(key, cacheTtlMs);
   if (fromMemory !== undefined) return fromMemory;
 
-  const revalidate = Math.max(1, Math.round(cacheTtlMs / 1000));
-  const cached = unstable_cache(() => rawJson<T>(url, rest, timeoutMs), [key], { revalidate });
+  const cached = unstable_cache(() => rawJson<T>(url, rest, timeoutMs), [key], {
+    revalidate: revalidateOf(cacheTtlMs),
+  });
   const value = await cached();
   memoryCache.set(key, { at: Date.now(), value });
   return value;
@@ -138,14 +155,21 @@ export async function fetchBytes(
 ): Promise<Uint8Array> {
   const { timeoutMs = 15000, cacheTtlMs, cacheKey, ...rest } = init;
   const raw = async () => {
-    const res = await fetchWithRetry(url, { ...rest, headers: { accept: "*/*", ...(rest.headers ?? {}) } }, timeoutMs);
+    const res = await fetchWithRetry(
+      url,
+      { ...rest, headers: { accept: "*/*", ...(rest.headers ?? {}) } },
+      timeoutMs,
+    );
     if (!res.ok) throw await httpError(res, url);
     return new Uint8Array(await res.arrayBuffer());
   };
   if (!cacheTtlMs) return raw();
-  const revalidate = Math.max(1, Math.round(cacheTtlMs / 1000));
-  const cached = unstable_cache(async () => Buffer.from(await raw()).toString("base64"), [cacheKey ?? safeUrl(url)], {
-    revalidate,
-  });
+  const cached = unstable_cache(
+    async () => Buffer.from(await raw()).toString("base64"),
+    [cacheKey ?? safeUrl(url)],
+    {
+      revalidate: revalidateOf(cacheTtlMs),
+    },
+  );
   return new Uint8Array(Buffer.from(await cached(), "base64"));
 }

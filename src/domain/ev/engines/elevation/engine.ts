@@ -13,7 +13,7 @@ import { MODEL_PARAMETERS, type ModelParameters } from "@/domain/ev/core/params"
  *  - malla: un punto cada `mesh.spacingM` sobre la geometría;
  *  - adaptativa: malla gruesa y más puntos solo donde la altura cambia.
  * Las dos últimas producen un perfil denso que se aplica con
- * `applyDenseElevationProfile`. La limpieza de túneles y puentes sigue pendiente.
+ * `applyDenseElevationProfile`, que además limpia túneles y pendientes imposibles.
  */
 
 type Sample = RawRoute["samples"][number];
@@ -100,7 +100,12 @@ export interface ElevationProbe extends LatLon {
 }
 
 /** Puntos cada `spacingM` entre `fromKm` y `toKm` (incluye los extremos). */
-function meshBetween(line: AxisPoint[], fromKm: number, toKm: number, spacingM: number): ElevationProbe[] {
+function meshBetween(
+  line: AxisPoint[],
+  fromKm: number,
+  toKm: number,
+  spacingM: number,
+): ElevationProbe[] {
   const step = spacingM / 1000;
   const n = Math.max(1, Math.ceil((toKm - fromKm) / step - 1e-9));
   const out: ElevationProbe[] = [];
@@ -136,7 +141,11 @@ export function adaptiveRefinement(
   if (line.length < 2 || coarse.length < 2) return [];
   const intervals = coarse
     .slice(1)
-    .map((b, i) => ({ a: coarse[i]!, b, delta: Math.abs((heights[i + 1] ?? 0) - (heights[i] ?? 0)) }))
+    .map((b, i) => ({
+      a: coarse[i]!,
+      b,
+      delta: Math.abs((heights[i + 1] ?? 0) - (heights[i] ?? 0)),
+    }))
     .filter((x) => x.delta > params.refineDeltaM)
     .sort((x, y) => y.delta - x.delta);
   let budget = params.maxProbes - coarse.length;
@@ -148,6 +157,50 @@ export function adaptiveRefinement(
     extra.push(...inner);
   }
   return extra.sort((x, y) => x.km - y.km);
+}
+
+/**
+ * Limpieza del perfil denso (F2b):
+ *  - en un túnel, la altura de los puntos interiores es la recta entre la
+ *    entrada y la salida (el modelo de terreno da la montaña, no la vía);
+ *  - entre puntos consecutivos, la pendiente no pasa de `maxGradePct` (un pico
+ *    o un hueco del terreno, como un puente sobre un valle, se recorta).
+ * Devuelve las alturas limpias y cuántos puntos cambió. Puntos ordenados por km.
+ */
+export function cleanElevationProfile(
+  km: number[],
+  heights: number[],
+  structures: RawRoute["structures"] = [],
+  maxGradePct: number = MODEL_PARAMETERS.elevation.maxGradePct,
+): { heights: number[]; corrected: number } {
+  const h = [...heights];
+  const changed = new Set<number>();
+  for (const st of structures ?? []) {
+    let a = -1;
+    let b = -1;
+    for (let i = 0; i < km.length; i++) {
+      if (km[i]! <= st.fromKm) a = i;
+      if (b < 0 && km[i]! >= st.toKm) b = i;
+    }
+    if (a < 0 || b < 0 || b - a < 2) continue;
+    for (let i = a + 1; i < b; i++) {
+      const t = (km[i]! - km[a]!) / (km[b]! - km[a]!);
+      const v = lerp(h[a]!, h[b]!, t);
+      if (Math.abs(v - h[i]!) > 1e-9) changed.add(i);
+      h[i] = v;
+    }
+  }
+  if (maxGradePct > 0) {
+    for (let i = 1; i < h.length; i++) {
+      const allowed = (maxGradePct / 100) * Math.max(0, km[i]! - km[i - 1]!) * 1000;
+      const d = h[i]! - h[i - 1]!;
+      if (Math.abs(d) > allowed + 1e-9) {
+        h[i] = h[i - 1]! + Math.sign(d) * allowed;
+        changed.add(i);
+      }
+    }
+  }
+  return { heights: h, corrected: changed.size };
 }
 
 /** Media móvil por distancia (ventana de `windowKm` centrada), para puntos a distinto espaciado. */
@@ -165,7 +218,10 @@ function smoothByDistance(km: number[], values: number[], windowKm: number): num
 }
 
 /** Subida y bajada acumuladas con histéresis: un cambio cuenta cuando se aleja `thresholdM` del último extremo. */
-export function hysteresisGainLoss(values: number[], thresholdM: number): { gainM: number; lossM: number } {
+export function hysteresisGainLoss(
+  values: number[],
+  thresholdM: number,
+): { gainM: number; lossM: number } {
   let gain = 0;
   let loss = 0;
   if (!values.length) return { gainM: 0, lossM: 0 };
@@ -194,13 +250,17 @@ export function applyDenseElevationProfile(
   params: ModelParameters["elevation"] = MODEL_PARAMETERS.elevation,
 ): RawRoute {
   if (route.samples.length < 2 || !probes.length) return route;
-  const order = probes.map((p, i) => ({ km: p.km, h: heights[i] ?? 0 })).sort((a, b) => a.km - b.km);
+  const order = probes
+    .map((p, i) => ({ km: p.km, h: heights[i] ?? 0 }))
+    .sort((a, b) => a.km - b.km);
   const km = order.map((o) => o.km);
-  const smoothed = smoothByDistance(
+  const cleaned = cleanElevationProfile(
     km,
     order.map((o) => o.h),
-    params.dense.smoothingM / 1000,
+    route.structures,
+    params.maxGradePct,
   );
+  const smoothed = smoothByDistance(km, cleaned.heights, params.dense.smoothingM / 1000);
   const withElev = route.samples.map((s) => ({ ...s, elevM: interpolateElev(s.km, km, smoothed) }));
   for (let i = 1; i < withElev.length; i++) {
     const dKm = Math.max(0.05, withElev[i]!.km - withElev[i - 1]!.km);
@@ -210,6 +270,12 @@ export function applyDenseElevationProfile(
   return {
     ...route,
     samples: withElev,
-    elevation: { gainM, lossM, minM: Math.min(...smoothed), maxM: Math.max(...smoothed) },
+    elevation: {
+      gainM,
+      lossM,
+      minM: Math.min(...smoothed),
+      maxM: Math.max(...smoothed),
+      ...(cleaned.corrected ? { correctedPoints: cleaned.corrected } : {}),
+    },
   };
 }

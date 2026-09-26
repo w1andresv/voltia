@@ -13,13 +13,31 @@ import {
 import { rankPlans } from "@/domain/planner";
 import { stationsNearRoutes } from "@/domain/ev/engines/corridor/engine";
 import { toPlanningCharger } from "@/domain/stations/to-charger";
-import type { PlanRequest, PlanResponse, RawRoute, RoutePlan, RoutingEngine, TripConditions, Vehicle } from "@/domain/types";
-import { SNAPSHOT_SCHEMA_VERSION, type PlanningSnapshot } from "@/domain/ev/contracts/snapshot";
-import { elevationSourceLabel, profileRoute, type ElevationReport, type ElevationSampling } from "./elevation-profile";
+import {
+  ELEVATION_UNAVAILABLE_TEXT,
+  type PlanRequest,
+  type PlanResponse,
+  type RawRoute,
+  type RoutePlan,
+  type RoutingEngine,
+  type TripConditions,
+  type Vehicle,
+} from "@/domain/types";
+import {
+  SNAPSHOT_SCHEMA_VERSION,
+  type PlanningSnapshot,
+  type VerifiedRoute,
+} from "@/domain/ev/contracts/snapshot";
+import {
+  elevationSourceLabel,
+  profileRoute,
+  type ElevationReport,
+  type ElevationSampling,
+} from "./elevation-profile";
 import { selectRoutes } from "./route-selection";
 import { buildEnergyShadowReport, formatEnergyShadowReport } from "./energy-shadow-report";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
-import { verifyPlan } from "./verify-plan";
+import { verifyPlan, verifyPlanDetailed } from "./verify-plan";
 
 /**
  * `legacy`: planificador actual. `v2`: planificador por programación dinámica (F7).
@@ -75,10 +93,14 @@ function logShadow(
       v2,
       selected: [rankPlans(legacy, mode)[0]?.id, rankPlans(v2, mode)[0]?.id],
     });
-    if (process.env.NODE_ENV === "production") console.log("[plan-trip:shadow]", JSON.stringify(report));
+    if (process.env.NODE_ENV === "production")
+      console.log("[plan-trip:shadow]", JSON.stringify(report));
     else console.log(formatShadowReport(report));
   } catch (error) {
-    console.error("[plan-trip:shadow] v2 falló", error instanceof Error ? error.message : String(error));
+    console.error(
+      "[plan-trip:shadow] v2 falló",
+      error instanceof Error ? error.message : String(error),
+    );
   }
 }
 
@@ -88,10 +110,14 @@ function logEnergyShadow(trip: string, current: RoutePlan[], runV2: () => RouteP
     const t0 = Date.now();
     const v2 = runV2();
     const report = buildEnergyShadowReport({ trip, ms: Date.now() - t0, legacy: current, v2 });
-    if (process.env.NODE_ENV === "production") console.log("[plan-trip:energy-shadow]", JSON.stringify(report));
+    if (process.env.NODE_ENV === "production")
+      console.log("[plan-trip:energy-shadow]", JSON.stringify(report));
     else console.log(formatEnergyShadowReport(report));
   } catch (error) {
-    console.error("[plan-trip:energy-shadow] v2 falló", error instanceof Error ? error.message : String(error));
+    console.error(
+      "[plan-trip:energy-shadow] v2 falló",
+      error instanceof Error ? error.message : String(error),
+    );
   }
 }
 
@@ -128,11 +154,16 @@ export class EVRoutePlanningService {
       stations.getDataset(),
     ]);
     logElevation(elevationReports, routes);
-    if (routes.some((r) => r.elevation.maxM === 0 && r.elevation.minM === 0 && r.distanceKm > 5)) {
-      warnings.push("No se obtuvo el perfil de elevación. El consumo puede estar subestimado en montaña.");
-    }
+    // Error de datos (F2b): ninguna fuente de elevación respondió para una ruta de más de 5 km.
+    const elevationUnavailable = elevationReports.some(
+      (r, i) => r.errorCode === "ELEVATION_UNAVAILABLE" && (routes[i]?.distanceKm ?? 0) > 5,
+    );
+    if (elevationUnavailable) warnings.push(ELEVATION_UNAVAILABLE_TEXT);
     for (const s of dataset.sources) {
-      if (s.stale) warnings.push(`Electrolineras de ${s.id}: usando el último dato disponible (fuente lenta o caída).`);
+      if (s.stale)
+        warnings.push(
+          `Electrolineras de ${s.id}: usando el último dato disponible (fuente lenta o caída).`,
+        );
       else if (!s.ok && s.error) warnings.push(`No se pudo consultar electrolineras de ${s.id}.`);
     }
     // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
@@ -159,12 +190,22 @@ export class EVRoutePlanningService {
     const energyMode = this.deps.energyMode ?? "legacy";
     const energy: EnergyEngine = energyMode === "v2" ? "v2" : "legacy";
     const trip = `${data.origin.label} → ${data.destination.label}`;
-    let { plans: ranked, selectedId } = computePlans(inputs, vehicle, conditions, responding, energy);
+    let { plans: ranked, selectedId } = computePlans(
+      inputs,
+      vehicle,
+      conditions,
+      responding,
+      energy,
+    );
     if (mode === "shadow") {
-      logShadow(trip, ranked, conditions.planningMode, () => buildPlans(inputs, vehicle, conditions, "v2", energy));
+      logShadow(trip, ranked, conditions.planningMode, () =>
+        buildPlans(inputs, vehicle, conditions, "v2", energy),
+      );
     }
     if (energyMode === "shadow") {
-      logEnergyShadow(trip, ranked, () => buildPlans(inputs, vehicle, conditions, responding, "v2"));
+      logEnergyShadow(trip, ranked, () =>
+        buildPlans(inputs, vehicle, conditions, responding, "v2"),
+      );
     }
     // Pasada 2 solo con el v2: una a tres rutas más por plan, y solo para el recomendado.
     if (mode === "v2" && ranked[0]?.stops.length) {
@@ -174,7 +215,15 @@ export class EVRoutePlanningService {
           withElevation: (r) => this.withElevation(r),
           maxIterations: params.planner.maxVerifyIterations,
         },
-        { plan: ranked[0], inputs, userWaypoints: data.waypoints, vehicle, conditions, engine: "v2", energyEngine: energy },
+        {
+          plan: ranked[0],
+          inputs,
+          userWaypoints: data.waypoints,
+          vehicle,
+          conditions,
+          engine: "v2",
+          energyEngine: energy,
+        },
       );
       console.log(
         `[plan-trip:verify] ${verified.verification?.status ?? "sin paradas"} en ${verified.verification?.iterations ?? 0} ruta(s):` +
@@ -206,12 +255,68 @@ export class EVRoutePlanningService {
           weather: snapshot,
           warnings,
           stationsVersion: dataset.version,
+          ...(elevationUnavailable ? { dataQuality: { elevation: "unavailable" as const } } : {}),
         },
         plans: ranked,
         selectedId,
       },
       engine: routed.engine,
       chargerCount: chargers.length,
+    };
+  }
+
+  /**
+   * Pasada 2 sobre un viaje guardado (D6: al compartir). Verifica el plan
+   * recomendado del snapshot y devuelve la ruta real para guardarla con el
+   * viaje; null si no tiene paradas o no se pudo verificar.
+   */
+  async verifySnapshot(
+    snapshot: PlanningSnapshot,
+    request: PlanRequest,
+  ): Promise<Record<string, VerifiedRoute> | null> {
+    const { routing, params } = this.deps;
+    const vehicle = request.vehicle as Vehicle;
+    const conditions = request.conditions as TripConditions;
+    const inputs: PlanInputs = {
+      routes: snapshot.routes,
+      chargers: snapshot.chargers,
+      weather: snapshot.weather,
+      origin: request.origin,
+      destination: request.destination,
+    };
+    const energyEngine = snapshot.energyEngine ?? "legacy";
+    const [plan] = computePlans(
+      inputs,
+      vehicle,
+      conditions,
+      snapshot.plannerEngine,
+      energyEngine,
+    ).plans;
+    if (!plan?.stops.length) return null;
+    const out = await verifyPlanDetailed(
+      {
+        routing,
+        withElevation: (r) => this.withElevation(r),
+        maxIterations: params.planner.maxVerifyIterations,
+      },
+      {
+        plan,
+        inputs,
+        userWaypoints: request.waypoints,
+        vehicle,
+        conditions,
+        engine: snapshot.plannerEngine,
+        energyEngine,
+      },
+    );
+    if (!out.route || !out.plan.verification || out.plan.verification.status === "failed")
+      return null;
+    return {
+      [plan.id]: {
+        route: out.route,
+        chargerIds: out.chargerIds ?? null,
+        verification: out.plan.verification,
+      },
     };
   }
 
@@ -226,5 +331,4 @@ export class EVRoutePlanningService {
     reports?.push(out.report);
     return out.route;
   }
-
 }

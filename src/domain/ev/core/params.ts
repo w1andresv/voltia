@@ -42,6 +42,11 @@ export interface ModelParameters {
     dense: { smoothingM: number; hysteresisM: number };
     /** Teselas de terreno de Mapbox: zoom (12 ≈ 38 m por píxel en el ecuador) y tileset. */
     terrain: { zoom: number; tileset: string };
+    /**
+     * Pendiente máxima creíble entre puntos del perfil denso, %. Más que esto es
+     * un error del modelo de terreno (p. ej. un puente sobre un valle) y se recorta.
+     */
+    maxGradePct: number;
   };
   soc: {
     /** Regeneración que acepta la batería según su SOC: completa hasta 80 %, cero desde 98 %. */
@@ -156,6 +161,7 @@ export const MODEL_PARAMETERS: ModelParameters = {
     adaptive: { coarseSpacingM: 1000, fineSpacingM: 200, refineDeltaM: 15, maxProbes: 1500 },
     dense: { smoothingM: 300, hysteresisM: 5 },
     terrain: { zoom: 12, tileset: "mapbox.terrain-rgb" },
+    maxGradePct: 15,
   },
   soc: {
     regenAcceptance: { fullBelowPct: 80, zeroFromPct: 98 },
