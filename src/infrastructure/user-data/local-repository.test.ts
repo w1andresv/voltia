@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createGuestStorage, type StorageLike } from "./guest-storage";
 import { createLocalRepository } from "./local-repository";
 import { SUMMARY, makeRequest, makeVehicle } from "@/domain/user/test-fixtures";
+import { minimalSnapshot } from "@/test-support/snapshot-fixture";
 
 function repo() {
   const data = new Map<string, string>();
@@ -38,5 +39,18 @@ describe("LocalUserDataRepository", () => {
     ]);
     await r.deleteTrip(id);
     expect(await r.listTrips()).toHaveLength(1);
+  });
+
+  it("no guarda el snapshot en el navegador (pesa demasiado para localStorage)", async () => {
+    const r = repo();
+    const saved = await r.saveTrip({
+      clientId: id,
+      request: makeRequest(),
+      summary: SUMMARY,
+      snapshot: minimalSnapshot(),
+    });
+    expect(saved).not.toHaveProperty("snapshot");
+    const [listed] = await r.listTrips();
+    expect(listed).not.toHaveProperty("snapshot");
   });
 });

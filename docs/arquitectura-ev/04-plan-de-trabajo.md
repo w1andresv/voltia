@@ -150,14 +150,15 @@ Dividida en dos (ADR-0006).
 ### F8 · Composición, gráficas y pasada 2
 
 - **Tareas:**
-  - [ ] `compute-plan.ts` (puro) usado por el servicio y por `lib/store.ts`.
-  - [ ] `application/plan-trip/verify-plan.ts`: reruteo por las paradas, máximo 3 replanificaciones.
-  - [ ] `engines/chart/series.ts`: ventanas con prorrateo; `consumption-chart.tsx` solo dibuja.
-  - [ ] `legacy-adapter.ts` (`EVRoutePlan → RoutePlan`) para la UI actual.
-  - [ ] `PlanningSnapshot` (plan §3.2) en lugar de `GeoBundle`, con migración del store persistido (ADR-0006).
-  - [ ] Viajes guardados con su snapshot y `modelVersion`.
-  - [ ] `PLANNER_ENGINE=v2`.
-- **Cierre:** Piedecuesta → Vélez de extremo a extremo (plan §7) con las invariantes de la especificación §8.4 y el informe §8.5.
+  - [x] `domain/ev/compute-plan.ts` (puro): `buildPlans`/`computePlans`, usado por el servicio y por `lib/store.ts`.
+  - [x] `application/plan-trip/verify-plan.ts`: reruteo por las paradas, máximo 3 rutas; solo el plan recomendado y solo con `v2` (ADR-0009).
+  - [x] `engines/chart/series.ts`: ventanas de 1/2/5 km con prorrateo (la suma de las ventanas es el total), promedio acumulado y SOC con el salto de cada carga. `consumption-chart.tsx` y `soc-chart.tsx` solo dibujan. `consumptionBlocks` se mudó aquí.
+  - [ ] `legacy-adapter.ts` (`EVRoutePlan → RoutePlan`): pasa a F9 (ADR-0010).
+  - [x] `PlanningSnapshot` (`contracts/snapshot.ts`) como `geo` de la respuesta. El store no persiste `geo`: no hizo falta migrarlo (ADR-0010).
+  - [x] Viajes de la cuenta guardados con su snapshot y `modelVersion`; `/v/[shareId]` recalcula con el snapshot, sin consultar proveedores, y ofrece recalcular con los datos de hoy.
+  - [ ] `PLANNER_ENGINE=v2`: decisión del dueño del producto después de mirar el modo sombra en producción.
+  - [ ] Verificar (pasada 2) también al guardar o compartir, y guardar la ruta verificada en el snapshot.
+- **Cierre:** Piedecuesta → Vélez de extremo a extremo (plan §7) con las invariantes de la especificación §8.4 y el informe §8.5. Pendiente de la cassette real (P1); con proveedores sintéticos la caracterización cubre pasada 1, pasada 2 y reproducción desde el snapshot.
 - **Especificación:** F7 y F8.
 
 ### FB · Fuente de datos Blaze (Muvatec)
@@ -228,7 +229,7 @@ Dividida en dos (ADR-0006).
 | F5 | Pendiente | — |
 | F6 | Pendiente | — |
 | F7 | ✅ Hecha detrás de `PLANNER_ENGINE` (por defecto `legacy`) | ver `git log --grep "^F7:"` |
-| F8 | Pendiente | — |
+| F8 | ✅ Hecha salvo `legacy-adapter` (pasa a F9), la verificación al guardar y el paso a `v2` | ver `git log --grep "^F8:"` |
 | F9 | Pendiente | — |
 | FB | Diseño listo (ADR-0008, propuesta); bloqueado por la documentación de Blaze | — |
 

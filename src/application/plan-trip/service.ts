@@ -9,6 +9,7 @@ import { rankPlans } from "@/domain/planner";
 import { stationsNearRoutes } from "@/domain/ev/engines/corridor/engine";
 import { toPlanningCharger } from "@/domain/stations/to-charger";
 import type { PlanRequest, PlanResponse, RawRoute, RoutePlan, RoutingEngine, TripConditions, Vehicle } from "@/domain/types";
+import { SNAPSHOT_SCHEMA_VERSION, type PlanningSnapshot } from "@/domain/ev/contracts/snapshot";
 import { selectRoutes } from "./route-selection";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
 import { verifyPlan } from "./verify-plan";
@@ -26,10 +27,12 @@ export interface PlanningDeps {
   stations: StationCatalog;
   params: ModelParameters;
   engineMode: PlannerEngineMode;
+  /** Reloj inyectable (tests deterministas). */
+  clock?: () => Date;
 }
 
 export interface PlanResult {
-  response: PlanResponse;
+  response: PlanResponse & { geo: PlanningSnapshot };
   engine: RoutingEngine;
   chargerCount: number;
 }
@@ -137,7 +140,23 @@ export class EVRoutePlanningService {
 
     return {
       response: {
-        geo: { routes, chargers, weather: snapshot, warnings, stationsVersion: dataset.version, plannerEngine: responding },
+        geo: {
+          schemaVersion: SNAPSHOT_SCHEMA_VERSION,
+          createdAt: (this.deps.clock ?? (() => new Date()))().toISOString(),
+          modelVersion: params.modelVersion,
+          plannerEngine: responding,
+          providers: {
+            routing: routed.engine,
+            elevation: this.deps.elevation.id,
+            weather: weather?.id ?? null,
+            stations: "dataset",
+          },
+          routes,
+          chargers,
+          weather: snapshot,
+          warnings,
+          stationsVersion: dataset.version,
+        },
         plans: ranked,
         selectedId,
       },

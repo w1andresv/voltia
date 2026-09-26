@@ -11,6 +11,7 @@ import {
   useUserContext,
 } from "@/components/user/user-context";
 import { decideSaveAction } from "@/domain/user/save-flow";
+import { parsePlanningSnapshot } from "@/domain/ev/contracts/snapshot";
 import type { RoutePlan } from "@/domain/types";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ export function SaveTripButton({ plan }: { plan: RoutePlan }) {
     (s) => s.vehicles.find((v) => v.id === s.selectedVehicleId) ?? s.vehicles[0]!,
   );
   const conditions = usePlanner((s) => s.conditions);
+  const geo = usePlanner((s) => s.geo);
 
   // Otra ruta calculada: el botón vuelve a estar disponible.
   useEffect(() => {
@@ -81,8 +83,10 @@ export function SaveTripButton({ plan }: { plan: RoutePlan }) {
 
   function buildTrip() {
     if (!origin || !destination) return null;
+    const snapshot = parsePlanningSnapshot(geo);
     return {
       request: { origin, destination, waypoints, vehicle, conditions },
+      ...(snapshot ? { snapshot } : {}),
       summary: {
         originLabel: origin.label,
         destinationLabel: destination.label,
@@ -91,6 +95,7 @@ export function SaveTripButton({ plan }: { plan: RoutePlan }) {
         stops: plan.stops.length,
         arrivalSoc: plan.arrivalSoc,
         energyKwh: plan.energyKwh,
+        ...(snapshot ? { modelVersion: snapshot.modelVersion } : {}),
       },
     };
   }

@@ -29,7 +29,8 @@ export function createLocalRepository(guest: GuestStorage): UserDataRepository {
         .reverse();
     },
     async saveTrip(t: NewTrip) {
-      const data = guest.addTrip(t);
+      // Sin el snapshot: pesa ~150 KB y el navegador tiene ~5 MB para todo.
+      const data = guest.addTrip({ clientId: t.clientId, request: t.request, summary: t.summary });
       const saved = data.trips.find((x) => x.clientId === t.clientId)!;
       return {
         id: saved.clientId,

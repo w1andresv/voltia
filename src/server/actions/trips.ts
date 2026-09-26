@@ -2,13 +2,19 @@
 
 import { z } from "zod";
 import { PlanRequestSchema, TripSummarySchema } from "@/domain/schemas";
+import { parsePlanningSnapshot } from "@/domain/ev/contracts/snapshot";
 import type { SavedTrip } from "@/domain/user/types";
 import { requireUser } from "@/infrastructure/auth/server-actor";
 import { createServerSupabase } from "@/infrastructure/supabase/server";
 
 export type { SavedTrip };
 
-const PayloadSchema = z.object({ request: PlanRequestSchema, summary: TripSummarySchema });
+const PayloadSchema = z.object({
+  request: PlanRequestSchema,
+  summary: TripSummarySchema,
+  /** Se valida aparte: un snapshot inválido o de otra versión no invalida el viaje. */
+  snapshot: z.unknown().optional(),
+});
 
 interface TripRow {
   id: string;
@@ -20,10 +26,12 @@ interface TripRow {
 
 function toSavedTrip(row: TripRow): SavedTrip {
   const payload = PayloadSchema.parse(row.payload);
+  const snapshot = parsePlanningSnapshot(payload.snapshot);
   return {
     id: row.id,
     request: payload.request,
     summary: payload.summary,
+    ...(snapshot ? { snapshot } : {}),
     shared: row.shared,
     shareId: row.share_id,
     createdAt: row.created_at,
@@ -33,18 +41,22 @@ function toSavedTrip(row: TripRow): SavedTrip {
 const SaveTripInput = z.object({
   request: PlanRequestSchema,
   summary: TripSummarySchema,
+  snapshot: z.unknown().optional(),
   /** Clave de idempotencia (uuid): un reintento con el mismo clientId no duplica. */
   clientId: z.string().uuid().optional(),
 });
 
 /**
- * Guarda un viaje planeado del usuario con sesión. Se guarda la petición
- * (PlanRequest) y un resumen del resultado, no el plan entero — el plan se
- * puede volver a calcular a partir de la petición (ver /v/[shareId]).
+ * Guarda un viaje planeado del usuario con sesión: la petición (PlanRequest),
+ * un resumen y, si viene y es válido, el PlanningSnapshot con que se calculó.
+ * Con el snapshot, abrir o compartir el viaje recalcula el plan sin consultar
+ * proveedores (ver /v/[shareId]); sin él, se recalcula con datos de hoy.
  */
 export async function saveTripFn(input: { data: unknown }): Promise<SavedTrip> {
   const actor = await requireUser();
-  const { clientId, ...data } = SaveTripInput.parse(input.data);
+  const { clientId, snapshot: rawSnapshot, ...rest } = SaveTripInput.parse(input.data);
+  const snapshot = parsePlanningSnapshot(rawSnapshot);
+  const data = snapshot ? { ...rest, snapshot } : rest;
   const supabase = await createServerSupabase();
   if (clientId) {
     const { data: existing } = await supabase

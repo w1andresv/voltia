@@ -13,6 +13,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0007](./0007-planificador-v2-detras-del-flag.md) | El planificador v2 entra detrás de PLANNER_ENGINE | Aceptada |
 | [0008](./0008-blaze-fuente-unica-detras-de-puertos.md) | Blaze (Muvatec) como fuente única, detrás de los puertos | Propuesta |
 | [0009](./0009-pasada-2-solo-plan-recomendado.md) | Pasada 2: solo el plan recomendado, solo con el planificador v2 | Aceptada |
+| [0010](./0010-snapshot-con-rutas-muestreadas.md) | PlanningSnapshot con rutas ya muestreadas, guardado solo en la cuenta | Aceptada |
 
 ## Plantilla
 

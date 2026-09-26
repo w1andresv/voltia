@@ -323,6 +323,7 @@ export interface PlanRequest {
 }
 
 export interface PlanResponse {
+  /** Un PlanningSnapshot (contracts/snapshot.ts) cuando viene del servidor. */
   geo: GeoBundle;
   plans: RoutePlan[];
   selectedId: string;

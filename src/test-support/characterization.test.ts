@@ -7,7 +7,7 @@
  */
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { PlanRequest, PlanResponse, TripConditions } from "@/domain/types";
+import type { PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/domain/types";
 import { catalogVehicle } from "./scenarios";
 import {
   SYNTHETIC_A,
@@ -94,6 +94,7 @@ async function plan(req: PlanRequest, engineMode: "legacy" | "v2" = "legacy"): P
   const { response } = await createPlanningService({
     stations: { getDataset: async () => syntheticStations() },
     engineMode,
+    clock: () => new Date("2026-09-01T12:00:00Z"),
   }).plan(req);
   return response;
 }
@@ -135,6 +136,24 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
   ] as [string, Partial<TripConditions>][])("planificador v2: %s", async (_name, over) => {
     const res = await plan(request(over), "v2");
     expect(summary(res)).toMatchSnapshot();
+  });
+
+  it("el snapshot guardado (JSON) reproduce el mismo plan sin consultar proveedores", async () => {
+    const req = request({ planningMode: "safer", initialSoc: 15, safetyMode: "conservative" });
+    const res = await plan(req);
+    const { computePlans } = await import("@/domain/ev/compute-plan");
+    const { parsePlanningSnapshot, snapshotInputs } = await import("@/domain/ev/contracts/snapshot");
+    const stored = parsePlanningSnapshot(JSON.parse(JSON.stringify(res.geo)));
+    expect(stored).not.toBeNull();
+    expect(stored).toMatchObject({ schemaVersion: 1, modelVersion: "0.1.0-legacy", createdAt: "2026-09-01T12:00:00.000Z" });
+    const again = computePlans(
+      { ...snapshotInputs(stored!), origin: req.origin, destination: req.destination },
+      req.vehicle as Vehicle,
+      req.conditions as TripConditions,
+      stored!.plannerEngine,
+    );
+    expect(normalized(again.plans)).toBe(normalized(res.plans));
+    expect(again.selectedId).toBe(res.selectedId);
   });
 
   it("es determinista", async () => {

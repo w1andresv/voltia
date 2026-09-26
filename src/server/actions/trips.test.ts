@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Actor } from "@/domain/auth/port";
 import { DEFAULT_CURVE } from "@/domain/charging";
 import type { PlanRequestShape, TripSummaryShape } from "@/domain/schemas";
+import { minimalSnapshot } from "@/test-support/snapshot-fixture";
 
 const { requireUser } = vi.hoisted(() => ({ requireUser: vi.fn<() => Promise<Actor>>() }));
 vi.mock("@/infrastructure/auth/server-actor", () => ({
@@ -15,7 +16,17 @@ vi.mock("@/infrastructure/supabase/server", () => ({ createServerSupabase }));
 /** Ver la nota en vehicles.test.ts: el cliente no debe ser "thenable" él mismo. */
 function chain(result: unknown) {
   const builder: Record<string, unknown> = {};
-  const methods = ["from", "select", "eq", "order", "insert", "update", "delete", "single", "maybeSingle"];
+  const methods = [
+    "from",
+    "select",
+    "eq",
+    "order",
+    "insert",
+    "update",
+    "delete",
+    "single",
+    "maybeSingle",
+  ];
   for (const m of methods) builder[m] = vi.fn(() => builder);
   (builder as { then: unknown }).then = (resolve: (v: unknown) => void) => resolve(result);
   return builder;
@@ -106,8 +117,60 @@ describe("saveTripFn", () => {
     expect(saved.id).toBe("trip-1");
     expect(saved.summary.distanceKm).toBe(290);
     expect(c._builder.insert).toHaveBeenCalledWith(
-      expect.objectContaining({ owner_id: "user-1", payload: { request: REQUEST, summary: SUMMARY } }),
+      expect.objectContaining({
+        owner_id: "user-1",
+        payload: { request: REQUEST, summary: SUMMARY },
+      }),
     );
+  });
+});
+
+describe("saveTripFn con PlanningSnapshot (F8)", () => {
+  it("guarda el snapshot válido y lo devuelve al leer", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const snapshot = minimalSnapshot();
+    const c = client({
+      data: { ...ROW, payload: { request: REQUEST, summary: SUMMARY, snapshot } },
+      error: null,
+    });
+    createServerSupabase.mockResolvedValueOnce(c);
+    const { saveTripFn } = await import("./trips");
+    const saved = await saveTripFn({ data: { request: REQUEST, summary: SUMMARY, snapshot } });
+    expect(c._builder.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: { request: REQUEST, summary: SUMMARY, snapshot } }),
+    );
+    expect(saved.snapshot).toEqual(snapshot);
+  });
+
+  it("un snapshot inválido no se guarda, pero el viaje sí", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const c = client({ data: ROW, error: null });
+    createServerSupabase.mockResolvedValueOnce(c);
+    const { saveTripFn } = await import("./trips");
+    const saved = await saveTripFn({
+      data: { request: REQUEST, summary: SUMMARY, snapshot: { schemaVersion: 99 } },
+    });
+    expect(c._builder.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: { request: REQUEST, summary: SUMMARY } }),
+    );
+    expect(saved.snapshot).toBeUndefined();
+  });
+
+  it("al leer, un snapshot guardado que ya no es válido se ignora", async () => {
+    const c = client({
+      data: {
+        ...ROW,
+        shared: true,
+        share_id: "abc",
+        payload: { request: REQUEST, summary: SUMMARY, snapshot: { schemaVersion: 0 } },
+      },
+      error: null,
+    });
+    createServerSupabase.mockResolvedValueOnce(c);
+    const { getSharedTripFn } = await import("./trips");
+    const trip = await getSharedTripFn({ data: { shareId: "abc" } });
+    expect(trip?.request).toEqual(REQUEST);
+    expect(trip?.snapshot).toBeUndefined();
   });
 });
 
@@ -119,7 +182,9 @@ describe("saveTripFn con clientId (idempotencia)", () => {
     const c = client({ data: ROW, error: null });
     createServerSupabase.mockResolvedValueOnce(c);
     const { saveTripFn } = await import("./trips");
-    const saved = await saveTripFn({ data: { request: REQUEST, summary: SUMMARY, clientId: CLIENT_ID } });
+    const saved = await saveTripFn({
+      data: { request: REQUEST, summary: SUMMARY, clientId: CLIENT_ID },
+    });
     expect(saved.id).toBe("trip-1");
     expect(c._builder.eq).toHaveBeenCalledWith("client_id", CLIENT_ID);
     expect(c._builder.insert).not.toHaveBeenCalled();
@@ -129,8 +194,14 @@ describe("saveTripFn con clientId (idempotencia)", () => {
     requireUser.mockResolvedValueOnce(MEMBER);
     const c = client({ data: null, error: null });
     // 1.ª consulta (maybeSingle): no existe; 2.ª (single del insert): la fila creada.
-    (c._builder.maybeSingle as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: null, error: null });
-    (c._builder.single as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: ROW, error: null });
+    (c._builder.maybeSingle as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: null,
+      error: null,
+    });
+    (c._builder.single as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: ROW,
+      error: null,
+    });
     createServerSupabase.mockResolvedValueOnce(c);
     const { saveTripFn } = await import("./trips");
     await saveTripFn({ data: { request: REQUEST, summary: SUMMARY, clientId: CLIENT_ID } });
@@ -142,7 +213,9 @@ describe("saveTripFn con clientId (idempotencia)", () => {
   it("rechaza un clientId que no es uuid", async () => {
     requireUser.mockResolvedValueOnce(MEMBER);
     const { saveTripFn } = await import("./trips");
-    await expect(saveTripFn({ data: { request: REQUEST, summary: SUMMARY, clientId: "abc" } })).rejects.toThrow();
+    await expect(
+      saveTripFn({ data: { request: REQUEST, summary: SUMMARY, clientId: "abc" } }),
+    ).rejects.toThrow();
   });
 });
 
@@ -198,7 +271,9 @@ describe("shareTripFn", () => {
 
   it("reutiliza el share_id si el viaje ya estaba compartido", async () => {
     requireUser.mockResolvedValueOnce(MEMBER);
-    createServerSupabase.mockResolvedValueOnce(client({ data: { share_id: "abc1234567" }, error: null }));
+    createServerSupabase.mockResolvedValueOnce(
+      client({ data: { share_id: "abc1234567" }, error: null }),
+    );
     const { shareTripFn } = await import("./trips");
     const result = await shareTripFn({ data: { id: "trip-1" } });
     expect(result.shareId).toBe("abc1234567");
@@ -207,7 +282,9 @@ describe("shareTripFn", () => {
 
 describe("getSharedTripFn", () => {
   it("no exige sesión", async () => {
-    createServerSupabase.mockResolvedValueOnce(client({ data: { ...ROW, shared: true, share_id: "abc1234567" }, error: null }));
+    createServerSupabase.mockResolvedValueOnce(
+      client({ data: { ...ROW, shared: true, share_id: "abc1234567" }, error: null }),
+    );
     const { getSharedTripFn } = await import("./trips");
     const trip = await getSharedTripFn({ data: { shareId: "abc1234567" } });
     expect(requireUser).not.toHaveBeenCalled();
@@ -215,7 +292,9 @@ describe("getSharedTripFn", () => {
   });
 
   it("da null si no existe o no está compartido", async () => {
-    createServerSupabase.mockResolvedValueOnce(client({ data: null, error: { message: "no rows" } }));
+    createServerSupabase.mockResolvedValueOnce(
+      client({ data: null, error: { message: "no rows" } }),
+    );
     const { getSharedTripFn } = await import("./trips");
     const trip = await getSharedTripFn({ data: { shareId: "no-existe" } });
     expect(trip).toBeNull();

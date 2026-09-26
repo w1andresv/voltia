@@ -131,5 +131,7 @@ export const TripSummarySchema = z.object({
   stops: z.number().int().min(0),
   arrivalSoc: z.number(),
   energyKwh: z.number(),
+  /** Versión del modelo con que se calculó (F8); falta en viajes guardados antes. */
+  modelVersion: z.string().optional(),
 });
 export type TripSummaryShape = z.infer<typeof TripSummarySchema>;

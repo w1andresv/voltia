@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { Route as RouteIcon } from "lucide-react";
 import type { PlanRequestShape } from "@/domain/schemas";
-import { departureChargeAdvice, FIRST_CHARGER_UNREACHABLE_REASON, type RoutePlan } from "@/domain/types";
+import {
+  departureChargeAdvice,
+  FIRST_CHARGER_UNREACHABLE_REASON,
+  type RoutePlan,
+} from "@/domain/types";
 import { formatKm, formatMinutes } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -21,14 +25,29 @@ import { SocChart } from "@/components/planner/soc-chart";
  * alcance de esta fase). Reusa los mismos componentes de estadísticas,
  * itinerario y gráficos que la pantalla principal del planificador.
  */
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString("es-CO", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "America/Bogota",
+      });
+}
+
 export function SharedTripView({
   request,
   plans,
   selectedId,
+  computedFrom,
 }: {
   request: PlanRequestShape;
   plans: RoutePlan[];
   selectedId: string;
+  /** El plan salió de los datos guardados con el viaje (PlanningSnapshot), no de los de hoy. */
+  computedFrom?: { createdAt: string; modelVersion: string; shareId: string };
 }) {
   const router = useRouter();
   const applySavedRequest = usePlanner((s) => s.applySavedRequest);
@@ -39,8 +58,8 @@ export function SharedTripView({
     return (
       <main className="mx-auto max-w-2xl px-4 pb-24 pt-20">
         <p className="text-sm text-muted">
-          No se pudo recalcular este viaje ahora mismo. El origen o destino puede haber cambiado, o alguno de los
-          servicios de mapas no respondió.
+          No se pudo recalcular este viaje ahora mismo. El origen o destino puede haber cambiado, o
+          alguno de los servicios de mapas no respondió.
         </p>
       </main>
     );
@@ -73,14 +92,33 @@ export function SharedTripView({
         </Button>
       </div>
 
+      {computedFrom ? (
+        <p className="text-xs leading-relaxed text-muted">
+          Calculado con las rutas, el clima y las electrolineras del{" "}
+          {formatDate(computedFrom.createdAt)}.{" "}
+          <a
+            className="underline underline-offset-2 hover:text-fg"
+            href={`/v/${computedFrom.shareId}?actualizar=1`}
+          >
+            Recalcular con los datos de hoy
+          </a>
+        </p>
+      ) : null}
+
       {plan.firstChargerUnreachable ? (
-        <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-danger">
+        <p
+          role="alert"
+          className="rounded-lg bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-danger"
+        >
           {plan.infeasibleReason ?? FIRST_CHARGER_UNREACHABLE_REASON}
         </p>
       ) : (
         <>
           {plan.departureCharge ? (
-            <p role="alert" className="rounded-lg bg-warn/15 px-3 py-2.5 text-sm leading-relaxed text-warn">
+            <p
+              role="alert"
+              className="rounded-lg bg-warn/15 px-3 py-2.5 text-sm leading-relaxed text-warn"
+            >
               {departureChargeAdvice(plan.departureCharge.additionalPct)}
             </p>
           ) : null}

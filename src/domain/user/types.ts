@@ -1,4 +1,5 @@
 import type { PlanRequestShape, TripSummaryShape } from "@/domain/schemas";
+import type { PlanningSnapshot } from "@/domain/ev/contracts/snapshot";
 import type { Vehicle } from "@/domain/types";
 
 /**
@@ -14,6 +15,8 @@ export interface SavedTrip {
   id: string;
   request: PlanRequestShape;
   summary: TripSummaryShape;
+  /** Datos con que se calculó (solo viajes de la cuenta, desde F8): abrirlo no vuelve a consultar proveedores. */
+  snapshot?: PlanningSnapshot;
   shared: boolean;
   shareId: string | null;
   createdAt: string;
@@ -24,5 +27,7 @@ export interface NewTrip {
   clientId: string;
   request: PlanRequestShape;
   summary: TripSummaryShape;
+  /** El navegador (invitado) no lo guarda: pesa ~150 KB por viaje. */
+  snapshot?: PlanningSnapshot;
 }
 export type { Vehicle };
