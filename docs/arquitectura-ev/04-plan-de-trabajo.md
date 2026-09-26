@@ -8,14 +8,15 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 
 | Pieza | Dónde | Para qué sirve en las fases |
 |---|---|---|
-| Rama de integración `engine-v2` | GitHub | Cada fase entra aquí por PR; `main` recibe el resultado al final (ADR-0001) |
-| CI en `engine-v2` y en sus PR | `.github/workflows/ci.yml` | typecheck, lint, cobertura (≥ 80/80/80/70), tests de scripts y build. Verde desde `c6c50fa` |
+| Rama de integración `engine-v2` | GitHub | Cada fase es un commit en esta rama; `main` recibe el resultado al final (ADR-0001) |
+| CI en `engine-v2` | `.github/workflows/ci.yml` | typecheck, lint, cobertura (≥ 80/80/80/70), tests de scripts y build. Verde desde `c6c50fa` |
 | Hook de inicio de sesión | `.claude/hooks/session-start.sh` | Cada sesión web instala dependencias sola. Se activa para todas las sesiones al llegar a `main` |
 | Correcciones C1, C2, C3, C5, C8 y el redondeo al llegar | `src/domain/planner.ts`, `charging.ts`, `types.ts` | Línea base correcta contra la que se compara el motor nuevo |
 | Cd·A y Crr por carrocería y por vehículo | `energy.ts`, seed | Parámetros físicos con fuente "estimated", listos para `SourcedValue` (ADR-0002) |
 | Regla de ESLint del dominio | `eslint.config.mjs` | `src/domain` no puede importar infraestructura ni el framework |
 | Pipeline extraído | `src/server/plan-pipeline.ts` | Punto único de composición. En F1 lo reemplaza `EVRoutePlanningService` |
 | Grabación y reproducción de proveedores | `src/test-support/` | Tests sin red y deterministas. El caso Piedecuesta → Vélez se activa al grabar la cassette |
+| Caracterización con proveedores sintéticos | `src/test-support/characterization.test.ts` | Resultado completo del pipeline actual (huella y resumen) en 3 escenarios, sin red. Es el test de igualdad de F1 y F2 mientras no esté la cassette real |
 
 ## 2. Pendientes tuyos antes de F1
 
@@ -29,19 +30,20 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 
 ## 3. Flujo de cada fase
 
-1. Rama desde `engine-v2`: `engine-v2/f<N>-<tema>` (por ejemplo `engine-v2/f1-contratos`).
+1. Se trabaja directo en `engine-v2` (ADR-0001).
 2. Leer la sección del plan de esa fase y la de la especificación que le corresponde (tabla 5).
 3. Decisiones no cubiertas por el plan → ADR en `docs/adr/` antes del código.
 4. Tests primero en lo que tiene resultado analítico (especificación §8.3).
-5. Antes de cada commit: `npm run typecheck && npm run lint && npm test`.
-6. PR hacia `engine-v2`. Se fusiona con CI verde y el criterio de cierre cumplido.
-7. Actualizar la tabla de estado (sección 6).
+5. Antes de commitear: `npm run typecheck && npm run lint && npm test`.
+6. **Un commit por fase**, con el prefijo `F<N>:` y el criterio de cierre cumplido. CI corre en cada push a `engine-v2`.
+7. Actualizar la tabla de estado (sección 6) en el mismo commit.
 
 **Reglas que no se negocian:**
 - Mientras `PLANNER_ENGINE` no sea `v2`, la app sigue respondiendo con el motor actual.
 - Ningún test usa red: los proveedores se prueban con respuestas grabadas (`src/test-support/cassette.ts`).
 - Nada de secretos en el repo: la grabación los verifica antes de escribir, pero revisar el diff igual.
-- Si una fase cambia números que ve el usuario, el PR lo dice con antes y después sobre el fixture.
+- Si una fase cambia números que ve el usuario, el commit lo dice con antes y después sobre el fixture, y actualiza el snapshot de caracterización (`src/test-support/characterization.test.ts`) a propósito.
+- Las fases que no deben cambiar resultados (F1, F2) dejan el snapshot de caracterización intacto.
 
 ## 4. Fases
 
@@ -166,10 +168,10 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 
 ## 6. Estado
 
-| Fase | Estado | PR |
+| Fase | Estado | Commit |
 |---|---|---|
 | F0 | ✅ Hecha salvo la cassette (P1) | commits en `engine-v2` |
-| F1 | Pendiente | — |
+| F1 | En curso | — |
 | F2 | Pendiente (decidir B6) | — |
 | F3 | Pendiente | — |
 | F4 | Pendiente | — |
@@ -181,4 +183,4 @@ Guía operativa para ejecutar las fases F1–F9 de [`02-plan-arquitectura-modula
 
 ## 7. Mensaje para abrir la sesión de una fase
 
-> Trabaja en `w1andresv/voltia`, rama `engine-v2`. Lee `docs/arquitectura-ev/04-plan-de-trabajo.md` (sección de la fase F<N>), la sección correspondiente de `02-plan-arquitectura-modular.md` y de `prompt_ev_route_engine_v2.md`, y los ADR de `docs/adr/`. Crea la rama `engine-v2/f<N>-<tema>`, implementa la fase con tests, corre `npm run typecheck && npm run lint && npm test` antes de cada commit y abre una PR hacia `engine-v2`. Actualiza la tabla de estado del plan de trabajo.
+> Trabaja en `w1andresv/voltia`, directo en la rama `engine-v2`. Lee `docs/arquitectura-ev/04-plan-de-trabajo.md` (sección de la fase F<N>), la sección correspondiente de `02-plan-arquitectura-modular.md` y de `prompt_ev_route_engine_v2.md`, y los ADR de `docs/adr/`. Implementa la fase con tests, corre `npm run typecheck && npm run lint && npm test` y haz un commit `F<N>: …` con la tabla de estado del plan de trabajo actualizada. Sube a `engine-v2`.
