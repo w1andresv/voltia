@@ -4,6 +4,7 @@ import type {
   PlaceShape,
   TripConditionsShape,
   RegenLevelShape,
+  BodyTypeShape,
 } from "@/domain/schemas";
 
 export type ConnectorType = "ccs2" | "ccs1" | "type2" | "chademo" | "nacs" | "gb_t";
@@ -12,6 +13,7 @@ export type DrivingStyle = "efficient" | "normal" | "sport";
 export type ClimateControl = "off" | "eco" | "normal" | "max";
 export type SafetyMode = "conservative" | "normal" | "low" | "custom";
 export type RegenLevel = RegenLevelShape;
+export type BodyType = BodyTypeShape;
 export type PlanningMode = "fastest" | "efficient" | "fewer_stops" | "safer" | "custom";
 export type EnergyMode = "manual" | "estimated";
 export type ChargerSource = "osm" | "catalog" | "community" | "plugshare" | "siveeic";

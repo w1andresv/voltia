@@ -19,6 +19,9 @@ export const ClimateControlSchema = z.enum(["off", "eco", "normal", "max"]);
 export const SafetyModeSchema = z.enum(["conservative", "normal", "low", "custom"]);
 export const PlanningModeSchema = z.enum(["fastest", "efficient", "fewer_stops", "safer", "custom"]);
 export const RegenLevelSchema = z.enum(["low", "medium", "high"]);
+/** Carrocería: elige Cd·A y Crr por defecto cuando el vehículo no trae los suyos. */
+export const BodyTypeSchema = z.enum(["sedan", "suv_compact", "suv_large"]);
+export type BodyTypeShape = z.infer<typeof BodyTypeSchema>;
 export type RegenLevelShape = z.infer<typeof RegenLevelSchema>;
 
 export const ChargeCurvePointSchema = z.object({
@@ -46,6 +49,11 @@ export const VehicleSchema = z.object({
   minSocRecommended: z.number(),
   maxSocTravel: z.number(),
   isCustom: z.boolean().optional(),
+  bodyType: BodyTypeSchema.optional(),
+  /** Cd × área frontal (m²). Si falta, sale de la tabla por carrocería. */
+  dragAreaM2: z.number().positive().optional(),
+  /** Coeficiente de rodadura. Si falta, sale de la tabla por carrocería. */
+  rollingResistance: z.number().positive().optional(),
 });
 
 export const PlaceSchema = z.object({

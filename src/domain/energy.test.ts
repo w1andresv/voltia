@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  BODY_TYPE_PHYSICS,
+  DEFAULT_BODY_TYPE,
   REGEN_RECOVERY,
   acPowerKw,
   airDensity,
@@ -8,13 +10,16 @@ import {
   batteryBudget,
   climateMultiplier,
   consumptionBlocks,
+  dragAreaM2,
   effectiveRegen,
   energyMode,
   hasManualConsumption,
   manualSpeedFactor,
   mixedCycleKwhPer100,
+  rollingCrr,
   segmentEnergyBreakdown,
   segmentTempC,
+  usesDefaultPhysics,
   wltpKwhPer100,
 } from "./energy";
 import { DEFAULT_CURVE } from "./charging";
@@ -372,5 +377,42 @@ describe("consumptionBlocks", () => {
   it("sin ruta no hay tramos", () => {
     expect(consumptionBlocks([])).toEqual([]);
     expect(consumptionBlocks([sample(0, 0)])).toEqual([]);
+  });
+});
+
+describe("coeficientes físicos por carrocería", () => {
+  it("sin carrocería ni coeficientes usa los de SUV compacta", () => {
+    const v = vehicle();
+    expect(DEFAULT_BODY_TYPE).toBe("suv_compact");
+    expect(dragAreaM2(v)).toBe(BODY_TYPE_PHYSICS.suv_compact.dragAreaM2);
+    expect(rollingCrr(v)).toBe(BODY_TYPE_PHYSICS.suv_compact.rollingResistance);
+    expect(usesDefaultPhysics(v)).toBe(true);
+  });
+
+  it("toma los valores de la carrocería declarada", () => {
+    expect(dragAreaM2(vehicle({ bodyType: "sedan" }))).toBe(0.55);
+    expect(dragAreaM2(vehicle({ bodyType: "suv_large" }))).toBe(0.95);
+    expect(rollingCrr(vehicle({ bodyType: "suv_large" }))).toBe(0.01);
+  });
+
+  it("los valores propios del vehículo mandan sobre la tabla", () => {
+    const v = vehicle({ bodyType: "suv_large", dragAreaM2: 0.6, rollingResistance: 0.008 });
+    expect(dragAreaM2(v)).toBe(0.6);
+    expect(rollingCrr(v)).toBe(0.008);
+    expect(usesDefaultPhysics(v)).toBe(false);
+  });
+
+  it("no depende del peso ni de la potencia del motor", () => {
+    const light = vehicle({ weightKg: 1400, motorKw: 100 });
+    const heavy = vehicle({ weightKg: 2300, motorKw: 400 });
+    expect(dragAreaM2(light)).toBe(dragAreaM2(heavy));
+    expect(rollingCrr(light)).toBe(rollingCrr(heavy));
+  });
+
+  it("más arrastre, más consumo a velocidad de carretera", () => {
+    const ctx = (v: Vehicle) => ({ vehicle: v, conditions: conditions(), weather: null });
+    const sedan = segmentEnergyBreakdown(100, 0, 90, ctx(vehicle({ bodyType: "sedan" })), 50);
+    const suv = segmentEnergyBreakdown(100, 0, 90, ctx(vehicle({ bodyType: "suv_large" })), 50);
+    expect(suv.netKwh).toBeGreaterThan(sedan.netKwh);
   });
 });

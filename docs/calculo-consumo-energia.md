@@ -21,9 +21,11 @@ segmentEnergyKwh(
 
 | Campo | Qué aporta al cálculo |
 |---|---|
-| `vehicle.weightKg` | Masa en vacío (ya incluye la batería). Entra en rodadura, aerodinámica estimada y gravedad. |
+| `vehicle.weightKg` | Masa en vacío (ya incluye la batería). Entra en rodadura y gravedad. |
 | `vehicle.batteryKwh` | Convierte kWh en % de batería. Ya no suma un sobrecosto de pack: el peso de la batería está en `weightKg`. |
-| `vehicle.motorKw` | Estima eficiencia del tren, tope de regeneración y un poco el CdA. |
+| `vehicle.motorKw` | Estima eficiencia del tren y tope de regeneración. |
+| `vehicle.bodyType` | Carrocería (`sedan`, `suv_compact`, `suv_large`). Elige CdA y Crr por defecto. Sin dato, `suv_compact`. |
+| `vehicle.dragAreaM2`, `vehicle.rollingResistance` | CdA y Crr propios del vehículo. Si están, reemplazan los de la carrocería. |
 | `vehicle.consumptionKwhPer100km` | Solo si el consumo es manual. Es la base de kWh por km. |
 | `vehicle.consumptionManual` | Elige el motor: manual o físico. |
 | `vehicle.rangeKm` | No entra en el consumo del tramo. Solo sirve para el dato WLTP de referencia (`batería / autonomía × 100`). |
@@ -165,21 +167,19 @@ v_aire²          = v_aire × |v_aire|      (con signo: un viento de cola más r
 
 ## Modo físico
 
-Se usa cuando no hay consumo manual. Estima el auto a partir de peso y potencia. No lee un Cx ni un coeficiente de rodadura reales del fabricante.
+Se usa cuando no hay consumo manual. CdA y Crr salen del vehículo si los trae; si no, de una tabla por carrocería (valores estimados). La eficiencia del tren todavía se estima por potencia.
 
 ### Coeficientes del vehículo
 
-Área de arrastre estimada, en m², entre 0,50 y 0,90:
+Área de arrastre (CdA, en m²) y rodadura (Crr): `vehicle.dragAreaM2` y `vehicle.rollingResistance` si el vehículo los trae. Si no, `BODY_TYPE_PHYSICS` según `vehicle.bodyType` (sin carrocería, `suv_compact`):
 
-```text
-CdA = 0,62 + (peso − 1500) × 0,00048 − min(0,07, (potencia / peso) × 0,25)
-```
+| Carrocería | CdA (m²) | Crr | Rango típico de Cd |
+|---|---|---|---|
+| `sedan` (sedán o hatchback) | 0,55 | 0,009 | 0,23–0,28 |
+| `suv_compact` | 0,75 | 0,009 | 0,27–0,33 |
+| `suv_large` (SUV grande o pickup) | 0,95 | 0,010 | 0,32–0,38 |
 
-Rodadura, entre 0,0084 y 0,011:
-
-```text
-Crr = 0,009 + max(0, peso − 1550) × 0,0000011
-```
+Son valores estándar de MVP, no del fabricante. Dentro de una misma carrocería el CdA real varía cerca de ±20 %, lo que da unos ±10–15 % de consumo en carretera. Para un vehículo con cifras reales, se agregan `dragAreaM2` y `rollingResistance` a su fila del catálogo (`seeds/0001_vehicle_catalog.sql`).
 
 Eficiencia del tren motriz, entre 0,85 y 0,925:
 
@@ -330,7 +330,7 @@ En llano casi no cambia. La diferencia está en las bajadas y en la altura.
 
 ## Qué no hace esta cuenta
 
-- No usa el Cx, el Crr ni la curva de carga del fabricante. Esos coeficientes se estiman por peso y potencia; en sedanes muy aerodinámicos el CdA sale alto.
+- Sin `dragAreaM2` y `rollingResistance` en el vehículo, CdA y Crr son los estándar de su carrocería, no los del fabricante. La curva de carga tampoco es la del fabricante.
 - No distingue la capacidad útil de la bruta ni la degradación de la batería. Usa `batteryKwh` completo.
 - No modela semáforos uno a uno. El 1,14 del modo físico es el sustituto.
 - No baja el estado de carga por debajo de 0 ni lo deja pasar de 100 al anotar la ruta.
@@ -458,16 +458,24 @@ export function wltpKwhPer100(vehicle: Vehicle): number | null {
   return (vehicle.batteryKwh / vehicle.rangeKm) * 100;
 }
 
+export const BODY_TYPE_PHYSICS: Record<BodyType, { dragAreaM2: number; rollingResistance: number }> = {
+  sedan: { dragAreaM2: 0.55, rollingResistance: 0.009 },
+  suv_compact: { dragAreaM2: 0.75, rollingResistance: 0.009 },
+  suv_large: { dragAreaM2: 0.95, rollingResistance: 0.01 },
+};
+
+export const DEFAULT_BODY_TYPE: BodyType = "suv_compact";
+
+function bodyPhysics(vehicle: Vehicle) {
+  return BODY_TYPE_PHYSICS[vehicle.bodyType ?? DEFAULT_BODY_TYPE] ?? BODY_TYPE_PHYSICS[DEFAULT_BODY_TYPE];
+}
+
 export function dragAreaM2(vehicle: Vehicle): number {
-  const mass = vehicle.weightKg;
-  let cda = 0.62 + (mass - 1500) * 0.00048;
-  const spec = vehicle.motorKw / Math.max(mass, 1);
-  cda -= Math.min(0.07, spec * 0.25);
-  return clamp(cda, 0.5, 0.9);
+  return vehicle.dragAreaM2 ?? bodyPhysics(vehicle).dragAreaM2;
 }
 
 export function rollingCrr(vehicle: Vehicle): number {
-  return clamp(0.009 + Math.max(0, vehicle.weightKg - 1550) * 0.0000011, 0.0084, 0.011);
+  return vehicle.rollingResistance ?? bodyPhysics(vehicle).rollingResistance;
 }
 
 export function drivetrainEff(vehicle: Vehicle): number {

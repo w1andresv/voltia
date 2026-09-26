@@ -1,4 +1,4 @@
-import type { RegenLevel, RouteSample, TripConditions, Vehicle, WeatherSnapshot } from "./types";
+import type { BodyType, RegenLevel, RouteSample, TripConditions, Vehicle, WeatherSnapshot } from "./types";
 import { tripMassKg, safetyPct } from "./types";
 import { bearingDeg, toRad } from "./geo";
 
@@ -114,16 +114,36 @@ export function wltpKwhPer100(vehicle: Vehicle): number | null {
   return (vehicle.batteryKwh / vehicle.rangeKm) * 100;
 }
 
+/**
+ * Valores estándar por carrocería (MVP, fuente "estimated"). Salen de rangos típicos
+ * de eléctricos actuales: sedán Cd 0,23–0,28, SUV compacta 0,27–0,33, SUV grande o
+ * pickup 0,32–0,38, con su área frontal. Cada vehículo puede traer los suyos
+ * (`dragAreaM2`, `rollingResistance`) en el payload del catálogo.
+ */
+export const BODY_TYPE_PHYSICS: Record<BodyType, { dragAreaM2: number; rollingResistance: number }> = {
+  sedan: { dragAreaM2: 0.55, rollingResistance: 0.009 },
+  suv_compact: { dragAreaM2: 0.75, rollingResistance: 0.009 },
+  suv_large: { dragAreaM2: 0.95, rollingResistance: 0.01 },
+};
+
+/** Sin carrocería declarada se asume SUV compacta: la más común entre los eléctricos en Colombia. */
+export const DEFAULT_BODY_TYPE: BodyType = "suv_compact";
+
+function bodyPhysics(vehicle: Vehicle) {
+  return BODY_TYPE_PHYSICS[vehicle.bodyType ?? DEFAULT_BODY_TYPE] ?? BODY_TYPE_PHYSICS[DEFAULT_BODY_TYPE];
+}
+
 export function dragAreaM2(vehicle: Vehicle): number {
-  const mass = vehicle.weightKg;
-  let cda = 0.62 + (mass - 1500) * 0.00048;
-  const spec = vehicle.motorKw / Math.max(mass, 1);
-  cda -= Math.min(0.07, spec * 0.25);
-  return clamp(cda, 0.5, 0.9);
+  return vehicle.dragAreaM2 ?? bodyPhysics(vehicle).dragAreaM2;
 }
 
 export function rollingCrr(vehicle: Vehicle): number {
-  return clamp(0.009 + Math.max(0, vehicle.weightKg - 1550) * 0.0000011, 0.0084, 0.011);
+  return vehicle.rollingResistance ?? bodyPhysics(vehicle).rollingResistance;
+}
+
+/** true si el consumo usa Cd·A o Crr de la tabla por carrocería (valores estimados). */
+export function usesDefaultPhysics(vehicle: Vehicle): boolean {
+  return vehicle.dragAreaM2 == null || vehicle.rollingResistance == null;
 }
 
 export function drivetrainEff(vehicle: Vehicle): number {

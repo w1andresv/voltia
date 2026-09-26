@@ -26,6 +26,7 @@ export const VEHICLE_CATALOG: Vehicle[] = [
     maxSocTravel: 80,
     consumptionKwhPer100km: null,
     consumptionManual: false,
+    bodyType: "suv_compact",
   },
 ];
 
