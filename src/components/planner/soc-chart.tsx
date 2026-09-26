@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { socSeries } from "@/domain/ev/engines/chart/series";
 import type { RoutePlan } from "@/domain/types";
 import { formatKm, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
@@ -9,11 +10,11 @@ export function SocChart({ plan }: { plan: RoutePlan }) {
   const hoverKm = usePlanner((s) => s.hoverKm);
   const data = useMemo(
     () =>
-      plan.samples.map((s) => ({
-        km: Number(s.km.toFixed(1)),
-        soc: Math.max(0, Math.round(s.soc * 10) / 10),
+      socSeries(plan.samples, plan.stops).map((p) => ({
+        km: Number(p.km.toFixed(1)),
+        soc: Math.max(0, Math.round(p.soc * 10) / 10),
       })),
-    [plan.samples],
+    [plan.samples, plan.stops],
   );
 
   return (
@@ -64,22 +65,18 @@ export function SocChart({ plan }: { plan: RoutePlan }) {
             {hoverKm != null ? (
               <ReferenceLine x={Number(hoverKm.toFixed(1))} stroke="rgb(238 242 246 / 0.35)" />
             ) : null}
-            <Area type="monotone" dataKey="soc" stroke="#3ddec8" strokeWidth={1.8} fill="url(#socFill)" />
-            {plan.stops.map((st) => {
-              const sample = plan.samples.reduce((b, s) =>
-                Math.abs(s.km - st.kmAlongRoute) < Math.abs(b.km - st.kmAlongRoute) ? s : b,
-              );
-              return (
-                <ReferenceDot
-                  key={st.charger.id}
-                  x={Number(sample.km.toFixed(1))}
-                  y={Math.max(0, Math.min(100, sample.soc))}
-                  r={4}
-                  fill="#3ddec8"
-                  stroke="#06221d"
-                />
-              );
-            })}
+            <Area type="linear" dataKey="soc" stroke="#3ddec8" strokeWidth={1.8} fill="url(#socFill)" />
+            {plan.stops.map((st) => (
+              // Punto al llegar: la subida vertical que sigue es la carga.
+              <ReferenceDot
+                key={st.charger.id}
+                x={Number(st.kmAlongRoute.toFixed(1))}
+                y={Math.max(0, Math.min(100, st.arriveSoc))}
+                r={4}
+                fill="#3ddec8"
+                stroke="#06221d"
+              />
+            ))}
             {hoverKm != null ? (
               <ReferenceDot
                 x={Number(hoverKm.toFixed(1))}

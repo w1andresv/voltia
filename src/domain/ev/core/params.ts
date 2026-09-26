@@ -57,6 +57,10 @@ export interface ModelParameters {
     /** Planificador v2: minutos de espera supuestos en una estación reportada ocupada. */
     occupiedWaitMin: SourcedValue<number>;
   };
+  chart: {
+    /** Ventana de la gráfica de consumo según el largo de la ruta (especificación §5.10). */
+    windows: { upToKm: number; windowKm: number }[];
+  };
   planning: {
     /** Margen de energía extra al planificar (0 hasta calibrar; plan §3.4). */
     energyMarginPercent: number;
@@ -104,6 +108,13 @@ export const MODEL_PARAMETERS: ModelParameters = {
     belowSafetyFloorPct: 2,
     socGridPct: 1,
     occupiedWaitMin: sourced(15, "estimated", { notes: "Sin datos de ocupación; calibrar." }),
+  },
+  chart: {
+    windows: [
+      { upToKm: 50, windowKm: 1 },
+      { upToKm: 200, windowKm: 2 },
+      { upToKm: Infinity, windowKm: 5 },
+    ],
   },
   planning: {
     energyMarginPercent: 0,

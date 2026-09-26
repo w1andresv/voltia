@@ -4,18 +4,11 @@ import type { StationCatalog } from "@/domain/ports/station-catalog";
 import type { WeatherProvider } from "@/domain/ports/weather";
 import type { ModelParameters } from "@/domain/ev/core/params";
 import { applyElevationProfile, elevationProbes } from "@/domain/ev/engines/elevation/engine";
-import { buildPlan, rankPlans } from "@/domain/planner";
+import { buildPlans, computePlans, type PlanInputs, type PlannerEngine } from "@/domain/ev/compute-plan";
+import { rankPlans } from "@/domain/planner";
 import { stationsNearRoutes } from "@/domain/ev/engines/corridor/engine";
 import { toPlanningCharger } from "@/domain/stations/to-charger";
-import type {
-  PlanRequest,
-  PlanResponse,
-  RawRoute,
-  RoutePlan,
-  RoutingEngine,
-  TripConditions,
-  Vehicle,
-} from "@/domain/types";
+import type { PlanRequest, PlanResponse, RawRoute, RoutePlan, RoutingEngine, TripConditions, Vehicle } from "@/domain/types";
 import { selectRoutes } from "./route-selection";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
 
@@ -107,33 +100,28 @@ export class EVRoutePlanningService {
       .map(toPlanningCharger);
 
     const mode = this.deps.engineMode;
-    const build = (engine: "legacy" | "v2") =>
-      routes.map((raw) =>
-        buildPlan({
-          raw,
-          vehicle: data.vehicle as Vehicle,
-          conditions: data.conditions as TripConditions,
-          chargers,
-          weather: snapshot,
-          origin: data.origin,
-          destination: data.destination,
-          engine,
-        }),
-      );
-    const responding: "legacy" | "v2" = mode === "v2" ? "v2" : "legacy";
-    const built = build(responding);
+    const inputs: PlanInputs = {
+      routes,
+      chargers,
+      weather: snapshot,
+      origin: data.origin,
+      destination: data.destination,
+    };
+    const vehicle = data.vehicle as Vehicle;
+    const conditions = data.conditions as TripConditions;
+    const responding: PlannerEngine = mode === "v2" ? "v2" : "legacy";
+    const { plans: ranked, selectedId } = computePlans(inputs, vehicle, conditions, responding);
     if (mode === "shadow") {
-      logShadow(`${data.origin.label} → ${data.destination.label}`, built, data.conditions.planningMode, () =>
-        build("v2"),
+      logShadow(`${data.origin.label} → ${data.destination.label}`, ranked, conditions.planningMode, () =>
+        buildPlans(inputs, vehicle, conditions, "v2"),
       );
     }
-    const ranked = rankPlans(built, data.conditions.planningMode);
 
     return {
       response: {
         geo: { routes, chargers, weather: snapshot, warnings, stationsVersion: dataset.version, plannerEngine: responding },
         plans: ranked,
-        selectedId: ranked[0]?.id ?? "",
+        selectedId,
       },
       engine: routed.engine,
       chargerCount: chargers.length,

@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import { Mountain, Timer, Zap } from "lucide-react";
-import { consumptionBlocks } from "@/domain/energy";
+import { consumptionBlocks } from "@/domain/ev/engines/chart/series";
 import { ROUTING_ENGINE_LABEL, type RoutePlan } from "@/domain/types";
 import { formatElevation, formatKm, formatKwh, formatKwhPer100, formatMinutes, formatPct } from "@/lib/format";
 

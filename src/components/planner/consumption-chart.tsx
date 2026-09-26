@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import {
   Area,
-  AreaChart,
   CartesianGrid,
+  ComposedChart,
+  Line,
   ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
@@ -10,17 +11,26 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { REGEN_LEVEL_LABEL, type RoutePlan, type RouteSample } from "@/domain/types";
+import { consumptionSeries } from "@/domain/ev/engines/chart/series";
+import { REGEN_LEVEL_LABEL, type RoutePlan } from "@/domain/types";
 import { formatKm, formatKwhPer100 } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 
 const LINE = "#d6b07e";
 
-function seriesFrom(samples: RouteSample[]) {
-  return samples.map((s) => ({
-    km: Number(s.km.toFixed(1)),
-    avg: s.km > 0.3 ? Math.round(s.avgKwhPer100 * 10) / 10 : null as number | null,
-  }));
+const r1 = (n: number | null) => (n == null ? null : Math.round(n * 10) / 10);
+
+/** Solo formatea para el eje: las cifras salen de `consumptionSeries` (dominio). */
+function chartData(plan: RoutePlan) {
+  const series = consumptionSeries(plan.samples);
+  return {
+    windowKm: series.windowKm,
+    rows: series.points.map((p) => ({
+      km: Number(p.km.toFixed(1)),
+      win: r1(p.windowKwhPer100),
+      avg: r1(p.cumulativeKwhPer100),
+    })),
+  };
 }
 
 export function ConsumptionChart({ plan }: { plan: RoutePlan }) {
@@ -28,10 +38,10 @@ export function ConsumptionChart({ plan }: { plan: RoutePlan }) {
   const hoverKm = usePlanner((s) => s.hoverKm);
   const regenLevel = usePlanner((s) => s.conditions.regenLevel);
 
-  const data = useMemo(() => seriesFrom(plan.samples), [plan.samples]);
-  const rates = data.map((d) => d.avg).filter((n): n is number => n != null && n > 0);
+  const { rows: data, windowKm } = useMemo(() => chartData(plan), [plan]);
+  const rates = data.flatMap((d) => [d.win, d.avg]).filter((n): n is number => n != null);
   const peak = rates.length ? Math.max(...rates) : plan.avgKwhPer100km;
-  const floor = rates.length ? Math.min(...rates) : 0;
+  const floor = rates.length ? Math.min(0, ...rates) : 0;
   const mean = plan.avgKwhPer100km;
   const hover =
     hoverKm == null
@@ -41,16 +51,16 @@ export function ConsumptionChart({ plan }: { plan: RoutePlan }) {
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">Consumo promedio acumulado</h3>
+        <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">Consumo por tramo</h3>
         <span className="font-mono text-xs tabular-nums text-muted">{formatKwhPer100(mean)}</span>
       </div>
       <p className="mb-1.5 text-xs text-muted">
-        Energía neta / distancia hasta cada km. Subidas lo suben; la regeneración en bajadas lo baja.
-        Regeneración {REGEN_LEVEL_LABEL[regenLevel].toLowerCase()}.
+        Energía neta cada {windowKm} km (negativa si la bajada regenera más de lo que gasta); la línea punteada es
+        el promedio acumulado. Regeneración {REGEN_LEVEL_LABEL[regenLevel].toLowerCase()}.
       </p>
       <div className="h-36">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
+          <ComposedChart
             data={data}
             margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
             onMouseMove={(state) => {
@@ -69,7 +79,7 @@ export function ConsumptionChart({ plan }: { plan: RoutePlan }) {
             <XAxis dataKey="km" tick={{ fill: "#8b98a8", fontSize: 10 }} axisLine={false} tickLine={false} />
             <YAxis
               width={40}
-              domain={[Math.max(0, Math.floor(floor * 0.85)), Math.max(12, Math.ceil(peak * 1.12))]}
+              domain={[Math.floor(floor < 0 ? floor * 1.12 : 0), Math.max(12, Math.ceil(peak * 1.12))]}
               tick={{ fill: "#8b98a8", fontSize: 10 }}
               axisLine={false}
               tickLine={false}
@@ -77,14 +87,16 @@ export function ConsumptionChart({ plan }: { plan: RoutePlan }) {
             <Tooltip
               content={({ active, payload }) => {
                 if (!active || !payload?.[0]) return null;
-                const d = payload[0].payload as { km: number; avg: number | null };
-                if (d.avg == null) return null;
+                const d = payload[0].payload as { km: number; win: number | null; avg: number | null };
+                if (d.win == null) return null;
                 return (
                   <div className="rounded-md bg-surface-2 px-2.5 py-1.5 text-xs shadow-float">
                     <div>
-                      {formatKm(d.km, 1)} · {formatKwhPer100(d.avg)}
+                      {formatKm(d.km, 1)} · {formatKwhPer100(d.win)}
                     </div>
-                    <div className="text-muted">Promedio acumulado neto</div>
+                    {d.avg != null ? (
+                      <div className="text-muted">Promedio acumulado {formatKwhPer100(d.avg)}</div>
+                    ) : null}
                   </div>
                 );
               }}
@@ -94,18 +106,29 @@ export function ConsumptionChart({ plan }: { plan: RoutePlan }) {
               <ReferenceLine x={Number(hoverKm.toFixed(1))} stroke="rgb(238 242 246 / 0.35)" />
             ) : null}
             <Area
-              type="monotone"
-              dataKey="avg"
+              type="stepAfter"
+              dataKey="win"
               stroke={LINE}
-              strokeWidth={1.8}
+              strokeWidth={1.4}
               fill="url(#avgFill)"
               connectNulls
               isAnimationActive={false}
             />
-            {hover && hover.avg != null ? (
-              <ReferenceDot x={hover.km} y={hover.avg} r={3} fill={LINE} stroke="none" />
+            <Line
+              type="monotone"
+              dataKey="avg"
+              stroke="rgb(238 242 246 / 0.55)"
+              strokeWidth={1.2}
+              strokeDasharray="3 3"
+              dot={false}
+              connectNulls
+              isAnimationActive={false}
+            />
+            <ReferenceLine y={0} stroke="rgb(238 242 246 / 0.2)" />
+            {hover && hover.win != null ? (
+              <ReferenceDot x={hover.km} y={hover.win} r={3} fill={LINE} stroke="none" />
             ) : null}
-          </AreaChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>

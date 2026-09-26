@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { buildPlan, rankPlans } from "@/domain/planner";
+import { computePlans } from "@/domain/ev/compute-plan";
 import { uniqueByProximity } from "@/domain/geo";
 import {
   DEFAULT_CONDITIONS,
@@ -142,19 +142,12 @@ export function rankedPlansFor(
   const destination = s.destination;
   if (!geo?.routes.length || !origin || !destination) return [];
   const vehicle = s.vehicles.find((v) => v.id === s.selectedVehicleId) ?? VEHICLE_CATALOG[0]!;
-  const built = geo.routes.map((raw) =>
-    buildPlan({
-      raw,
-      vehicle,
-      conditions,
-      chargers: geo.chargers,
-      weather: geo.weather,
-      origin,
-      destination,
-      engine: geo.plannerEngine,
-    }),
-  );
-  return rankPlans(built, conditions.planningMode);
+  return computePlans(
+    { routes: geo.routes, chargers: geo.chargers, weather: geo.weather, origin, destination },
+    vehicle,
+    conditions,
+    geo.plannerEngine,
+  ).plans;
 }
 
 function withRecomputedPlans(
