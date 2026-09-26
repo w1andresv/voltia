@@ -17,9 +17,23 @@ export interface SavedTrip {
   summary: TripSummaryShape;
   /** Datos con que se calculó (solo viajes de la cuenta, desde F8): abrirlo no vuelve a consultar proveedores. */
   snapshot?: PlanningSnapshot;
+  /** "¿Con cuánto llegaste?" (D13): lo que el usuario registró al terminar el viaje. */
+  observation?: TripArrivalSummary;
   shared: boolean;
   shareId: string | null;
   createdAt: string;
+}
+
+export interface TripArrivalSummary {
+  /** SOC con que llegó, %. */
+  arrivalSoc: number;
+  /** SOC que el plan predijo para la llegada, %. */
+  predictedArrivalSoc: number;
+  /** Predicho − observado, puntos (positivo: el plan fue optimista). */
+  errorPct: number;
+  /** Consumo observado / predicho, si se pudo calcular. */
+  consumptionRatio?: number;
+  recordedAt: string;
 }
 
 /** `clientId` (uuid) es la clave de idempotencia al migrar del invitado a la cuenta. */

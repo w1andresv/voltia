@@ -4,7 +4,8 @@ import { z } from "zod";
 import { PlanRequestSchema, TripSummarySchema } from "@/domain/schemas";
 import { createPlanningService } from "@/application/container";
 import { parsePlanningSnapshot } from "@/domain/ev/contracts/snapshot";
-import type { SavedTrip } from "@/domain/user/types";
+import { recordArrival } from "@/application/calibration/record-arrival";
+import type { SavedTrip, TripArrivalSummary } from "@/domain/user/types";
 import { requireUser } from "@/infrastructure/auth/server-actor";
 import { createServerSupabase } from "@/infrastructure/supabase/server";
 
@@ -88,7 +89,113 @@ export async function listMyTripsFn(): Promise<SavedTrip[]> {
     .eq("owner_id", actor.id)
     .order("updated_at", { ascending: false });
   if (error) throw new Error(`No se pudo cargar tu historial: ${error.message}`);
-  return (data ?? []).map((row) => toSavedTrip(row as TripRow));
+  const observations = await arrivalSummaries(supabase, actor.id);
+  return (data ?? []).map((row) => {
+    const trip = toSavedTrip(row as TripRow);
+    const obs = observations.get(trip.id);
+    return obs ? { ...trip, observation: obs } : trip;
+  });
+}
+
+const ObservationRowSchema = z.object({
+  trip_id: z.string(),
+  updated_at: z.string(),
+  comparison: z.object({
+    socErrors: z
+      .array(z.object({ predicted: z.number(), observed: z.number(), error: z.number() }))
+      .min(1),
+    consumptionRatio: z.number().optional(),
+  }),
+});
+
+/**
+ * Lo que el usuario registró de cada viaje (D13). Si la tabla aún no existe
+ * (migración 0014 sin aplicar) o la consulta falla, el historial se muestra igual.
+ */
+async function arrivalSummaries(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  ownerId: string | null,
+): Promise<Map<string, TripArrivalSummary>> {
+  const out = new Map<string, TripArrivalSummary>();
+  if (!ownerId) return out;
+  try {
+    const { data, error } = await supabase
+      .from("voltia_trip_observations")
+      .select("trip_id, comparison, updated_at")
+      .eq("owner_id", ownerId);
+    if (error || !data) return out;
+    for (const row of data as unknown[]) {
+      const parsed = ObservationRowSchema.safeParse(row);
+      if (!parsed.success) continue;
+      const last = parsed.data.comparison.socErrors[parsed.data.comparison.socErrors.length - 1]!;
+      out.set(parsed.data.trip_id, {
+        arrivalSoc: last.observed,
+        predictedArrivalSoc: last.predicted,
+        errorPct: last.error,
+        ...(parsed.data.comparison.consumptionRatio != null
+          ? { consumptionRatio: parsed.data.comparison.consumptionRatio }
+          : {}),
+        recordedAt: parsed.data.updated_at,
+      });
+    }
+  } catch {
+    // sin observaciones
+  }
+  return out;
+}
+
+const ArrivalInputSchema = z.object({
+  tripId: z.string().min(1),
+  arrivalSoc: z.number().min(0).max(100),
+  departureSoc: z.number().min(0).max(100).optional(),
+  energyKwh: z.number().positive().max(500).optional(),
+  points: z
+    .array(z.object({ distanceKm: z.number().min(0), socPercent: z.number().min(0).max(100) }))
+    .max(20)
+    .optional(),
+});
+
+/**
+ * "¿Con cuánto llegaste?" (D13): guarda lo que el usuario observó al terminar
+ * un viaje de su cuenta y lo compara con el plan del viaje. Una observación
+ * por viaje: registrarla otra vez la reemplaza.
+ */
+export async function recordArrivalFn(input: { data: unknown }): Promise<TripArrivalSummary> {
+  const actor = await requireUser();
+  const { tripId, ...arrival } = ArrivalInputSchema.parse(input.data);
+  const supabase = await createServerSupabase();
+  const { data: row, error: readError } = await supabase
+    .from("voltia_trips")
+    .select("id, payload, shared, share_id, created_at")
+    .eq("id", tripId)
+    .eq("owner_id", actor.id)
+    .single();
+  if (readError || !row) throw new Error("No se encontró ese viaje.");
+  const trip = toSavedTrip(row as TripRow);
+  const { observation, comparison, predictedArrivalSoc } = recordArrival(trip, arrival);
+  const now = new Date().toISOString();
+  const { error } = await supabase.from("voltia_trip_observations").upsert(
+    {
+      trip_id: trip.id,
+      owner_id: actor.id,
+      payload: observation,
+      comparison,
+      model_version: observation.modelVersion,
+      updated_at: now,
+    },
+    { onConflict: "trip_id" },
+  );
+  if (error) throw new Error(`No se pudo guardar cómo llegaste: ${error.message}`);
+  const last = comparison.socErrors[comparison.socErrors.length - 1]!;
+  return {
+    arrivalSoc: last.observed,
+    predictedArrivalSoc,
+    errorPct: last.error,
+    ...(comparison.consumptionRatio != null
+      ? { consumptionRatio: comparison.consumptionRatio }
+      : {}),
+    recordedAt: now,
+  };
 }
 
 export async function deleteTripFn(input: { data: { id: string } }): Promise<void> {

@@ -26,6 +26,7 @@ function chain(result: unknown) {
     "order",
     "insert",
     "update",
+    "upsert",
     "delete",
     "single",
     "maybeSingle",
@@ -363,5 +364,125 @@ describe("getSharedTripFn", () => {
     const { getSharedTripFn } = await import("./trips");
     const trip = await getSharedTripFn({ data: { shareId: "no-existe" } });
     expect(trip).toBeNull();
+  });
+});
+
+/** Cliente con un resultado por tabla (el historial y las observaciones van en consultas distintas). */
+function tablesClient(results: Record<string, unknown>) {
+  const builders: Record<string, Record<string, unknown>> = {};
+  for (const [table, result] of Object.entries(results)) builders[table] = chain(result);
+  const from = vi.fn(
+    (table: string) => builders[table] ?? chain({ data: null, error: { message: "sin tabla" } }),
+  );
+  return { from, _builders: builders };
+}
+
+describe("recordArrivalFn (D13)", () => {
+  const snapshot = minimalSnapshot();
+  const tripRow = { ...ROW, payload: { request: REQUEST, summary: SUMMARY, snapshot } };
+
+  it("guarda la observación (upsert por viaje) y devuelve la comparación", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const c = tablesClient({
+      voltia_trips: { data: tripRow, error: null },
+      voltia_trip_observations: { data: null, error: null },
+    });
+    createServerSupabase.mockResolvedValueOnce(c);
+    const { recordArrivalFn } = await import("./trips");
+    const out = await recordArrivalFn({ data: { tripId: "trip-1", arrivalSoc: 20 } });
+    expect(out.arrivalSoc).toBe(20);
+    expect(out.errorPct).toBeCloseTo(out.predictedArrivalSoc - 20, 9);
+    const upsert = c._builders.voltia_trip_observations!.upsert as ReturnType<typeof vi.fn>;
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trip_id: "trip-1",
+        owner_id: "user-1",
+        model_version: "0.1.0-legacy",
+      }),
+      { onConflict: "trip_id" },
+    );
+    const saved = upsert.mock.calls[0]![0] as {
+      payload: { observedSoc: unknown[] };
+      comparison: unknown;
+    };
+    expect(saved.payload.observedSoc).toHaveLength(2);
+    expect(saved.comparison).toHaveProperty("socErrors");
+  });
+
+  it("valida el porcentaje y que el viaje sea del usuario", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    const { recordArrivalFn } = await import("./trips");
+    await expect(
+      recordArrivalFn({ data: { tripId: "trip-1", arrivalSoc: 130 } }),
+    ).rejects.toThrow();
+    requireUser.mockResolvedValueOnce(MEMBER);
+    createServerSupabase.mockResolvedValueOnce(
+      tablesClient({ voltia_trips: { data: null, error: { message: "no" } } }),
+    );
+    await expect(recordArrivalFn({ data: { tripId: "otro", arrivalSoc: 30 } })).rejects.toThrow(
+      /No se encontró/,
+    );
+  });
+
+  it("si guardar falla, lo dice", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    createServerSupabase.mockResolvedValueOnce(
+      tablesClient({
+        voltia_trips: { data: tripRow, error: null },
+        voltia_trip_observations: { data: null, error: { message: "relation does not exist" } },
+      }),
+    );
+    const { recordArrivalFn } = await import("./trips");
+    await expect(recordArrivalFn({ data: { tripId: "trip-1", arrivalSoc: 30 } })).rejects.toThrow(
+      /cómo llegaste/,
+    );
+  });
+});
+
+describe("listMyTripsFn con observaciones (D13)", () => {
+  it("agrega a cada viaje lo que el usuario registró", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    createServerSupabase.mockResolvedValueOnce(
+      tablesClient({
+        voltia_trips: { data: [ROW], error: null },
+        voltia_trip_observations: {
+          data: [
+            {
+              trip_id: "trip-1",
+              updated_at: "2026-09-26T00:00:00Z",
+              comparison: {
+                socErrors: [
+                  { predicted: 80, observed: 80, error: 0 },
+                  { predicted: 22, observed: 18, error: 4 },
+                ],
+                consumptionRatio: 1.07,
+              },
+            },
+            { trip_id: "roto", comparison: {} },
+          ],
+          error: null,
+        },
+      }),
+    );
+    const { listMyTripsFn } = await import("./trips");
+    const [trip] = await listMyTripsFn();
+    expect(trip!.observation).toEqual({
+      arrivalSoc: 18,
+      predictedArrivalSoc: 22,
+      errorPct: 4,
+      consumptionRatio: 1.07,
+      recordedAt: "2026-09-26T00:00:00Z",
+    });
+  });
+
+  it("si la tabla de observaciones aún no existe, el historial carga igual", async () => {
+    requireUser.mockResolvedValueOnce(MEMBER);
+    createServerSupabase.mockResolvedValueOnce(
+      tablesClient({ voltia_trips: { data: [ROW], error: null } }),
+    );
+    const { listMyTripsFn } = await import("./trips");
+    const trips = await listMyTripsFn();
+    expect(trips).toHaveLength(1);
+    expect(trips[0]!.observation).toBeUndefined();
   });
 });

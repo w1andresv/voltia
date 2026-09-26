@@ -109,6 +109,7 @@ Un valor inválido en `PLANNER_ENGINE`, `ENERGY_ENGINE` o `ELEVATION_SOURCE` cae
 | `npm run test:coverage` | Cobertura con umbrales 80/80/80/70 (CI) | No |
 | `npm run build` | Build de producción | No |
 | `npm run elevation:compare` | Compara las tres fuentes de elevación sobre una ruta real (`ORIGIN=lat,lon DESTINATION=lat,lon` opcionales) | Mapbox y Open-Meteo |
+| `npm run calibration:report` | Error del modelo según lo que anotaron los usuarios (D13), por modelo y vehículo | Base (solo lectura) |
 | `npm run report` | Informe del plan (§8.5) en `docs/arquitectura-ev/informes/`; sintético por defecto, `REAL=1` con Mapbox | Sin red (sintético) o Mapbox |
 | `npm run snapshot:record` | Graba la cassette real (opcional, P1 omitido; `STATIONS_URL` evita la base) | Mapbox, Open-Meteo y base o API |
 
@@ -138,7 +139,7 @@ Cada una desbloquea algo. Cuando se tome, va a un ADR (o se actualiza el que se 
 | D8 ✅ | Tabla de velocidad por clase vial cuando no hay límite — **decidido: tabla propuesta (90/80/60/50/40)** | Valores de la normativa colombiana vigente | Confirmar con la normativa y marcar `configurable` | F5 | `ModelParameters.speed` |
 | D9 ✅ | Datos de Blaze — **decidido: solo electrolineras (listado + detalle por estación)** | Qué endpoints hay y qué reemplazan | Llenar la tabla de §5.7 | FB | ADR-0008 |
 | D10 ✅ | Cómo se une `engine-v2` a `main` — **decidido: merge commit** | Merge commit o squash | Merge commit: conserva un commit por fase y los ADR citan esos commits | F9 | ADR-0001 |
-| D13 | Cómo registra el usuario un viaje real para calibrar | Al terminar el viaje, un botón "¿Con cuánto llegaste?" (SOC de llegada, y opcionalmente intermedios), o importar datos del vehículo (API del fabricante, OBD) | Empezar con el SOC de llegada en "Mis viajes" (una tabla nueva `voltia_trip_observations`); importar después | Calibración (§5.8) | Nuevo ADR |
+| D13 ✅ | Cómo registra el usuario un viaje real para calibrar — **decidido: "¿Con cuánto llegaste?" en Mis viajes** | Al terminar el viaje, un botón "¿Con cuánto llegaste?" (SOC de llegada, y opcionalmente intermedios), o importar datos del vehículo (API del fabricante, OBD) | Empezar con el SOC de llegada en "Mis viajes" (una tabla nueva `voltia_trip_observations`); importar después | Calibración (§5.8) | Nuevo ADR |
 | D11 ✅ | Espera en estación "ocupada" — **decidido: 15 min hasta tener datos** | 15 min (hoy, estimado) o calibrado | Mantener hasta tener datos de ocupación (Blaze) | F7 | `ModelParameters.planner.occupiedWaitMin` |
 
 ---
@@ -157,10 +158,11 @@ Cada una desbloquea algo. Cuando se tome, va a un ADR (o se actualiza el que se 
 | D8 | 2026-09-26 | **Tope por tipo de vía cuando no hay límite:** primaria 90, secundaria 80, terciaria 60, local/urbana 50, sin pavimentar 40 km/h; fuente `configurable`, ajustable en `ModelParameters.speed.defaultByRoadTier` | §5.3.4 tiene los valores; sigue pendiente confirmar contra la normativa vigente al implementarlo |
 | D9 | 2026-09-26 | **Blaze solo para electrolineras:** un endpoint con el listado y otro con el detalle de cada una, que se pide solo para las estaciones usadas en la ruta cuando haga falta. Rutas, elevación, clima, geocodificación y vehículos siguen con los proveedores actuales | §5.7 se reduce a `BlazeStationCatalog` (listado) y un puerto de detalle; ya no hacen falta `VehicleCatalog` ni adaptadores de rutas o clima. Falta el formato exacto de los dos endpoints (O5) |
 | D10 | 2026-09-26 | **Merge commit** para unir `engine-v2` a `main` | Se conserva un commit por fase; §5.10 paso 10 usa merge commit |
+| D13 | 2026-09-26 | **"¿Con cuánto llegaste?" en Mis viajes**: el usuario anota el SOC de llegada (y opcionalmente el de salida) de un viaje de su cuenta; se guarda en `voltia_trip_observations` y se compara con el plan | §5.8 implementado (ADR-0014); aplicar la migración 0014 (O8) |
 | D12 | 2026-09-26 | **Caché de elevación por el máximo tiempo posible** (pedido: "en cookies"). Se implementó en el servidor, sin vencimiento: la Data Cache de Next con `revalidate: false`, que persiste entre peticiones y despliegues y es compartida por todos los usuarios. Las cookies no sirven: ~4 KB cada una frente a ~100–150 KB por tesela, viajan en cada petición y el navegador no consulta la elevación (lo hace el servidor) | Teselas de Mapbox y consultas de Open-Meteo sin vencimiento (`CACHE_FOREVER` en `http.ts`). Los viajes guardados ya llevan la elevación en su snapshot |
 | D11 | 2026-09-26 | **Espera en estación ocupada: 15 min (estimado)** hasta tener datos | Cuando el detalle de Blaze dé estado por conector, se revisa (p. ej. sin espera si hay otro conector compatible libre) |
 
-**Las decisiones D1–D12 están tomadas; D13 (calibración) quedó abierta en la sesión D.** Lo que queda abierto depende de datos o de acciones: el tileset y el costo de Mapbox (O4, O6), el cierre del periodo de sombra (O3 → D2), cuándo activar la energía v2 (el dueño, D3) y el formato de los endpoints de Blaze (O5).
+**Todas las decisiones (D1–D13) están tomadas.** Lo que queda abierto depende de datos o de acciones: el tileset y el costo de Mapbox (O4, O6), el cierre del periodo de sombra (O3 → D2), cuándo activar la energía v2 (el dueño, D3) y el formato de los endpoints de Blaze (O5).
 
 ## 4. Tareas operativas (sin código)
 
@@ -205,6 +207,9 @@ Exportar la especificación de la API (OpenAPI/JSON, PDF o capturas) a `docs/bla
 
 ### O6 · Plan de Mapbox
 Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terreno). Anotar los números en el ADR-0011.
+
+### O8 · Aplicar la migración 0014 (calibración)
+`npm run db:migrate` en tu computador (con `.env.local`). Crea la tabla `voltia_trip_observations` y su seguridad por fila, y **escribe en el esquema de producción**. Hasta que se aplique, el botón "¿Con cuánto llegaste?" muestra un error al guardar; el resto de la app no cambia. Para ver los resultados: `npm run calibration:report`.
 
 ### O7 · Seed del catálogo (cuando se quiera)
 `npm run db:seed` **escribe en producción**: solo cuando haya cambios del catálogo que se quieran publicar (por ejemplo, parámetros físicos por vehículo de §5.3.6).
@@ -464,9 +469,11 @@ Rutas, elevación, clima, geocodificación y vehículos siguen con los proveedor
 10. **ESLint:** nada fuera de `src/infrastructure/` y `container.ts` importa `@/infrastructure/blaze/*`. La regla actual ya lo cubre; verificarlo con un import de prueba.
 11. **Limpieza (F9):** con `DATA_SOURCE=blaze` estable, borrar las fuentes que Blaze reemplaza en `src/infrastructure/stations/sources/*`, la fusión (`src/domain/stations/merge.ts`, `src/infrastructure/stations/registry.ts`) y el cron de refresco del dataset, si ya no se usan.
 
-### 5.8 Calibración (`TripObservation`) — 🟡 contrato hecho (sesión D); falta dónde se guarda y cómo lo carga el usuario (D13)
+### 5.8 Calibración (`TripObservation`) — ✅ contrato y registro hechos (sesiones D y E, ADR-0014); falta el ajuste automático cuando haya datos
 
-> **Sesión D (2026-09-26):** `src/domain/ev/contracts/calibration.ts` define `TripObservation` y su esquema zod (plan, modelo, vehículo, condiciones y al menos dos SOC observados). También define `compareObservation`, que calcula el error de SOC en cada punto, el error medio y máximo, el error de energía y la razón de consumo observado/predicho. La tabla, la acción y la pantalla (pasos 2 y 3) esperan D13.
+> **Sesión D (2026-09-26):** `src/domain/ev/contracts/calibration.ts` define `TripObservation` y su esquema zod (plan, modelo, vehículo, condiciones y al menos dos SOC observados). También define `compareObservation`, que calcula el error de SOC en cada punto, el error medio y máximo, el error de energía y la razón de consumo observado/predicho. 
+>
+> **Sesión E (2026-09-26, D13):** "¿Con cuánto llegaste?" en Mis viajes, con la tabla `voltia_trip_observations` (migración 0014), `recordArrivalFn`, `record-arrival.ts` y `npm run calibration:report`. Falta aplicar la migración (O8) y, con suficientes viajes, el ajuste automático de parámetros (paso 3).
 
 
 - **Contexto:** la especificación §9 define solo el contrato de datos. Casi todos los parámetros físicos son `estimated`; la calibración los vuelve `calculated`.

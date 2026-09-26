@@ -1,14 +1,24 @@
 "use client";
 
+import { useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Link2, Route as RouteIcon, Trash2 } from "lucide-react";
+import { BatteryCharging, Link2, Route as RouteIcon, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { shareTripFn, type SavedTrip } from "@/server/actions/trips";
+import { recordArrivalFn, shareTripFn, type SavedTrip } from "@/server/actions/trips";
+import { arrivalText } from "@/lib/arrival-text";
 import { formatKm, formatMinutes, formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useSavedTrips } from "@/components/user/user-context";
 
 /**
@@ -87,7 +97,9 @@ export function MyTripsDialog() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted">Todavía no has guardado ningún viaje. Usa "Guardar ruta" en los resultados de una ruta.</p>
+          <p className="text-sm text-muted">
+            Todavía no has guardado ningún viaje. Usa "Guardar ruta" en los resultados de una ruta.
+          </p>
         )}
       </DialogContent>
     </Dialog>
@@ -120,7 +132,8 @@ function TripRow({
           </div>
           <div className="font-mono text-xs tabular-nums text-muted">
             {formatKm(trip.summary.distanceKm)} · {formatMinutes(trip.summary.totalMinutes)} ·{" "}
-            {trip.summary.stops} {trip.summary.stops === 1 ? "parada" : "paradas"} · llega {formatPct(trip.summary.arrivalSoc)}
+            {trip.summary.stops} {trip.summary.stops === 1 ? "parada" : "paradas"} · llega{" "}
+            {formatPct(trip.summary.arrivalSoc)}
           </div>
         </div>
       </div>
@@ -140,6 +153,105 @@ function TripRow({
           Borrar
         </Button>
       </div>
+      {canShare ? <ArrivalFeedback trip={trip} /> : null}
     </li>
+  );
+}
+
+/**
+ * "¿Con cuánto llegaste?" (D13): el usuario anota el SOC de llegada (y, si
+ * quiere, el de salida) de un viaje de su cuenta. Sirve para calibrar el
+ * modelo; se puede corregir después.
+ */
+function ArrivalFeedback({ trip }: { trip: SavedTrip }) {
+  const [open, setOpen] = useState(false);
+  const [arrival, setArrival] = useState("");
+  const [departure, setDeparture] = useState("");
+  const queryClient = useQueryClient();
+  const mut = useMutation({
+    mutationFn: (data: { arrivalSoc: number; departureSoc?: number }) =>
+      recordArrivalFn({ data: { tripId: trip.id, ...data } }),
+    onSuccess: (summary) => {
+      toast.success("Gracias, quedó registrado.", { description: arrivalText(summary) });
+      setOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["user-data"] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar cómo llegaste.");
+    },
+  });
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    const a = Number(arrival.replace(",", "."));
+    const d = departure.trim() ? Number(departure.replace(",", ".")) : undefined;
+    if (
+      !Number.isFinite(a) ||
+      a < 0 ||
+      a > 100 ||
+      (d != null && (!Number.isFinite(d) || d < 0 || d > 100))
+    ) {
+      toast.error("Escribe un porcentaje entre 0 y 100.");
+      return;
+    }
+    mut.mutate({ arrivalSoc: a, ...(d != null ? { departureSoc: d } : {}) });
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+        {trip.observation ? <span>{arrivalText(trip.observation)}</span> : null}
+        <Button size="sm" variant="ghost" className="h-9" onClick={() => setOpen(true)}>
+          <BatteryCharging className="size-4" />
+          {trip.observation ? "Corregir" : "¿Con cuánto llegaste?"}
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <form
+      onSubmit={submit}
+      className="mt-2 grid grid-cols-2 gap-2 rounded-md border border-border p-2"
+    >
+      <div>
+        <Label htmlFor={`arrival-${trip.id}`}>Batería al llegar (%)</Label>
+        <Input
+          id={`arrival-${trip.id}`}
+          inputMode="decimal"
+          required
+          autoFocus
+          value={arrival}
+          onChange={(e) => setArrival(e.target.value)}
+          placeholder={String(Math.round(trip.summary.arrivalSoc))}
+        />
+      </div>
+      <div>
+        <Label htmlFor={`departure-${trip.id}`}>Batería al salir (%, opcional)</Label>
+        <Input
+          id={`departure-${trip.id}`}
+          inputMode="decimal"
+          value={departure}
+          onChange={(e) => setDeparture(e.target.value)}
+          placeholder={String(Math.round(trip.request.conditions.initialSoc))}
+        />
+      </div>
+      <p className="col-span-2 text-xs text-muted">
+        Nos ayuda a ajustar el cálculo del consumo con viajes reales. Solo lo ves tú.
+      </p>
+      <div className="col-span-2 flex gap-2">
+        <Button type="submit" size="sm" className="h-10" disabled={mut.isPending}>
+          Guardar
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-10"
+          onClick={() => setOpen(false)}
+        >
+          Cancelar
+        </Button>
+      </div>
+    </form>
   );
 }
