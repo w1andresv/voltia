@@ -14,7 +14,7 @@ export type SafetyMode = "conservative" | "normal" | "low" | "custom";
 export type RegenLevel = RegenLevelShape;
 export type PlanningMode = "fastest" | "efficient" | "fewer_stops" | "safer" | "custom";
 export type EnergyMode = "manual" | "estimated";
-export type ChargerSource = "osm" | "catalog" | "community" | "plugshare";
+export type ChargerSource = "osm" | "catalog" | "community" | "plugshare" | "siveeic";
 export type StationStatus = "pending" | "approved" | "rejected";
 export type StationAvailability = "unknown" | "available" | "occupied" | "offline";
 export type RoutingEngine = "mapbox-traffic" | "mapbox" | "osrm";
@@ -251,6 +251,8 @@ export interface GeoBundle {
   chargers: Charger[];
   weather: WeatherSnapshot | null;
   warnings: string[];
+  /** Versión del dataset consolidado de electrolineras usado para este plan. */
+  stationsVersion?: string;
 }
 
 export interface PlanRequest {
@@ -281,6 +283,7 @@ export const CHARGER_SOURCE_LABEL: Record<ChargerSource, string> = {
   catalog: "Catálogo del operador",
   community: "Comunidad",
   plugshare: "PlugShare",
+  siveeic: "SIVEEIC (MinEnergía)",
 };
 
 export const STATION_STATUS_LABEL: Record<StationStatus, string> = {
@@ -360,7 +363,7 @@ export function isVerifiedForPlanning(c: Charger): boolean {
   if (c.access === "private") return false;
   if (c.status === "rejected" || c.status === "pending") return false;
   if (c.source === "community") return c.status === "approved";
-  if (c.source === "osm" || c.source === "plugshare") return true;
+  if (c.source === "osm" || c.source === "plugshare" || c.source === "siveeic") return true;
   if (c.source === "catalog") return c.verified === true;
   return false;
 }

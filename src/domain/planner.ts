@@ -33,7 +33,7 @@ import {
 
 const MAX_STOPS = 7;
 const PREFERRED_FROM_ROUTE_KM = 5;
-const MAX_FROM_ROUTE_KM = 12;
+export const MAX_FROM_ROUTE_KM = 12;
 const MIN_PROGRESS_KM = 4;
 const DETOUR_SPEED_KMH = 50;
 const FLAT_CURVE = [
@@ -161,6 +161,7 @@ function scoreCharger(
   const price = cand.charger.pricePerKwh?.amount;
   if (price && price > 0) s += Math.min(18, price * 0.35);
   if (cand.charger.source === "plugshare") s -= 4;
+  if (cand.charger.source === "siveeic") s -= 3;
   if (cand.charger.source === "osm") s -= 2;
   return s;
 }
