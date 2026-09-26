@@ -140,11 +140,23 @@ describe("EVRoutePlanningService", () => {
     const { response } = await new EVRoutePlanningService(deps({ engineMode: "shadow" })).plan(request);
     expect(response.geo.plannerEngine).toBe("legacy");
     expect(response.plans.every((p) => p.planner === "legacy")).toBe(true);
-    const shadow = log.mock.calls.find(([tag]) => tag === "[plan-trip:shadow]");
-    expect(shadow).toBeDefined();
-    const payload = JSON.parse(String(shadow![1])) as { routes: { stops: number[] }[] };
-    expect(payload.routes).toHaveLength(response.plans.length);
+    // Fuera de producción: tabla legible.
+    const text = log.mock.calls.map(([first]) => String(first)).find((t) => t.startsWith("[plan-trip:shadow]"));
+    expect(text).toContain("Piedecuesta → Vélez · más rápida");
+    expect(text).toContain("Elegida: actual");
     log.mockRestore();
+  });
+
+  it("modo sombra en producción: JSON de una línea", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { response } = await new EVRoutePlanningService(deps({ engineMode: "shadow" })).plan(request);
+    const call = log.mock.calls.find(([tag]) => tag === "[plan-trip:shadow]");
+    const payload = JSON.parse(String(call![1])) as { routes: unknown[]; mode: string };
+    expect(payload.routes).toHaveLength(response.plans.length);
+    expect(payload.mode).toBe("fastest");
+    log.mockRestore();
+    vi.unstubAllEnvs();
   });
 
   it("modo v2: responde con el planificador nuevo", async () => {

@@ -17,6 +17,7 @@ import type {
   Vehicle,
 } from "@/domain/types";
 import { selectRoutes } from "./route-selection";
+import { buildShadowReport, formatShadowReport } from "./shadow-report";
 
 /**
  * `legacy`: planificador actual. `v2`: planificador por programación dinámica (F7).
@@ -39,31 +40,30 @@ export interface PlanResult {
   chargerCount: number;
 }
 
-const r1 = (n: number) => Math.round(n * 10) / 10;
-
 /**
  * Modo sombra: el planificador v2 corre al lado del actual y se registra en qué
- * difieren, sin afectar la respuesta. Un error del v2 solo se registra.
+ * difieren, sin afectar la respuesta. En desarrollo como tabla legible; en
+ * producción como JSON de una línea. Un error del v2 solo se registra.
  */
-function logShadow(legacy: RoutePlan[], mode: TripConditions["planningMode"], runV2: () => RoutePlan[]): void {
+function logShadow(
+  trip: string,
+  legacy: RoutePlan[],
+  mode: TripConditions["planningMode"],
+  runV2: () => RoutePlan[],
+): void {
   try {
     const t0 = Date.now();
     const v2 = runV2();
-    const routes = legacy.map((a, i) => {
-      const b = v2[i]!;
-      return {
-        id: a.id,
-        feasible: [a.feasible, b.feasible],
-        stops: [a.stops.length, b.stops.length],
-        totalMinutes: [Math.round(a.totalMinutes), Math.round(b.totalMinutes)],
-        arrivalSoc: [r1(a.arrivalSoc), r1(b.arrivalSoc)],
-        minSoc: [r1(a.minSoc), r1(b.minSoc)],
-        status: b.feasibilityStatus,
-      };
+    const report = buildShadowReport({
+      trip,
+      mode,
+      ms: Date.now() - t0,
+      legacy,
+      v2,
+      selected: [rankPlans(legacy, mode)[0]?.id, rankPlans(v2, mode)[0]?.id],
     });
-    const bestLegacy = rankPlans(legacy, mode)[0]?.id;
-    const bestV2 = rankPlans(v2, mode)[0]?.id;
-    console.log("[plan-trip:shadow]", JSON.stringify({ ms: Date.now() - t0, selected: [bestLegacy, bestV2], routes }));
+    if (process.env.NODE_ENV === "production") console.log("[plan-trip:shadow]", JSON.stringify(report));
+    else console.log(formatShadowReport(report));
   } catch (error) {
     console.error("[plan-trip:shadow] v2 falló", error instanceof Error ? error.message : String(error));
   }
@@ -122,7 +122,11 @@ export class EVRoutePlanningService {
       );
     const responding: "legacy" | "v2" = mode === "v2" ? "v2" : "legacy";
     const built = build(responding);
-    if (mode === "shadow") logShadow(built, data.conditions.planningMode, () => build("v2"));
+    if (mode === "shadow") {
+      logShadow(`${data.origin.label} → ${data.destination.label}`, built, data.conditions.planningMode, () =>
+        build("v2"),
+      );
+    }
     const ranked = rankPlans(built, data.conditions.planningMode);
 
     return {
