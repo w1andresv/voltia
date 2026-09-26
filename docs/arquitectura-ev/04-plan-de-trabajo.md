@@ -155,10 +155,43 @@ Dividida en dos (ADR-0006).
   - [ ] `engines/chart/series.ts`: ventanas con prorrateo; `consumption-chart.tsx` solo dibuja.
   - [ ] `legacy-adapter.ts` (`EVRoutePlan → RoutePlan`) para la UI actual.
   - [ ] `PlanningSnapshot` (plan §3.2) en lugar de `GeoBundle`, con migración del store persistido (ADR-0006).
-- [ ] Viajes guardados con su snapshot y `modelVersion`.
+  - [ ] Viajes guardados con su snapshot y `modelVersion`.
   - [ ] `PLANNER_ENGINE=v2`.
 - **Cierre:** Piedecuesta → Vélez de extremo a extremo (plan §7) con las invariantes de la especificación §8.4 y el informe §8.5.
 - **Especificación:** F7 y F8.
+
+### FB · Fuente de datos Blaze (Muvatec)
+
+- **Objetivo:** que Blaze sea la única fuente de datos, sin que el dominio lo sepa (ADR-0008).
+- **Bloqueo:** la documentación (`blaze.muvatec.com/?screen=admin&adminTab=apidocs`) no se puede leer desde el entorno de desarrollo: el proxy bloquea el dominio y la pantalla es del panel de administración. Hace falta habilitar el dominio o exportar la especificación (OpenAPI/JSON o PDF) a `docs/blaze/`, sin credenciales.
+- **Correspondencia (llenar al leer la documentación):**
+
+  | Dato | Puerto actual | Fuente actual | Endpoint de Blaze | Notas |
+  |---|---|---|---|---|
+  | Estaciones y conectores | `StationCatalog` | OSM, SIVEEIC, comunidad, catálogo (fusión) | ? | tipo, potencia, AC/DC, cantidad |
+  | Disponibilidad en vivo | — (nuevo `StationAvailability`) | SIVEEIC (parcial) | ? | por estación o por conector |
+  | Precios | dentro de `StationCatalog` | SIVEEIC | ? | |
+  | Vehículos (curva, batería, Cd·A, Crr) | — (nuevo `VehicleCatalog`) | Postgres (seed) | ? | |
+  | Rutas | `RoutingProvider` | Mapbox / OSRM | ? | alternativas, peajes, clase vial |
+  | Elevación | `ElevationProvider` | Open-Meteo | ? | |
+  | Clima | `WeatherProvider` | Open-Meteo | ? | |
+  | Geocodificación | `GeocodingProvider` | Photon | ? | |
+
+- **Tareas:**
+  - [ ] `infrastructure/blaze/client.ts`: `BLAZE_API_URL` y `BLAZE_API_KEY` en `getEnv()`; timeouts, reintentos, caché (`unstable_cache` con TTL por recurso); la credencial no sale en logs ni errores.
+  - [ ] `infrastructure/blaze/schemas.ts` (zod de las respuestas) y `mappers.ts` (puros, con procedencia `source: "blaze"`).
+  - [ ] `BlazeStationCatalog implements StationCatalog`. Primero, porque es lo que el planificador más necesita.
+  - [ ] Puertos nuevos según la tabla: `VehicleCatalog`, `StationAvailability`. Solo si Blaze los cubre.
+  - [ ] Adaptadores de rutas, elevación, clima y geocodificación solo si Blaze los ofrece; si no, se quedan los actuales.
+  - [ ] `DATA_SOURCE = legacy | blaze` en `container.ts`, por defecto `legacy`; `blaze` sin credencial cae a `legacy` con aviso.
+  - [ ] Fixtures grabados de Blaze sin secretos (`assertNoSecrets`) y un test de contrato de cada mapper.
+  - [ ] Caracterización con `DATA_SOURCE=blaze`: mismas invariantes que con los datos actuales (las estaciones cambian; la lógica no).
+- **Cierre:** con `DATA_SOURCE=blaze` el planificador corre de extremo a extremo; ESLint confirma que nada fuera de `infrastructure/` y `container.ts` importa `infrastructure/blaze`.
+- **Encaje con las demás fases:**
+  - **F8:** `PlanningSnapshot` guarda la versión del dataset de Blaze.
+  - **F5:** si Blaze trae parámetros físicos por vehículo, reemplazan los del seed (`SourcedValue` con origen `blaze`).
+  - **F2b:** si Blaze trae elevación, la malla la pide a `ElevationProvider` sin cambios.
+  - **F9:** se borran la fusión y las fuentes que Blaze reemplace.
 
 ### F9 · Limpieza
 
@@ -179,8 +212,9 @@ Dividida en dos (ADR-0006).
 | F7 | F6 |
 | F8 | F7 y F8 |
 | F9 | — (limpieza final) |
+| FB | — (fuente de datos Blaze, ADR-0008) |
 
-**Orden recomendado:** F1 → F2 → F3 → F4 → F7 → F5 → F6 → F8 → F9. F3, F4 y F7 corrigen casi todo lo que afecta la seguridad sin cambiar el consumo. F5 y F6 cambian los números y conviene hacerlas con el modo sombra ya activo.
+**Orden recomendado:** F1 → F2 → F3 → F4 → F7 → F5 → F6 → F8 → F9. FB (Blaze) va en paralelo apenas se pueda leer la documentación, empezando por `BlazeStationCatalog`, y antes de F9, que borra las fuentes que Blaze reemplace. F3, F4 y F7 corrigen casi todo lo que afecta la seguridad sin cambiar el consumo. F5 y F6 cambian los números y conviene hacerlas con el modo sombra ya activo.
 
 ## 6. Estado
 
@@ -196,6 +230,7 @@ Dividida en dos (ADR-0006).
 | F7 | ✅ Hecha detrás de `PLANNER_ENGINE` (por defecto `legacy`) | ver `git log --grep "^F7:"` |
 | F8 | Pendiente | — |
 | F9 | Pendiente | — |
+| FB | Diseño listo (ADR-0008, propuesta); bloqueado por la documentación de Blaze | — |
 
 ## 7. Mensaje para abrir la sesión de una fase
 
