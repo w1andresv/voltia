@@ -1,4 +1,4 @@
-import type { RoadMix } from "./road-hierarchy";
+import type { RoadMix, RoadTier } from "./road-hierarchy";
 import type { FeasibilityStatus, InfeasibilityReason } from "./ev/engines/feasibility/engine";
 import type {
   VehicleShape,
@@ -49,6 +49,8 @@ export interface RouteSample {
   speedKmh: number;
   /** Límite legal del tramo que llega a esta muestra (el menor), si el proveedor lo informa (F5). */
   speedLimitKmh?: number;
+  /** Clase vial predominante del tramo que llega a esta muestra, si el proveedor la informa (F5). */
+  roadTier?: RoadTier;
   energyKwh: number;
   energyGrossKwh: number;
   energyRegenKwh: number;
@@ -206,6 +208,12 @@ export interface RawRoute {
   minorRoadScore?: number;
   /** Motor que calculó geometría y distancia. */
   engine?: RoutingEngine;
+  /**
+   * Km de cada punto intermedio (fin de cada tramo salvo el último), en el eje
+   * de las muestras. Ahí el perfil de velocidad v2 se detiene (F5). Solo con
+   * puntos intermedios.
+   */
+  legBoundariesKm?: number[];
 }
 
 export interface DepartureCharge {

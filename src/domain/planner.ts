@@ -1,13 +1,27 @@
 import { compareByHierarchy } from "./road-hierarchy";
 import { FLAT_CURVE, chargeTimeMinutes, lerpFactor } from "./ev/engines/charging/curve";
-import { routePlugs, routeSocket, uncarriedAdapterPlugs, type RoutePlug } from "./ev/engines/compatibility/engine";
-import { planCharging, requiredInitialCharge, type PlannerInput, type PlannerNode } from "./ev/engines/charging/planner";
-import { classifyFeasibility, type FeasibilityStatus, type InfeasibilityReason } from "./ev/engines/feasibility/engine";
+import {
+  routePlugs,
+  routeSocket,
+  uncarriedAdapterPlugs,
+  type RoutePlug,
+} from "./ev/engines/compatibility/engine";
+import {
+  planCharging,
+  requiredInitialCharge,
+  type PlannerInput,
+  type PlannerNode,
+} from "./ev/engines/charging/planner";
+import {
+  classifyFeasibility,
+  type FeasibilityStatus,
+  type InfeasibilityReason,
+} from "./ev/engines/feasibility/engine";
 import { toTripConfiguration } from "./ev/core/trip-config";
 import { kwhToSocPct } from "./ev/core/units";
 import { placeOnRoute } from "./ev/engines/corridor/engine";
 import { STYLE_SPEED_FACTOR, annotateEnergy, energyMode, segmentEnergyKwh } from "./energy";
-import { energyProfileForRoute, type EnergyEngine } from "./ev/energy-v2";
+import { detourEnergyV2, energyProfileForRoute, type EnergyEngine } from "./ev/energy-v2";
 import type { EnergySample } from "./ev/contracts/energy";
 import type { SocEvent } from "./ev/contracts/soc";
 import { legSoc, requiredStartSoc, simulateSoc, walkSoc } from "./ev/engines/soc/simulate";
@@ -52,21 +66,40 @@ function rangeFromEnergy(vehicle: Vehicle, kwh: number): number {
   return (kwh / vehicle.batteryKwh) * vehicle.rangeKm;
 }
 
-
-
 type EnergyCtx = {
   vehicle: Vehicle;
   conditions: TripConditions;
   weather: WeatherSnapshot | null;
   originAltitudeM?: number;
+  /** Energía del desvío hasta un cargador y de parar en él (energía v2); sin ella, el cálculo anterior. */
+  detourKwh?: DetourEnergy;
 };
 
+/** kWh de ir y volver `detourKm` desde la muestra `sIdx`, incluida la parada. */
+export type DetourEnergy = (detourKm: number, sIdx: number) => number;
+
+function detourEnergyKwh(
+  ctx: EnergyCtx,
+  detourKm: number,
+  sIdx: number,
+  samples: EnergySample[],
+): number {
+  if (ctx.detourKwh) return ctx.detourKwh(detourKm, sIdx);
+  return segmentEnergyKwh(detourKm, 0, DETOUR_SPEED_KMH, ctx, { altitudeM: samples[sIdx]?.elevM });
+}
+
 /** Estaciones verificadas ubicadas sobre la ruta por el corredor (D7). */
-function placeChargers(chargers: Charger[], samples: { lat: number; lon: number; km: number }[]): Charger[] {
+function placeChargers(
+  chargers: Charger[],
+  samples: { lat: number; lon: number; km: number }[],
+): Charger[] {
   return placeOnRoute(
     chargers.filter((c) => isVerifiedForPlanning(c)),
     samples,
-    { maxKm: MAX_FROM_ROUTE_KM, detourRoadFactor: MODEL_PARAMETERS.corridor.detourRoadFactor.value },
+    {
+      maxKm: MAX_FROM_ROUTE_KM,
+      detourRoadFactor: MODEL_PARAMETERS.corridor.detourRoadFactor.value,
+    },
   );
 }
 
@@ -145,9 +178,7 @@ function arriveAt(
 ): { arrive: number; lowest: number; detourKwh: number; sIdx: number } | null {
   const sIdx = charger.nearestSampleIndex ?? 0;
   if (sIdx <= fromIdx) return null;
-  const detourKwh = segmentEnergyKwh(charger.detourKm ?? 0, 0, DETOUR_SPEED_KMH, ctx, {
-    altitudeM: samples[sIdx]?.elevM,
-  });
+  const detourKwh = detourEnergyKwh(ctx, charger.detourKm ?? 0, sIdx, samples);
   const leg = legSoc(samples, fromIdx, sIdx, soc, cap);
   const arrive = socAfter(leg.endSoc, detourKwh, cap);
   // El mínimo del tramo: por la vía hasta el cargador, o la llegada tras el desvío.
@@ -192,13 +223,20 @@ function pickStops(args: {
   vehicle: Vehicle;
   conditions: TripConditions;
   weather: WeatherSnapshot | null;
+  detourKwh?: DetourEnergy;
 }): { stops: ChargeStop[]; feasible: boolean; reason?: string } {
   const { samples, vehicle, conditions, weather } = args;
   const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(vehicle, conditions);
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
   const maxTravel = Math.min(100, vehicle.maxSocTravel);
-  const ctx: EnergyCtx = { vehicle, conditions, weather, originAltitudeM: samples[0]?.elevM };
+  const ctx: EnergyCtx = {
+    vehicle,
+    conditions,
+    weather,
+    originAltitudeM: samples[0]?.elevM,
+    detourKwh: args.detourKwh,
+  };
   const floor = conditions.allowBelowSafety ? MODEL_PARAMETERS.planner.belowSafetyFloorPct : safety;
   // 0: llegar justo a la electrolinera. Con "bajar del margen" se mantiene el 2 %.
   const reachFloor = conditions.allowBelowSafety ? MODEL_PARAMETERS.planner.belowSafetyFloorPct : 0;
@@ -287,14 +325,10 @@ function pickStops(args: {
       if (cont.length) pool = cont;
       else if (close.length) pool = close;
     }
-    const fastOk = pool.filter(
-      (c) => c.dc && continuationOk(c.sIdx, maxTravel, c.charger.id),
-    );
+    const fastOk = pool.filter((c) => c.dc && continuationOk(c.sIdx, maxTravel, c.charger.id));
     if (fastOk.length) pool = fastOk;
     else {
-      const slowOk = pool.filter(
-        (c) => !c.dc && continuationOk(c.sIdx, maxTravel, c.charger.id),
-      );
+      const slowOk = pool.filter((c) => !c.dc && continuationOk(c.sIdx, maxTravel, c.charger.id));
       if (slowOk.length) pool = slowOk;
     }
     if (conditions.planningMode !== "fewer_stops") {
@@ -479,7 +513,11 @@ function pickStops(args: {
         const chargeKw = plug.powerKw;
         const energyAddedKwh = Math.max(0, ((leave - pick.arriveSoc) / 100) * cap);
         return {
-          mode: plug.adapter ? ("adapter" as const) : acMode ? ("ac" as const) : ("direct" as const),
+          mode: plug.adapter
+            ? ("adapter" as const)
+            : acMode
+              ? ("ac" as const)
+              : ("direct" as const),
           socket: plug.socket,
           adapter: plug.adapter ?? undefined,
           nominalKw: plug.socket.powerKw,
@@ -751,6 +789,7 @@ type StopsArgs = {
   vehicle: Vehicle;
   conditions: TripConditions;
   weather: WeatherSnapshot | null;
+  detourKwh?: DetourEnergy;
 };
 
 /** Planificador actual: carga previa hasta la primera estación y paradas por puntaje. */
@@ -775,6 +814,7 @@ function planStopsLegacy(args: StopsArgs): StopsChoice {
           vehicle,
           conditions: planningConditions,
           weather,
+          detourKwh: args.detourKwh,
         });
   const departureCharge =
     gate.kind === "precharge"
@@ -796,12 +836,15 @@ function planStopsLegacy(args: StopsArgs): StopsChoice {
   };
 }
 
-
 /**
  * Minutos de carga por estación, precalculados sobre la malla de integración:
  * la programación dinámica los consulta miles de veces.
  */
-function chargeMinutesTable(plug: RoutePlug, vehicle: Vehicle, capacityKwh: number): PlannerNode["chargeMinutes"] {
+function chargeMinutesTable(
+  plug: RoutePlug,
+  vehicle: Vehicle,
+  capacityKwh: number,
+): PlannerNode["chargeMinutes"] {
   const step = MODEL_PARAMETERS.charging.integrationStepPct;
   const overhead = MODEL_PARAMETERS.charging.connectionOverheadMin.value;
   const peak = plug.dc ? vehicle.dcMaxKw : vehicle.acMaxKw;
@@ -836,7 +879,13 @@ function planStopsV2(args: StopsArgs): StopsChoice {
   const destReserve = conditions.allowBelowSafety
     ? Math.max(conditions.arrivalSoc, floor)
     : cfg.destinationReserveSocPercent;
-  const ctx: EnergyCtx = { vehicle, conditions, weather, originAltitudeM: samples[0]?.elevM };
+  const ctx: EnergyCtx = {
+    vehicle,
+    conditions,
+    weather,
+    originAltitudeM: samples[0]?.elevM,
+    detourKwh: args.detourKwh,
+  };
 
   const usable = args.chargers.filter((c) => {
     if (!isVerifiedForPlanning(c) || isOffline(c)) return false;
@@ -847,7 +896,7 @@ function planStopsV2(args: StopsArgs): StopsChoice {
   const nodes: PlannerNode[] = usable.map((c, i) => {
     const sIdx = c.nearestSampleIndex ?? 0;
     const detourKm = c.detourKm ?? fromRouteKmOf(c) * 2;
-    const detourKwh = segmentEnergyKwh(detourKm, 0, DETOUR_SPEED_KMH, ctx, { altitudeM: samples[sIdx]?.elevM });
+    const detourKwh = detourEnergyKwh(ctx, detourKm, sIdx, samples);
     return {
       sIdx,
       detourPct: kwhToSocPct(detourKwh, cap),
@@ -916,7 +965,8 @@ function planStopsV2(args: StopsArgs): StopsChoice {
         reachesNext: true,
       };
     });
-    const chosenOption = options.find((o) => o.socket === plug.socket && o.chargeKw === plug.powerKw) ?? options[0]!;
+    const chosenOption =
+      options.find((o) => o.socket === plug.socket && o.chargeKw === plug.powerKw) ?? options[0]!;
     const acOpt = options.find((o) => o.mode === "ac" && o.socket !== chosenOption.socket);
     return {
       charger,
@@ -948,7 +998,9 @@ function planStopsV2(args: StopsArgs): StopsChoice {
       detourMinutes: node.detourMin,
       detourEnergyKwh: node.detourKwh,
       chargeKw: plug.powerKw,
-      kmToNext: (next ? (usable[next.node]!.nearestKm ?? 0) : (samples[destIdx]?.km ?? 0)) - (charger.nearestKm ?? 0),
+      kmToNext:
+        (next ? (usable[next.node]!.nearestKm ?? 0) : (samples[destIdx]?.km ?? 0)) -
+        (charger.nearestKm ?? 0),
       nextLabel: next ? usable[next.node]!.name : "",
     };
   });
@@ -956,8 +1008,13 @@ function planStopsV2(args: StopsArgs): StopsChoice {
   // Verificación final: la curva completa respeta el piso y la reserva (§5.9).
   let validated = result.feasible;
   if (validated) {
-    const sim = simulateSoc(samples, { initialSocPct: planningSoc, capacityKwh: cap, events: stopEvents(samples, stops) });
-    validated = sim.minSoc >= floor - ARRIVE_TOLERANCE && sim.arrivalSoc >= destReserve - ARRIVE_TOLERANCE;
+    const sim = simulateSoc(samples, {
+      initialSocPct: planningSoc,
+      capacityKwh: cap,
+      events: stopEvents(samples, stops),
+    });
+    validated =
+      sim.minSoc >= floor - ARRIVE_TOLERANCE && sim.arrivalSoc >= destReserve - ARRIVE_TOLERANCE;
   }
   const verdict = classifyFeasibility({
     feasibleNow: now.feasible,
@@ -968,7 +1025,9 @@ function planStopsV2(args: StopsArgs): StopsChoice {
     validated,
   });
   const firstChargerUnreachable =
-    full != null && nodes.length > 0 && full.reachable.length === 0 && !full.destinationShort ? true : undefined;
+    full != null && nodes.length > 0 && full.reachable.length === 0 && !full.destinationShort
+      ? true
+      : undefined;
   const departureCharge =
     pre && verdict.feasible
       ? {
@@ -995,7 +1054,13 @@ function planStopsV2(args: StopsArgs): StopsChoice {
   };
 }
 /** Minutos de esta carga (llegada → salida) con una forma de cargar. */
-function plugMinutes(plug: RoutePlug, vehicle: Vehicle, cap: number, from: number, to: number): number {
+function plugMinutes(
+  plug: RoutePlug,
+  vehicle: Vehicle,
+  cap: number,
+  from: number,
+  to: number,
+): number {
   return chargeTimeMinutes(
     cap,
     from,
@@ -1010,10 +1075,16 @@ function plugMinutes(plug: RoutePlug, vehicle: Vehicle, cap: number, from: numbe
  * Si la estación tiene carga rápida con otro conector: qué adaptador hace falta,
  * si el usuario lo lleva, y el tiempo de la misma carga con y sin él.
  */
-function adapterSummary(stop: ChargeStop, vehicle: Vehicle, cap: number): ChargeStop["adapterNeeded"] {
+function adapterSummary(
+  stop: ChargeStop,
+  vehicle: Vehicle,
+  cap: number,
+): ChargeStop["adapterNeeded"] {
   const plugs = routePlugs(stop.charger, vehicle);
   const without = plugs.filter((p) => !p.adapter);
-  const bestWithout = without.length ? without.reduce((a, b) => (b.powerKw > a.powerKw ? b : a)) : null;
+  const bestWithout = without.length
+    ? without.reduce((a, b) => (b.powerKw > a.powerKw ? b : a))
+    : null;
   const withoutAdapter = bestWithout
     ? {
         mode: bestWithout.dc ? ("direct" as const) : ("ac" as const),
@@ -1040,7 +1111,10 @@ function adapterSummary(stop: ChargeStop, vehicle: Vehicle, cap: number): Charge
     from: best.adapter!.from,
     to: best.adapter!.to,
     carried: false,
-    withAdapter: { chargeKw: best.powerKw, chargeMinutes: plugMinutes(best, vehicle, cap, stop.arriveSoc, stop.departSoc) },
+    withAdapter: {
+      chargeKw: best.powerKw,
+      chargeMinutes: plugMinutes(best, vehicle, cap, stop.arriveSoc, stop.departSoc),
+    },
     withoutAdapter,
   };
 }
@@ -1072,13 +1146,30 @@ export function buildPlan(args: {
 
   const attached = placeChargers(args.chargers, samplesPre);
   // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
-  const energyV2 = args.energyEngine === "v2" ? energyProfileForRoute(raw, vehicle, conditions, weather) : null;
+  const energyV2 =
+    args.energyEngine === "v2" ? energyProfileForRoute(raw, vehicle, conditions, weather) : null;
   const energySamples = energyV2 ? energyV2.samples : annotateEnergy(samplesPre, ctx);
+  // Con la energía v2, el desvío usa el consumo local del perfil y el costo de parar (§5.8.1).
+  const detourEnergy = energyV2 ? detourEnergyV2(energyV2) : undefined;
   const cap = Math.max(vehicle.batteryKwh, 1);
   const chosen =
     args.engine === "v2"
-      ? planStopsV2({ samples: energySamples, chargers: attached, vehicle, conditions, weather })
-      : planStopsLegacy({ samples: energySamples, chargers: attached, vehicle, conditions, weather });
+      ? planStopsV2({
+          samples: energySamples,
+          chargers: attached,
+          vehicle,
+          conditions,
+          weather,
+          detourKwh: detourEnergy,
+        })
+      : planStopsLegacy({
+          samples: energySamples,
+          chargers: attached,
+          vehicle,
+          conditions,
+          weather,
+          detourKwh: detourEnergy,
+        });
   const { planningSoc, departureCharge, feasible, reason } = chosen;
   const stops = chosen.stops.map((st) => ({
     ...st,

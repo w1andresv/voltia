@@ -3,7 +3,14 @@ import type { TripConditions, Vehicle } from "@/domain/types";
 import { G_STANDARD_MS2, J_PER_KWH } from "@/domain/ev/core/units";
 import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import { airDensity, type EnergyContext } from "./environment";
-import { calibrateToManual, energyProfileV2, segmentEnergyV2 } from "./physics";
+import {
+  calibrateToManual,
+  energyProfileV2,
+  localNetRateKwhPerKm,
+  segmentEnergyV2,
+  stopEnergyKwh,
+  temperatureFactor,
+} from "./physics";
 import {
   estimatedParams,
   resolveVehicleEnergyParams,
@@ -259,5 +266,45 @@ describe("energyProfileV2", () => {
     expect(out.samples[1]!.speedKmh).toBeGreaterThan(0);
     // Sube 100 m: la energía de la pendiente está en el total.
     expect(out.totals.netEnergyKwh).toBeGreaterThan(kwh(M * G_STANDARD_MS2 * 100));
+  });
+});
+
+describe("temperatura (D4)", () => {
+  it("factor interpolado: frío como el modelo anterior, templado 1, calor casi plano", () => {
+    expect(temperatureFactor(-5)).toBe(1.28);
+    expect(temperatureFactor(5)).toBeCloseTo(1.16, 12);
+    expect(temperatureFactor(12.5)).toBeCloseTo(1.035, 12);
+    expect(temperatureFactor(20)).toBe(1);
+    expect(temperatureFactor(35)).toBeCloseTo(1.015, 12);
+    expect(temperatureFactor(45)).toBe(1.03);
+    expect(temperatureFactor(10, [])).toBe(1);
+  });
+
+  it("a 10 °C la tracción sube 7 %; los auxiliares y la regeneración no cambian por el factor", () => {
+    const cold = { ...ctx, conditions: { ...conditions, temperatureC: 10 } };
+    const seg = { horizontalM: 1000, deltaHM: 0, v1Ms: 20, v2Ms: 20, altitudeM: 0 };
+    const warmTraction = segmentEnergyV2(seg, vp, cold, regen, [[0, 1]]).tractionEnergyKwh;
+    const coldTraction = segmentEnergyV2(seg, vp, cold, regen).tractionEnergyKwh;
+    expect(coldTraction / warmTraction).toBeCloseTo(1.07, 12);
+  });
+});
+
+describe("desvíos y paradas (§5.8.1)", () => {
+  const samples = [0, 1, 2, 3, 4, 5, 6].map((km, i) => ({
+    km,
+    cumulativeKwh: [0, 0.2, 0.4, 0.3, 0.2, 0.4, 0.6][i]!,
+  }));
+
+  it("consumo neto local en ±2 km, prorrateado y nunca negativo", () => {
+    expect(localNetRateKwhPerKm(samples, 1, 1)).toBeCloseTo(0.2, 12);
+    expect(localNetRateKwhPerKm(samples, 3.5, 0.5)).toBe(0); // bajada: no regala energía
+    expect(localNetRateKwhPerKm(samples, 0, 2)).toBeCloseTo(0.2, 12); // recorta en el origen
+    expect(localNetRateKwhPerKm(samples.slice(0, 1), 0)).toBe(0);
+  });
+
+  it("parar y arrancar cuesta ½·m_eff·v²·(1/η − captura·η_regen)", () => {
+    const kinetic = kwh(0.5 * M * 1.05 * 25 * 25);
+    expect(stopEnergyKwh(vp, regen, 90)).toBeCloseTo(kinetic * (1 / 0.9 - 0.7 * 0.8), 12);
+    expect(stopEnergyKwh(vp, regen, 0)).toBe(0);
   });
 });

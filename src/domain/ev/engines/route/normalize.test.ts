@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderRoute } from "@/domain/ev/contracts/route";
 import {
+  applyRoadTiers,
   applySegmentSpeeds,
   applySpeedLimits,
   buildSamples,
@@ -169,5 +170,47 @@ describe("applySpeedLimits", () => {
     });
     const raw = toRawRoute(r, { id: "a", label: "A" });
     expect(raw.samples.slice(1).every((s) => s.speedLimitKmh === 90)).toBe(true);
+  });
+});
+
+describe("puntos intermedios y clase vial en toRawRoute (F5)", () => {
+  it("guarda el km de cada punto intermedio, escalado a la distancia", () => {
+    const r = route({ distanceM: 4000, legs: [{ distanceM: 1500 }, { distanceM: 2500 }] });
+    expect(toRawRoute(r, { id: "a", label: "A" }).legBoundariesKm).toEqual([1.5]);
+    expect(
+      toRawRoute(route({ legs: [{ distanceM: 4000 }] }), { id: "a", label: "A" }).legBoundariesKm,
+    ).toBeUndefined();
+  });
+
+  it("cada muestra toma la clase vial con más km en su tramo", () => {
+    const step = (km: number, cls: string, lat0: number) => ({
+      distanceM: km * 1000,
+      durationS: km * 60,
+      geometry: [
+        { lat: lat0, lon: -73 },
+        { lat: lat0 + km / 111, lon: -73 },
+      ],
+      intersections: [{ location: { lat: lat0, lon: -73 }, roadClass: cls }],
+    });
+    const r = route({
+      legs: [{ steps: [step(1.4, "primary", 7), step(2.6, "tertiary", 7 + 1.4 / 111)] }],
+    });
+    const samples = [0, 1, 2, 3, 4].map((km) => ({
+      km,
+      lat: 7,
+      lon: -73,
+      elevM: 0,
+      slopePct: 0,
+      speedKmh: 60,
+    }));
+    const out = applyRoadTiers(samples, r, 4);
+    expect(out.map((s) => s.roadTier)).toEqual([
+      undefined,
+      "primary",
+      "tertiary",
+      "tertiary",
+      "tertiary",
+    ]);
+    expect(applyRoadTiers(samples, route({ legs: [] }), 4)).toBe(samples);
   });
 });

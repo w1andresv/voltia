@@ -44,6 +44,9 @@ const RawRouteSchema = z
         slopePct: z.number(),
         speedKmh: z.number(),
         speedLimitKmh: z.number().optional(),
+        roadTier: z
+          .enum(["primary", "secondary", "tertiary", "local", "unpaved", "unknown"])
+          .optional(),
       }),
     ),
     distanceKm: z.number(),
@@ -61,6 +64,7 @@ const RawRouteSchema = z
     withinTolerance: z.boolean().optional(),
     minorRoadScore: z.number().optional(),
     engine: z.enum(["mapbox-traffic", "mapbox", "osrm"]).optional(),
+    legBoundariesKm: z.array(z.number()).optional(),
   })
   .passthrough();
 

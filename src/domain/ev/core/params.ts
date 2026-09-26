@@ -1,4 +1,5 @@
 import type { BodyType } from "../../types";
+import type { RoadTier } from "../../road-hierarchy";
 import type { RegenAcceptance } from "../contracts/soc";
 import { sourced, type SourcedValue } from "./provenance";
 
@@ -11,7 +12,9 @@ export interface ModelParameters {
   modelVersion: string;
   vehicle: {
     /** Cd·A (m²) y Crr por carrocería cuando el vehículo no trae los suyos (ADR-0002). */
-    bodyTypePhysics: SourcedValue<Record<BodyType, { dragAreaM2: number; rollingResistance: number }>>;
+    bodyTypePhysics: SourcedValue<
+      Record<BodyType, { dragAreaM2: number; rollingResistance: number }>
+    >;
     /** Carrocería supuesta cuando el vehículo no declara una. */
     defaultBodyType: BodyType;
   };
@@ -29,7 +32,12 @@ export interface ModelParameters {
      * cada `coarseSpacingM`; donde la altura cambia más de `refineDeltaM` entre
      * dos puntos, se densifica a `fineSpacingM`. Tope de `maxProbes` por ruta.
      */
-    adaptive: { coarseSpacingM: number; fineSpacingM: number; refineDeltaM: number; maxProbes: number };
+    adaptive: {
+      coarseSpacingM: number;
+      fineSpacingM: number;
+      refineDeltaM: number;
+      maxProbes: number;
+    };
     /** Perfil denso (malla o adaptativa): suavizado por distancia y umbral de histéresis del desnivel. */
     dense: { smoothingM: number; hysteresisM: number };
     /** Teselas de terreno de Mapbox: zoom (12 ≈ 38 m por píxel en el ecuador) y tileset. */
@@ -76,11 +84,18 @@ export interface ModelParameters {
     meshSpacingM: number;
     /** Distancia entre los tres puntos con que se mide el radio de una curva, m. */
     curvatureSpanM: number;
+    /** Tope por clase vial cuando el proveedor no da el límite legal, km/h (D8). `unknown` sin tope. */
+    defaultByRoadTier: SourcedValue<Partial<Record<RoadTier, number>>>;
     /** Por modo de conducción (especificación §5.3). `targetSpeedFactor` escala la velocidad típica; nunca supera el límite legal. */
     modes: SourcedValue<
       Record<
         "efficient" | "normal" | "sport",
-        { targetSpeedFactor: number; maxAccelMs2: number; maxDecelMs2: number; maxLateralAccelMs2: number }
+        {
+          targetSpeedFactor: number;
+          maxAccelMs2: number;
+          maxDecelMs2: number;
+          maxLateralAccelMs2: number;
+        }
       >
     >;
   };
@@ -97,9 +112,17 @@ export interface ModelParameters {
      * Regeneración por modo: fracción del frenado que va al motor (el resto, a los
      * frenos de fricción) y fracción de la potencia máxima de regeneración que se usa.
      */
-    regenModes: SourcedValue<Record<"low" | "medium" | "high", { captureFraction: number; maxPowerFraction: number }>>;
+    regenModes: SourcedValue<
+      Record<"low" | "medium" | "high", { captureFraction: number; maxPowerFraction: number }>
+    >;
     /** Velocidad a la que se supone medido el consumo manual del usuario, km/h. */
     manualReferenceSpeedKmh: number;
+    /**
+     * Pérdida de eficiencia de la tracción por temperatura (D4): [°C, factor]; la
+     * energía de tracción se divide por la eficiencia y se multiplica por el
+     * factor interpolado. Es el `EfficiencyModel` de la especificación §5.4.
+     */
+    temperatureFactor: SourcedValue<[number, number][]>;
   };
   chart: {
     /** Ventana de la gráfica de consumo según el largo de la ruta (especificación §5.10). */
@@ -140,11 +163,14 @@ export const MODEL_PARAMETERS: ModelParameters = {
   corridor: {
     maxFromRouteKm: 12,
     preferredFromRouteKm: 5,
-    detourRoadFactor: sourced(1, "estimated", { notes: "Línea recta ida y vuelta; se reemplaza con la matriz de rutas." }),
+    detourRoadFactor: sourced(1, "estimated", {
+      notes: "Línea recta ida y vuelta; se reemplaza con la matriz de rutas.",
+    }),
   },
   charging: {
     connectionOverheadMin: sourced(5, "estimated", {
-      notes: "Estacionar, app, conectar, desconectar y salir. Decisión del producto; calibrar con paradas reales.",
+      notes:
+        "Estacionar, app, conectar, desconectar y salir. Decisión del producto; calibrar con paradas reales.",
     }),
     integrationStepPct: 0.5,
   },
@@ -161,25 +187,45 @@ export const MODEL_PARAMETERS: ModelParameters = {
   speed: {
     meshSpacingM: 100,
     curvatureSpanM: 100,
+    defaultByRoadTier: sourced(
+      { primary: 90, secondary: 80, tertiary: 60, local: 50, unpaved: 40 },
+      "configurable",
+      {
+        reference: "docs/arquitectura-ev/05-pendientes-y-guia-de-desarrollo.md §3.1 (D8)",
+        notes: "Decisión del producto; confirmar contra la normativa colombiana vigente.",
+      },
+    ),
     modes: sourced(
       {
-        efficient: { targetSpeedFactor: 0.9, maxAccelMs2: 0.8, maxDecelMs2: 0.8, maxLateralAccelMs2: 1.5 },
+        efficient: {
+          targetSpeedFactor: 0.9,
+          maxAccelMs2: 0.8,
+          maxDecelMs2: 0.8,
+          maxLateralAccelMs2: 1.5,
+        },
         normal: { targetSpeedFactor: 1, maxAccelMs2: 1.2, maxDecelMs2: 1.5, maxLateralAccelMs2: 2 },
         sport: { targetSpeedFactor: 1.08, maxAccelMs2: 2, maxDecelMs2: 2.5, maxLateralAccelMs2: 3 },
       },
       "estimated",
       {
         reference: "docs/arquitectura-ev/prompt_ev_route_engine_v2.md §5.3",
-        notes: "sport: +8 % sobre la velocidad típica, tope en el límite legal (sin dato de congestión).",
+        notes:
+          "sport: +8 % sobre la velocidad típica, tope en el límite legal (sin dato de congestión).",
       },
     ),
   },
   energy: {
     vehicleDefaults: {
-      rotationalInertiaFactor: sourced(1.05, "estimated", { notes: "Típico 1,03–1,08 (especificación §3.3)." }),
-      drivetrainEfficiency: sourced(0.9, "estimated", { notes: "Batería → rueda; el modelo anterior daba 0,90–0,925 según motorKw." }),
+      rotationalInertiaFactor: sourced(1.05, "estimated", {
+        notes: "Típico 1,03–1,08 (especificación §3.3).",
+      }),
+      drivetrainEfficiency: sourced(0.9, "estimated", {
+        notes: "Batería → rueda; el modelo anterior daba 0,90–0,925 según motorKw.",
+      }),
       regenEfficiency: sourced(0.8, "estimated", { notes: "Rueda → batería." }),
-      maxRegenPowerKw: sourced(60, "estimated", { notes: "Sin dato del fabricante; el modelo anterior usaba 40 % de motorKw." }),
+      maxRegenPowerKw: sourced(60, "estimated", {
+        notes: "Sin dato del fabricante; el modelo anterior usaba 40 % de motorKw.",
+      }),
       baseAuxPowerKw: sourced(0.45, "estimated", { notes: "Mismo valor que el modelo anterior." }),
     },
     regenModes: sourced(
@@ -193,6 +239,22 @@ export const MODEL_PARAMETERS: ModelParameters = {
       { notes: "Calibrar con viajes reales (TripObservation)." },
     ),
     manualReferenceSpeedKmh: 70,
+    temperatureFactor: sourced(
+      [
+        [0, 1.28],
+        [5, 1.16],
+        [10, 1.07],
+        [15, 1],
+        [32, 1],
+        [38, 1.03],
+      ],
+      "estimated",
+      {
+        reference: "docs/arquitectura-ev/05-pendientes-y-guia-de-desarrollo.md §3.1 (D4)",
+        notes:
+          "Lado frío igual al modelo anterior (batería, llantas y tren fríos). En calor casi plano: el aire acondicionado ya suma el enfriamiento en los auxiliares.",
+      },
+    ),
   },
   chart: {
     windows: [

@@ -56,12 +56,30 @@ export interface EnergySegment {
 
 export type RegenModeParams = ModelParameters["energy"]["regenModes"]["value"]["medium"];
 
+/** Factor de la tracción por temperatura, interpolado entre los puntos (constante fuera del rango). */
+export function temperatureFactor(
+  tempC: number,
+  points: [number, number][] = MODEL_PARAMETERS.energy.temperatureFactor.value,
+): number {
+  if (!points.length) return 1;
+  if (tempC <= points[0]![0]) return points[0]![1];
+  for (let i = 1; i < points.length; i++) {
+    const [t1, f1] = points[i]!;
+    if (tempC <= t1) {
+      const [t0, f0] = points[i - 1]!;
+      return f0 + ((f1 - f0) * (tempC - t0)) / (t1 - t0);
+    }
+  }
+  return points[points.length - 1]![1];
+}
+
 /** Energía de un tramo con aceleración constante entre v1 y v2. */
 export function segmentEnergyV2(
   seg: EnergySegmentInput,
   vp: VehicleEnergyParams,
   ctx: EnergyContext,
   regen: RegenModeParams,
+  thermal: [number, number][] = MODEL_PARAMETERS.energy.temperatureFactor.value,
 ): EnergySegment {
   const dh = seg.horizontalM;
   const theta = dh > 0 ? Math.atan(seg.deltaHM / dh) : 0;
@@ -99,7 +117,7 @@ export function segmentEnergyV2(
   let regenKwh = 0;
   let friction = 0;
   if (wheelKwh >= 0) {
-    traction = wheelKwh / vp.drivetrainEfficiency.value;
+    traction = (wheelKwh / vp.drivetrainEfficiency.value) * temperatureFactor(temp, thermal);
   } else {
     const braking = -wheelKwh;
     const capturable = braking * regen.captureFraction * vp.regenEfficiency.value;
@@ -299,4 +317,50 @@ export function energyProfileV2(
     durationMinutes: seconds / 60,
     segments: Math.max(0, mesh.length - 1),
   };
+}
+
+/**
+ * Consumo neto local (kWh/km) alrededor de `km`, en una ventana de ±`windowKm`,
+ * a partir del perfil por muestra (especificación §5.8.1). Prorratea por
+ * distancia los tramos que cruzan el borde. Nunca negativo: un desvío en una
+ * bajada no "regala" energía.
+ */
+export function localNetRateKwhPerKm(
+  samples: Pick<EnergySample, "km" | "cumulativeKwh">[],
+  km: number,
+  windowKm = 2,
+): number {
+  if (samples.length < 2) return 0;
+  const first = samples[0]!.km;
+  const last = samples[samples.length - 1]!.km;
+  const from = Math.max(first, km - windowKm);
+  const to = Math.min(last, km + windowKm);
+  if (!(to > from)) return 0;
+  const cumAt = (x: number) => {
+    let i = 1;
+    while (i < samples.length - 1 && samples[i]!.km < x) i++;
+    const a = samples[i - 1]!;
+    const b = samples[i]!;
+    const span = b.km - a.km;
+    const t = span > 0 ? Math.min(1, Math.max(0, (x - a.km) / span)) : 1;
+    return a.cumulativeKwh + (b.cumulativeKwh - a.cumulativeKwh) * t;
+  };
+  return Math.max(0, (cumAt(to) - cumAt(from)) / (to - from));
+}
+
+/**
+ * Energía de detenerse en una parada y volver a arrancar desde `speedKmh`:
+ * arrancar cuesta ½·m_eff·v²/η y frenar recupera ½·m_eff·v²·captura·η_regen
+ * (sin tope de potencia: la frenada es corta). Siempre ≥ 0.
+ */
+export function stopEnergyKwh(
+  vp: VehicleEnergyParams,
+  regen: RegenModeParams,
+  speedKmh: number,
+): number {
+  const v = kmhToMs(Math.max(0, speedKmh));
+  const kinetic = (0.5 * vp.massKg.value * vp.rotationalInertiaFactor.value * v * v) / J_PER_KWH;
+  const restart = kinetic / vp.drivetrainEfficiency.value;
+  const recovered = kinetic * regen.captureFraction * vp.regenEfficiency.value;
+  return Math.max(0, restart - recovered);
 }

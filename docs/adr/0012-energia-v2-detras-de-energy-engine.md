@@ -43,3 +43,13 @@ Cambiarlo cambia el consumo, así que va detrás del modo sombra, igual que el p
 - **D4:** se agrega **ya** el efecto del frío: eficiencia del tren motriz en función de la temperatura, con puntos `estimated` parecidos al modelo actual (guía 05, §5.3.5).
 - **D5:** `sport` = +8 % sobre la velocidad típica, con tope legal y de curva (lo implementado).
 - **D8:** sin límite de Mapbox, tope por tipo de vía: primaria 90, secundaria 80, terciaria 60, local/urbana 50, sin pavimentar 40 km/h, `configurable` (guía 05, §5.3.4).
+
+## Sesión A (2026-09-26)
+Se resolvieron los pendientes de este ADR:
+- **Paradas:** 0 km/h en los puntos intermedios (`legBoundariesKm`).
+- **Desvío:** consumo local ±2 km más el costo de parar y arrancar (`detourEnergyV2`; §5.8.1).
+- **Tope por clase vial** cuando no hay límite (`defaultByRoadTier`, D8).
+- **Frío:** factor de la tracción por temperatura (`temperatureFactor`, D4). En el lado frío es igual al modelo anterior; en calor es casi plano, porque el aire acondicionado ya suma el enfriamiento en los auxiliares.
+
+Sigue pendiente la calibración con viajes reales.
+

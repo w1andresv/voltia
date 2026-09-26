@@ -1,6 +1,8 @@
 import { downsample, interpolatePoint, polylineLengthKm } from "@/domain/geo";
 import type { LatLon, RawRoute } from "@/domain/types";
 import type { ProviderRoute } from "@/domain/ev/contracts/route";
+import type { RoadTier } from "@/domain/road-hierarchy";
+import { classifyRoute, legBoundariesKm } from "./classify";
 
 /**
  * Ruta del proveedor → RawRoute: muestras a lo largo de la ruta con la
@@ -96,7 +98,11 @@ export function applySegmentSpeeds(
  * Muestras cada `max(0,8 km, distancia / 220)`, en km de la ruta (escalados a la
  * distancia del proveedor), con la velocidad media como valor inicial.
  */
-export function buildSamples(points: LatLon[], distanceKm: number, durationMin: number): RawRoute["samples"] {
+export function buildSamples(
+  points: LatLon[],
+  distanceKm: number,
+  durationMin: number,
+): RawRoute["samples"] {
   const geomLen = polylineLengthKm(points) || distanceKm;
   const everyKm = Math.max(0.8, distanceKm / 220);
   const samples: RawRoute["samples"] = [];
@@ -195,6 +201,40 @@ export function applySpeedLimits(
   return out;
 }
 
+/**
+ * Clase vial de cada muestra: la que ocupa más km entre la muestra anterior y
+ * esta, según la clasificación de los pasos del proveedor. Sin pasos (OSRM)
+ * las muestras quedan sin clase.
+ */
+export function applyRoadTiers(
+  samples: RawRoute["samples"],
+  route: ProviderRoute,
+  distanceKm: number,
+): RawRoute["samples"] {
+  const segments = classifyRoute(route);
+  if (!segments.length || samples.length < 2 || !(distanceKm > 0)) return samples;
+  const totalKm = segments[segments.length - 1]!.endKm;
+  if (!(totalKm > 0)) return samples;
+  const scale = totalKm / distanceKm;
+  const out = samples.map((s) => ({ ...s }));
+  let j = 0;
+  for (let i = 1; i < out.length; i++) {
+    const a = out[i - 1]!.km * scale;
+    const b = out[i]!.km * scale;
+    while (j < segments.length - 1 && segments[j]!.endKm <= a) j++;
+    const km = new Map<RoadTier, number>();
+    for (let k = j; k < segments.length && segments[k]!.startKm < b; k++) {
+      const seg = segments[k]!;
+      const overlap = Math.min(b, seg.endKm) - Math.max(a, seg.startKm);
+      if (overlap > 0) km.set(seg.tier, (km.get(seg.tier) ?? 0) + overlap);
+    }
+    let best: RoadTier | undefined;
+    for (const [tier, v] of km) if (best == null || v > km.get(best)!) best = tier;
+    if (best) out[i]!.roadTier = best;
+  }
+  return out;
+}
+
 /** Vías principales según el resumen de cada tramo ("Ruta 45A, Ruta 66"). */
 export function viaOf(route: ProviderRoute): string | undefined {
   const names = route.legs
@@ -218,13 +258,35 @@ export function toRawRoute(
     via: viaOf(route),
     noTolls: meta.noTolls || undefined,
     geometry: downsample(route.geometry, MAP_GEOMETRY_POINTS),
-    samples: applySpeedLimits(
-      applySegmentSpeeds(buildSamples(route.geometry, distanceKm, driveMinutes), speedProfile(route), distanceKm),
+    samples: applyRoadTiers(
+      applySpeedLimits(
+        applySegmentSpeeds(
+          buildSamples(route.geometry, distanceKm, driveMinutes),
+          speedProfile(route),
+          distanceKm,
+        ),
+        route,
+        distanceKm,
+      ),
       route,
       distanceKm,
     ),
     distanceKm,
     driveMinutes,
     elevation: { gainM: 0, lossM: 0, minM: 0, maxM: 0 },
+    ...legStops(route, distanceKm),
   };
+}
+
+/** Km de los puntos intermedios escalados a `distanceKm` (el eje de las muestras). */
+function legStops(route: ProviderRoute, distanceKm: number): { legBoundariesKm?: number[] } {
+  const raw = legBoundariesKm(route);
+  const legsKm =
+    route.legs.reduce(
+      (a, l) => a + (l.distanceM ?? (l.steps ?? []).reduce((b, s) => b + s.distanceM, 0)),
+      0,
+    ) / 1000;
+  if (!raw.length || !(legsKm > 0)) return {};
+  const k = distanceKm / legsKm;
+  return { legBoundariesKm: raw.map((km) => Math.min(distanceKm, km * k)) };
 }

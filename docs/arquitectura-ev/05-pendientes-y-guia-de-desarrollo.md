@@ -45,7 +45,7 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | F2b | Elevación configurable (`ELEVATION_SOURCE`) | 🟡 | Elegir la fuente, limpiar túneles y puentes, pendiente máxima, error tipado |
 | F3 | SOC separado de la energía | ✅ | — |
 | F4 | Corredor, compatibilidad, curva de carga | 🟡 | Desvíos medidos con la matriz de Mapbox |
-| F5 | Energía v2 y perfil de velocidad (`ENERGY_ENGINE`) | 🟡 | Medir en sombra, 0 km/h en puntos intermedios y paradas, desvío con energía local, velocidad por clase vial, temperatura, calibración |
+| F5 | Energía v2 y perfil de velocidad (`ENERGY_ENGINE`) | 🟡 | Medir en sombra, datos físicos por vehículo y calibración (0 km/h en tramos, desvío local, tope por vía y frío: ✅ sesión A) |
 | F6 | Quitar los multiplicadores | ⏳ | Todo (depende de F5 medido) |
 | F7 | Planificador por programación dinámica (`PLANNER_ENGINE`) | 🟡 | Medir en sombra y activar `v2` |
 | F8 | Composición, gráficas, pasada 2, snapshot | 🟡 | Verificar al guardar y compartir; activar `v2` |
@@ -297,7 +297,15 @@ Ver O4. Si hay que cambiarlo: `ModelParameters.elevation.terrain.tileset`. La f�
 #### 5.3.1 Medir en sombra
 Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del proveedor, SOC de llegada y mínimo, paradas. Las diferencias grandes se explican antes de F6 (D3).
 
-#### 5.3.2 0 km/h en los puntos intermedios del usuario y en las paradas de carga
+> **Sesión A (2026-09-26):** 5.3.2 a 5.3.5 quedaron hechos detrás de `ENERGY_ENGINE`, sin cambios con `legacy`.
+> - Puntos intermedios: `RawRoute.legBoundariesKm`, y el perfil se detiene ahí (también en la pasada 2, donde las estaciones son puntos intermedios).
+> - Desvío: consumo local ±2 km más el costo de parar y arrancar (`detourEnergyV2`), inyectado en los dos planificadores.
+> - Tope por clase vial: `roadTier` por muestra y `ModelParameters.speed.defaultByRoadTier` (D8).
+> - Frío: `ModelParameters.energy.temperatureFactor` sobre la tracción (D4).
+>
+> En la ruta sintética: +0,1 kWh y −0,2 puntos de SOC al llegar a la parada, por el costo de parar. Los pasos de abajo quedan como referencia de lo implementado.
+
+#### 5.3.2 0 km/h en los puntos intermedios del usuario y en las paradas de carga — ✅ hecho (sesión A)
 - **Contexto:** el perfil de velocidad arranca y termina en 0, pero no se detiene en los puntos intermedios. En la pasada 2 las estaciones son puntos intermedios, así que tampoco se detiene en ellas. La razón es que `RawRoute` no guarda dónde termina cada tramo (*leg*).
 - **Pasos:**
   1. En `toRawRoute` (`src/domain/ev/engines/route/normalize.ts`), calcular `legBoundariesKm: number[]` con `legBoundariesKm(route)` (ya existe en `engines/route/classify.ts`; moverla a `normalize.ts` o a `core/axis.ts` para no cruzar engines), escalados a `distanceKm`.
@@ -308,7 +316,7 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
 - **Tests:** perfil con un punto intermedio (0 km/h en ese km, aceleración antes y después); energía de una ruta con un punto intermedio > sin él; `stopEvents` con v2 suma el evento.
 - **Cierre:** en la pasada 2, cada estación aparece como parada con 0 km/h.
 
-#### 5.3.3 Energía del desvío con el perfil (especificación §5.8.1)
+#### 5.3.3 Energía del desvío con el perfil (especificación §5.8.1) — ✅ hecho (sesión A)
 - **Contexto:** hoy el desvío usa el modelo anterior a 50 km/h en llano (`segmentEnergyKwh` en `src/domain/planner.ts`, dos lugares: la función que coloca cargadores y `planStopsV2`).
 - **Pasos:**
   1. Nueva función pura `localNetRateKwhPerKm(samples, km, windowKm = 2)` en `src/domain/ev/engines/chart/series.ts` o en un módulo nuevo `engines/energy/local-rate.ts`: la energía neta de la ventana ±2 km dividida por su distancia (con prorrateo, como `consumptionWindows`).
@@ -316,7 +324,7 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
   3. Pasar `energyEngine` a las funciones del planificador que calculan el desvío.
 - **Tests:** la tasa local en llano es igual al consumo por km; en bajada no es negativa; la energía del desvío con v2 no depende de `STYLE_MULT`.
 
-#### 5.3.4 Velocidad por clase vial cuando no hay límite
+#### 5.3.4 Velocidad por clase vial cuando no hay límite — ✅ hecho (sesión A)
 - **Contexto:** la especificación dice `v_exp = min(límite ?? defaultByRoadClass, típica)`. Hoy, sin límite, solo cuenta la típica del proveedor.
 - **Pasos:**
   1. En `ModelParameters.speed`, agregar `defaultByRoadTier: SourcedValue<Record<RoadTier, number>>` con los valores de D8: primaria 90, secundaria 80, terciaria 60, local/urbana 50, sin pavimentar 40 km/h; fuente `configurable` y referencia a la norma cuando se confirme. La clase `unknown` no tiene tope.
@@ -324,7 +332,7 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
   3. En `speedMesh`/`buildSpeedProfile`, si no hay `limitKmh`, usar `defaultByRoadTier[roadTier]` como tope, con `limitingFactor = "road_class_default"` (agregarlo a `LimitingFactor` en `contracts/speed.ts`).
 - **Tests:** sin límite y con clase terciaria, el tope es el de la tabla; con límite, manda el límite.
 
-#### 5.3.5 Temperatura (D4)
+#### 5.3.5 Temperatura (D4) — ✅ hecho (sesión A)
 **Decidido (D4): se hace ya.** Se agrega un `EfficiencyModel` en `engines/energy/`: la eficiencia del tren motriz como función de la temperatura, con puntos `estimated` y la extensión que prevé la especificación §5.4. Se usa en `segmentEnergyV2` en vez de `drivetrainEfficiency` constante. Tests: a 20 °C, el mismo resultado que hoy; a 5 °C, menos eficiencia.
 
 #### 5.3.6 Parámetros físicos por vehículo en el catálogo

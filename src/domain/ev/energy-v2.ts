@@ -7,7 +7,14 @@ import { hasManualConsumption } from "../energy";
 import type { RawRoute, TripConditions, Vehicle, WeatherSnapshot } from "../types";
 import type { SpeedProfile } from "./contracts/speed";
 import { MODEL_PARAMETERS, type ModelParameters } from "./core/params";
-import { calibrateToManual, energyProfileV2, type EnergyProfileV2 } from "./engines/energy/physics";
+import {
+  calibrateToManual,
+  energyProfileV2,
+  localNetRateKwhPerKm,
+  stopEnergyKwh,
+  type EnergyProfileV2,
+  type RegenModeParams,
+} from "./engines/energy/physics";
 import {
   estimatedParams,
   resolveVehicleEnergyParams,
@@ -20,6 +27,7 @@ export type EnergyEngine = "legacy" | "v2";
 export interface EnergyV2Result extends EnergyProfileV2 {
   speed: SpeedProfile;
   params: VehicleEnergyParams;
+  regen: RegenModeParams;
   /** Parámetros del vehículo que salieron de valores por defecto (estimated). */
   assumptions: (keyof VehicleEnergyParams)[];
   /** Duración del perfil de velocidad frente a la del proveedor, % (especificación §5.3, punto 7). */
@@ -63,10 +71,29 @@ export function energyProfileForRoute(
     ...profile,
     speed,
     params: vp,
+    regen,
     assumptions: estimatedParams(vp),
     durationDeviationPct:
       raw.driveMinutes > 0
         ? ((profile.durationMinutes - raw.driveMinutes) / raw.driveMinutes) * 100
         : 0,
+  };
+}
+
+/**
+ * Energía de un desvío a un cargador con el perfil v2 (especificación §5.8.1):
+ * km de ida y vuelta × consumo neto local (±2 km alrededor del punto) más
+ * detenerse y volver a arrancar a la velocidad de la ruta en ese punto.
+ * Estimado: lo reemplaza la pasada 2 o la matriz de distancias.
+ */
+export function detourEnergyV2(
+  result: EnergyV2Result,
+  windowKm = 2,
+): (detourKm: number, sIdx: number) => number {
+  return (detourKm, sIdx) => {
+    const s = result.samples[Math.max(0, Math.min(result.samples.length - 1, sIdx))];
+    if (!s) return 0;
+    const rate = localNetRateKwhPerKm(result.samples, s.km, windowKm);
+    return Math.max(0, detourKm) * rate + stopEnergyKwh(result.params, result.regen, s.speedKmh);
   };
 }

@@ -157,3 +157,37 @@ describe("buildSpeedProfile", () => {
     });
   });
 });
+
+describe("paradas intermedias y tope por clase vial (F5)", () => {
+  it("se detiene en los puntos intermedios de la ruta", () => {
+    const route = { ...straight(4), legBoundariesKm: [2, 0, 4] };
+    const mesh = speedMesh(route, 100);
+    const at2 = mesh.findIndex((p) => Math.abs(p.km - 2) < 1e-9);
+    expect(mesh[at2]!.stop).toBe(true);
+    expect(mesh.filter((p) => p.stop)).toHaveLength(1); // 0 y 4 son origen y destino
+    const prof = buildSpeedProfile(mesh, "normal");
+    expect(prof.points[at2]!.speedKmh).toBe(0);
+    expect(prof.points[at2]!.limitingFactor).toBe("stop");
+    expect(prof.points[at2 - 1]!.limitingFactor).toBe("deceleration");
+    expect(prof.points[at2 + 1]!.limitingFactor).toBe("acceleration");
+  });
+
+  it("sin límite legal manda el tope de la clase vial; con límite, el límite", () => {
+    const tertiary = buildSpeedProfile(points(51, 0.1, 90, { roadTier: "tertiary" }), "normal");
+    expect(tertiary.points[25]!.speedKmh).toBeCloseTo(60, 9);
+    expect(tertiary.points[25]!.limitingFactor).toBe("road_class_default");
+    const withLimit = buildSpeedProfile(
+      points(51, 0.1, 90, { roadTier: "tertiary", limitKmh: 70 }),
+      "normal",
+    );
+    expect(withLimit.points[25]!.speedKmh).toBeCloseTo(70, 9);
+    const unknown = buildSpeedProfile(points(51, 0.1, 90, { roadTier: "unknown" }), "normal");
+    expect(unknown.points[25]!.speedKmh).toBeCloseTo(90, 9);
+  });
+
+  it("la malla lleva la clase vial de la muestra", () => {
+    const route = straight(2);
+    route.samples = route.samples.map((s) => ({ ...s, roadTier: "secondary" as const }));
+    expect(speedMesh(route, 100).every((p) => p.roadTier === "secondary")).toBe(true);
+  });
+});

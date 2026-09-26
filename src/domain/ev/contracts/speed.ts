@@ -4,7 +4,13 @@ import type { TripConditions } from "../../types";
 export type DrivingMode = TripConditions["drivingStyle"];
 
 export type LimitingFactor =
-  "speed_limit" | "traffic" | "curvature" | "acceleration" | "deceleration" | "stop";
+  | "speed_limit"
+  | "road_class_default"
+  | "traffic"
+  | "curvature"
+  | "acceleration"
+  | "deceleration"
+  | "stop";
 
 export interface SpeedProfilePoint {
   km: number;

@@ -127,7 +127,8 @@ Dividida en dos (ADR-0006).
   - [x] Anotación `maxspeed` de Mapbox hasta las muestras (`speedLimitKmh`); los proveedores sintéticos la simulan.
   - [x] `ENERGY_ENGINE = legacy | shadow | v2` y registro `[plan-trip:energy-shadow]`.
   - [ ] `ENERGY_ENGINE=shadow` en producción y revisar las diferencias.
-  - [ ] 0 km/h en puntos intermedios y paradas; desvío con la energía local del perfil; velocidad por clase vial sin límite.
+  - [x] 0 km/h en puntos intermedios (y en las estaciones de la pasada 2); desvío con la energía local del perfil y el costo de parar; tope por clase vial sin límite (D8); efecto del frío (D4).
+  - [ ] Parámetros físicos por vehículo con fuente (guía 05, §5.3.6) y calibración (§5.8).
 - **Tests:** llano `E = (Crr·m·g + ½ρCdAv²)·d/η`; pendiente `= m·g·Δh` para cualquier tamaño de tramo; ciclo 0 → v → 0; tope de regeneración; auxiliares en bajada; curva de 90°; límites; caracterización v2 en cuatro escenarios.
 - **Especificación:** F2 (EnergyEngine) y F4 (SpeedProfileEngine).
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RawRoute, TripConditions } from "@/domain/types";
 import { catalogVehicle } from "@/test-support/scenarios";
 import { buildPlan } from "../planner";
-import { energyProfileForRoute } from "./energy-v2";
+import { detourEnergyV2, energyProfileForRoute } from "./energy-v2";
 
 const KM_PER_DEG = 111.195;
 function hillRoute(km: number): RawRoute {
@@ -118,5 +118,17 @@ describe("buildPlan con energyEngine v2", () => {
     expect(v2.energyKwh).not.toBeCloseTo(legacy.energyKwh, 3);
     expect(v2.driveMinutes).not.toBeCloseTo(legacy.driveMinutes, 3);
     expect(v2.energyAssumptions?.length).toBeGreaterThan(0);
+  });
+});
+
+describe("desvío con el perfil v2", () => {
+  it("km de desvío × consumo local + costo de parar", () => {
+    const out = energyProfileForRoute(hillRoute(40), vehicle, conditions, null);
+    const fn = detourEnergyV2(out);
+    const stopOnly = fn(0, 20);
+    expect(stopOnly).toBeGreaterThan(0);
+    expect(fn(4, 20)).toBeGreaterThan(stopOnly);
+    // En la bajada (después de la cima) el consumo local es menor que en la subida.
+    expect(fn(4, 35) - fn(0, 35)).toBeLessThan(fn(4, 5) - fn(0, 5));
   });
 });

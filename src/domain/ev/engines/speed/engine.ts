@@ -1,5 +1,6 @@
 import { bearingDeg } from "@/domain/geo";
 import type { RawRoute } from "@/domain/types";
+import type { RoadTier } from "@/domain/road-hierarchy";
 import type {
   DrivingMode,
   LimitingFactor,
@@ -27,8 +28,12 @@ export interface SpeedInputPoint extends AxisPoint {
   /** Velocidad típica del tramo que llega a este punto (proveedor o fija del usuario), km/h. */
   typicalKmh: number;
   limitKmh?: number;
+  /** Clase vial del tramo; da el tope cuando no hay límite legal. */
+  roadTier?: RoadTier;
   /** Rumbo hacia el punto siguiente, grados. */
   headingDeg: number;
+  /** Punto intermedio de la ruta: el vehículo se detiene (0 km/h). */
+  stop?: boolean;
 }
 
 type ModeParams = ModelParameters["speed"]["modes"]["value"]["normal"];
@@ -38,7 +43,7 @@ type ModeParams = ModelParameters["speed"]["modes"]["value"]["normal"];
  * (así los tramos de energía se agregan exactamente en las muestras).
  */
 export function speedMesh(
-  route: Pick<RawRoute, "geometry" | "samples" | "distanceKm">,
+  route: Pick<RawRoute, "geometry" | "samples" | "distanceKm" | "legBoundariesKm">,
   spacingM: number,
   fixedKmh?: number | null,
 ): SpeedInputPoint[] {
@@ -49,6 +54,13 @@ export function speedMesh(
   const kms = new Set<number>();
   for (let km = 0; km < route.distanceKm - 1e-9; km += step) kms.add(Number(km.toFixed(6)));
   for (const s of samples) kms.add(Number(s.km.toFixed(6)));
+  // Paradas estrictamente dentro de la ruta (origen y destino ya son 0 km/h).
+  const stops = new Set(
+    (route.legBoundariesKm ?? [])
+      .filter((km) => km > 1e-3 && km < route.distanceKm - 1e-3)
+      .map((km) => Number(km.toFixed(6))),
+  );
+  for (const km of stops) kms.add(km);
   kms.add(Number(route.distanceKm.toFixed(6)));
   const sorted = [...kms]
     .sort((a, b) => a - b)
@@ -65,7 +77,9 @@ export function speedMesh(
       ...hit.point,
       typicalKmh: fixedKmh && fixedKmh > 0 ? fixedKmh : s.speedKmh,
       limitKmh: s.speedLimitKmh,
+      ...(s.roadTier ? { roadTier: s.roadTier } : {}),
       headingDeg: 0,
+      ...(stops.has(km) ? { stop: true } : {}),
     };
   });
   for (let i = 0; i < pts.length; i++) {
@@ -123,14 +137,26 @@ export function buildSpeedProfile(
     const p = points[i]!;
     let v = kmhToMs(p.typicalKmh * m.targetSpeedFactor);
     let why: LimitingFactor = "traffic";
-    if (p.limitKmh != null && p.limitKmh > 0 && kmhToMs(p.limitKmh) < v) {
-      v = kmhToMs(p.limitKmh);
-      why = "speed_limit";
+    if (p.limitKmh != null && p.limitKmh > 0) {
+      if (kmhToMs(p.limitKmh) < v) {
+        v = kmhToMs(p.limitKmh);
+        why = "speed_limit";
+      }
+    } else {
+      const tierCap = p.roadTier ? params.defaultByRoadTier.value[p.roadTier] : undefined;
+      if (tierCap != null && kmhToMs(tierCap) < v) {
+        v = kmhToMs(tierCap);
+        why = "road_class_default";
+      }
     }
     const vCurve = Math.sqrt(m.maxLateralAccelMs2 * radii[i]!);
     if (vCurve < v) {
       v = vCurve;
       why = "curvature";
+    }
+    if (p.stop) {
+      v = 0;
+      why = "stop";
     }
     target.push(v);
     factor.push(why);
