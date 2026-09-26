@@ -1084,3 +1084,53 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     expect(p.stops.map((s) => s.charger.id)).toEqual(["chg-160"]);
   });
 });
+
+describe("buildPlan — parada con carga rápida que requiere adaptador", () => {
+  const sockets = [
+    { connector: "gb_t" as const, powerKw: 50, count: 1, current: "DC" as const, currentOrigin: "reported" as const },
+    { connector: "type2" as const, powerKw: 11, count: 1 },
+  ];
+  const run = (adapters: Vehicle["adapters"], engine: "legacy" | "v2") =>
+    buildPlan({
+      raw: straightRoute(250),
+      vehicle: vehicle({ adapters, acMaxKw: 11 }),
+      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      chargers: [chargerAt(100, { sockets })],
+      weather: null,
+      origin: ORIGIN,
+      destination: { label: "Destino", lat: 4 + 250 / 111, lon: -74 },
+      engine,
+    });
+
+  it.each(["legacy", "v2"] as const)("si no lo lleva, avisa y da el tiempo con y sin adaptador (%s)", (engine) => {
+    const stop = run(undefined, engine).stops[0]!;
+    expect(stop.adapter).toBeUndefined();
+    expect(stop.adapterNeeded).toMatchObject({ from: "gb_t", to: "ccs2", carried: false });
+    expect(stop.adapterNeeded!.withAdapter.chargeKw).toBe(50);
+    expect(stop.adapterNeeded!.withoutAdapter).toMatchObject({ mode: "ac", chargeKw: 11 });
+    // La misma carga tarda menos con el adaptador.
+    expect(stop.adapterNeeded!.withAdapter.chargeMinutes).toBeLessThan(stop.adapterNeeded!.withoutAdapter!.chargeMinutes);
+    expect(stop.adapterNeeded!.withoutAdapter!.chargeMinutes).toBeCloseTo(stop.chargeMinutes, 6);
+  });
+
+  it.each(["legacy", "v2"] as const)("si lo lleva, el plan lo usa y compara con la carga sin adaptador (%s)", (engine) => {
+    const stop = run([{ from: "gb_t", to: "ccs2" }], engine).stops[0]!;
+    expect(stop.adapter).toEqual({ from: "gb_t", to: "ccs2" });
+    expect(stop.adapterNeeded).toMatchObject({ carried: true, withAdapter: { chargeKw: 50 } });
+    expect(stop.adapterNeeded!.withAdapter.chargeMinutes).toBeCloseTo(stop.chargeMinutes, 6);
+    expect(stop.adapterNeeded!.withoutAdapter!.chargeMinutes).toBeGreaterThan(stop.chargeMinutes);
+  });
+
+  it("sin toma que requiera adaptador, no hay aviso", () => {
+    const p = buildPlan({
+      raw: straightRoute(250),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      chargers: [chargerAt(100)],
+      weather: null,
+      origin: ORIGIN,
+      destination: { label: "Destino", lat: 4 + 250 / 111, lon: -74 },
+    });
+    expect(p.stops[0]!.adapterNeeded).toBeUndefined();
+  });
+});

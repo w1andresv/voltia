@@ -1,5 +1,6 @@
 import { Flag, MapPin, Navigation } from "lucide-react";
 import { isDcSocket } from "@/domain/charging";
+import { adapterNote } from "@/lib/adapter-note";
 import type { ChargeStop, ItineraryNode, RoutePlan } from "@/domain/types";
 import { CHARGER_SOURCE_LABEL, CONNECTOR_LABEL } from "@/domain/types";
 import { formatKm, formatKwh, formatKw, formatMinutes, formatPct, formatUpdatedAt } from "@/lib/format";
@@ -53,7 +54,28 @@ function optionTitle(stop: ChargeStop, index: number): string {
   return `Carga directa · ${CONNECTOR_LABEL[option.socket.connector]}`;
 }
 
+function AdapterLines({ stop }: { stop: ChargeStop }) {
+  if (!stop.adapterNeeded) return null;
+  const note = adapterNote(stop.adapterNeeded);
+  return (
+    <div className="space-y-0.5 text-warn">
+      <div className="font-medium">{note.title}</div>
+      <div>{note.withLine}</div>
+      <div>{note.withoutLine}</div>
+    </div>
+  );
+}
+
 function ChargeLines({ stop }: { stop: ChargeStop }) {
+  return (
+    <div className="space-y-2">
+      <AdapterLines stop={stop} />
+      <ChargeOptions stop={stop} />
+    </div>
+  );
+}
+
+function ChargeOptions({ stop }: { stop: ChargeStop }) {
   if (stop.options && stop.options.length > 1) {
     return (
       <div className="space-y-2">

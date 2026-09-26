@@ -123,6 +123,16 @@ export interface ChargeAlternative {
   rangeGainKm: number;
 }
 
+export interface AdapterNeeded {
+  from: ConnectorType;
+  to: ConnectorType;
+  /** El usuario marcó que lo lleva: el plan ya lo usa. */
+  carried: boolean;
+  withAdapter: { chargeKw: number; chargeMinutes: number };
+  /** La mejor opción sin adaptador en la misma estación; null si no hay otra toma compatible. */
+  withoutAdapter: { mode: "direct" | "ac"; chargeKw: number; chargeMinutes: number } | null;
+}
+
 export interface ChargeStop {
   charger: Charger;
   arriveSoc: number;
@@ -134,6 +144,12 @@ export interface ChargeStop {
   bestSocket: ChargerSocket;
   /** Presente cuando la opción elegida usa un adaptador de la lista verificada. */
   adapter?: { from: ConnectorType; to: ConnectorType };
+  /**
+   * La estación tiene carga rápida con un conector distinto al del vehículo:
+   * qué adaptador hace falta, si el usuario lo lleva, y el tiempo de esta misma
+   * carga (llegada → salida) con y sin él.
+   */
+  adapterNeeded?: AdapterNeeded;
   /** Carga lenta en la misma estación, cuando el plan usa otra opción. */
   alternative?: ChargeAlternative;
   /** Directo, cada adaptador definido y la carga lenta, si existen. */

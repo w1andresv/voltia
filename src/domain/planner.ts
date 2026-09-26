@@ -1,6 +1,6 @@
 import { compareByHierarchy } from "./road-hierarchy";
 import { FLAT_CURVE, chargeTimeMinutes, lerpFactor } from "./ev/engines/charging/curve";
-import { routePlugs, routeSocket, type RoutePlug } from "./ev/engines/compatibility/engine";
+import { routePlugs, routeSocket, uncarriedAdapterPlugs, type RoutePlug } from "./ev/engines/compatibility/engine";
 import { planCharging, requiredInitialCharge, type PlannerInput, type PlannerNode } from "./ev/engines/charging/planner";
 import { classifyFeasibility, type FeasibilityStatus, type InfeasibilityReason } from "./ev/engines/feasibility/engine";
 import { toTripConfiguration } from "./ev/core/trip-config";
@@ -993,6 +993,57 @@ function planStopsV2(args: StopsArgs): StopsChoice {
     infeasibilityCode: verdict.reasonCode,
   };
 }
+/** Minutos de esta carga (llegada → salida) con una forma de cargar. */
+function plugMinutes(plug: RoutePlug, vehicle: Vehicle, cap: number, from: number, to: number): number {
+  return chargeTimeMinutes(
+    cap,
+    from,
+    to,
+    plug.dc ? vehicle.dcMaxKw : vehicle.acMaxKw,
+    plug.powerKw,
+    plug.dc ? vehicle.chargeCurve : FLAT_CURVE,
+  );
+}
+
+/**
+ * Si la estación tiene carga rápida con otro conector: qué adaptador hace falta,
+ * si el usuario lo lleva, y el tiempo de la misma carga con y sin él.
+ */
+function adapterSummary(stop: ChargeStop, vehicle: Vehicle, cap: number): ChargeStop["adapterNeeded"] {
+  const plugs = routePlugs(stop.charger, vehicle);
+  const without = plugs.filter((p) => !p.adapter);
+  const bestWithout = without.length ? without.reduce((a, b) => (b.powerKw > a.powerKw ? b : a)) : null;
+  const withoutAdapter = bestWithout
+    ? {
+        mode: bestWithout.dc ? ("direct" as const) : ("ac" as const),
+        chargeKw: bestWithout.powerKw,
+        chargeMinutes: plugMinutes(bestWithout, vehicle, cap, stop.arriveSoc, stop.departSoc),
+      }
+    : null;
+  // Lo lleva y el plan lo usa.
+  if (stop.adapter) {
+    return {
+      from: stop.adapter.from,
+      to: stop.adapter.to,
+      carried: true,
+      withAdapter: { chargeKw: stop.chargeKw, chargeMinutes: stop.chargeMinutes },
+      withoutAdapter,
+    };
+  }
+  // No lo lleva: la carga rápida con adaptador más potente, si supera a lo que usa el plan.
+  const fast = uncarriedAdapterPlugs(stop.charger, vehicle);
+  if (!fast.length) return undefined;
+  const best = fast.reduce((a, b) => (b.powerKw > a.powerKw ? b : a));
+  if (best.powerKw <= stop.chargeKw) return undefined;
+  return {
+    from: best.adapter!.from,
+    to: best.adapter!.to,
+    carried: false,
+    withAdapter: { chargeKw: best.powerKw, chargeMinutes: plugMinutes(best, vehicle, cap, stop.arriveSoc, stop.departSoc) },
+    withoutAdapter,
+  };
+}
+
 export function buildPlan(args: {
   raw: RawRoute;
   vehicle: Vehicle;
@@ -1028,6 +1079,7 @@ export function buildPlan(args: {
   const stops = chosen.stops.map((st) => ({
     ...st,
     nextLabel: st.nextLabel || destination.label,
+    adapterNeeded: adapterSummary(st, vehicle, cap),
   }));
 
   // La curva de batería sale del SOCEngine: regeneración recortada según el SOC

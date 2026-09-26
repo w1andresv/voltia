@@ -7,6 +7,7 @@ import { planTripFn, reversePlaceFn } from "@/server/actions/plan";
 import { ChargerFacts } from "./charger-facts";
 import { DEMO_TRIPS, usePlanner } from "@/lib/store";
 import { isDcSocket } from "@/domain/charging";
+import { adapterNote } from "@/lib/adapter-note";
 import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { useStationDataset } from "@/components/stations/use-station-dataset";
@@ -462,14 +463,15 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
             <span className="font-medium text-fg">
               {i + 1}. {st.charger.name}
             </span>
-            {st.adapter ? (
-              <span className="text-warn">
-                {" "}
-                · Necesario adaptador para carga rápida ({CONNECTOR_LABEL[st.adapter.from]} →{" "}
-                {CONNECTOR_LABEL[st.adapter.to]})
-              </span>
-            ) : !isDcSocket(st.bestSocket) ? (
+            {st.adapter ? null : !isDcSocket(st.bestSocket) ? (
               <span className="text-warn"> · Carga lenta — sin adaptador · {formatKw(st.chargeKw)}</span>
+            ) : null}
+            {st.adapterNeeded ? (
+              <span className="mt-1 block text-xs leading-relaxed text-warn">
+                <span className="block font-medium">{adapterNote(st.adapterNeeded).title}</span>
+                <span className="block">{adapterNote(st.adapterNeeded).withLine}</span>
+                <span className="block">{adapterNote(st.adapterNeeded).withoutLine}</span>
+              </span>
             ) : null}
             <span className="mt-2 grid grid-cols-3 gap-2">
               <span className="rounded-md bg-bg px-2 py-1.5">

@@ -106,6 +106,23 @@ export function routePlugs(charger: Charger, vehicle: Vehicle): RoutePlug[] {
   return plugs;
 }
 
+/**
+ * Cargas rápidas que la estación ofrece con un adaptador verificado que el
+ * usuario NO marcó que lleva. El plan no cuenta con ellas (C4); sirven para
+ * avisar "con adaptador cargarías en X min".
+ */
+export function uncarriedAdapterPlugs(charger: Charger, vehicle: Vehicle): RoutePlug[] {
+  const carried = usableAdapters(vehicle);
+  const plugs: RoutePlug[] = [];
+  for (const socket of charger.sockets) {
+    if (!isDcSocket(socket) || vehicle.connectors.includes(socket.connector)) continue;
+    if (carried.some((a) => a.from === socket.connector)) continue;
+    const verified = VERIFIED_DC_ADAPTERS.find((v) => v.from === socket.connector && vehicle.connectors.includes(v.to));
+    if (verified) plugs.push(plugOf(socket, vehicle, true, verified));
+  }
+  return plugs;
+}
+
 /** La forma más rápida de cargar. Sin ninguna, la estación no sirve para este vehículo. */
 export function routeSocket(charger: Charger, vehicle: Vehicle): RoutePlug | null {
   const plugs = routePlugs(charger, vehicle);
