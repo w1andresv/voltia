@@ -136,6 +136,8 @@ export interface ChargeStop {
   fromRouteKm: number;
   detourKm: number;
   detourMinutes: number;
+  /** Energía del desvío (ida y vuelta) hasta el cargador, ya descontada en arriveSoc. */
+  detourEnergyKwh?: number;
   chargeKw: number;
   kmToNext: number;
   nextLabel: string;

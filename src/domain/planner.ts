@@ -534,6 +534,7 @@ function pickStops(args: {
       fromRouteKm: pick.fromRouteKm,
       detourKm,
       detourMinutes: detourMinutesOf(detourKm),
+      detourEnergyKwh: pick.detourKwh,
       chargeKw: chosen.chargeKw,
       kmToNext: 0,
       nextLabel: "",
@@ -574,7 +575,8 @@ function applyStopsToSamples(
   return base.map((s) => {
     let added = 0;
     for (const st of ordered) {
-      if (s.km + 0.05 >= st.kmAlongRoute) added += st.energyAddedKwh;
+      // La carga suma y el desvío (ida y vuelta) resta, igual que en arriveSoc (C2).
+      if (s.km + 0.05 >= st.kmAlongRoute) added += st.energyAddedKwh - (st.detourEnergyKwh ?? 0);
     }
     const soc = initialSoc - ((s.cumulativeKwh - added) / cap) * 100;
     return { ...s, soc };
@@ -790,14 +792,20 @@ export function buildPlan(args: {
 
   const samples = applyStopsToSamples(energySamples, stops, vehicle, planningSoc);
   const last = samples[samples.length - 1]!;
-  const energyGrossKwh = samples.reduce((a, s) => a + s.energyGrossKwh, 0);
+  const detourKwh = stops.reduce((a, s) => a + (s.detourEnergyKwh ?? 0), 0);
+  const energyKwh = last.cumulativeKwh + detourKwh;
+  const energyGrossKwh = samples.reduce((a, s) => a + s.energyGrossKwh, 0) + detourKwh;
   const energyRegenKwh = samples.reduce((a, s) => a + s.energyRegenKwh, 0);
   const driveMin = driveMinutesFor(raw, conditions);
   const chargeMin = stops.reduce((a, s) => a + s.chargeMinutes, 0);
   const detourKm = stops.reduce((a, s) => a + (s.detourKm ?? 0), 0);
   const detourMin = stops.reduce((a, s) => a + (s.detourMinutes ?? 0), 0);
   const arrivalSoc = last.soc;
-  const minSoc = samples.reduce((m, s) => Math.min(m, s.soc), 100);
+  // El punto más bajo puede ser la llegada a un cargador (la curva muestra la salida).
+  const minSoc = Math.min(
+    samples.reduce((m, s) => Math.min(m, s.soc), 100),
+    ...stops.map((s) => s.arriveSoc),
+  );
   const remainingKwh = Math.max(0, (arrivalSoc / 100) * vehicle.batteryKwh);
   const canArriveWithoutCharge =
     stops.length === 0 && arrivalSoc >= arrivalTargetPct - ARRIVE_TOLERANCE;
@@ -857,10 +865,11 @@ export function buildPlan(args: {
     driveMinutes: driveMin + detourMin,
     chargeMinutes: chargeMin,
     totalMinutes: driveMin + chargeMin + detourMin,
-    energyKwh: last.cumulativeKwh,
+    energyKwh,
     energyGrossKwh,
     energyRegenKwh,
-    avgKwhPer100km: raw.distanceKm > 0 ? (last.cumulativeKwh / raw.distanceKm) * 100 : 0,
+    avgKwhPer100km:
+      raw.distanceKm + detourKm > 0 ? (energyKwh / (raw.distanceKm + detourKm)) * 100 : 0,
     energyMode: energyMode(vehicle),
     arrivalSoc,
     initialSoc: planningSoc,

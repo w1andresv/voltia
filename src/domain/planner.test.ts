@@ -769,3 +769,45 @@ describe("buildPlan — carga previa con SOC inicial decimal (C5)", () => {
     expect(p.departureCharge?.requiredStartSoc).toBeLessThanOrEqual(100);
   });
 });
+
+describe("buildPlan — el desvío al cargador se descuenta de la curva de SOC (C2)", () => {
+  const distance = 300;
+  // ~10 km al este de la vía (0,09° de longitud a 4° de latitud): desvío de ~20 km.
+  const plan = buildPlan({
+    raw: straightRoute(distance),
+    vehicle: vehicle(),
+    conditions: conditions({ initialSoc: 80, arrivalSoc: 10, safetyMode: "low" }),
+    chargers: [chargerAt(150, { lon: -74 + 0.09 })],
+    weather: null,
+    origin: ORIGIN,
+    destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+  });
+  const stop = plan.stops[0]!;
+
+  it("hay una parada con desvío de energía", () => {
+    expect(plan.stops).toHaveLength(1);
+    expect(stop.detourKm).toBeGreaterThan(15);
+    expect(stop.detourEnergyKwh).toBeGreaterThan(0);
+  });
+
+  it("tras la parada la curva sale con el SOC de salida del plan", () => {
+    const at = plan.samples.find((s) => s.km >= stop.kmAlongRoute)!;
+    expect(at.soc).toBeCloseTo(stop.departSoc, 6);
+  });
+
+  it("el SOC de llegada es el de salida menos el tramo final", () => {
+    const at = plan.samples.findIndex((s) => s.km >= stop.kmAlongRoute);
+    const legKwh = energyBetween(plan.samples, at, plan.samples.length - 1);
+    expect(plan.arrivalSoc).toBeCloseTo(stop.departSoc - (legKwh / 60) * 100, 6);
+  });
+
+  it("la energía total y el promedio incluyen el desvío", () => {
+    const last = plan.samples[plan.samples.length - 1]!;
+    expect(plan.energyKwh).toBeCloseTo(last.cumulativeKwh + stop.detourEnergyKwh!, 6);
+    expect(plan.avgKwhPer100km).toBeCloseTo((plan.energyKwh / (distance + plan.detourKm)) * 100, 6);
+  });
+
+  it("el SOC mínimo considera la llegada al cargador", () => {
+    expect(plan.minSoc).toBeLessThanOrEqual(stop.arriveSoc);
+  });
+});
