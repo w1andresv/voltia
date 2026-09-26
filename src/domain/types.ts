@@ -279,7 +279,29 @@ export interface RoutePlan {
   itinerary: ItineraryNode[];
   elevation: ElevationStats;
   weather: WeatherSnapshot | null;
+  /** Pasada 2 (F8): el plan recalculado sobre la ruta real que pasa por las paradas. */
+  verification?: PlanVerification;
 }
+
+/**
+ * Resultado de la pasada 2. `verified`: las paradas elegidas alcanzan sobre la
+ * ruta real. `changed`: hubo que cambiar paradas y el cambio se verificó.
+ * `failed`: no se pudo verificar (proveedor caído o sin convergencia); el plan
+ * es el de la pasada 1, con desvíos estimados.
+ */
+export interface PlanVerification {
+  status: "verified" | "changed" | "failed";
+  /** Rutas pedidas al proveedor. */
+  iterations: number;
+  /** Km de la ruta de la pasada 1 (sin desvíos), para comparar con la real. */
+  baseDistanceKm: number;
+}
+
+export const VERIFICATION_TEXT: Record<PlanVerification["status"], string> = {
+  verified: "Verificado con la ruta real hasta cada parada.",
+  changed: "Paradas ajustadas al recalcular con la ruta real hasta cada una.",
+  failed: "No se pudo verificar con la ruta real: los desvíos a las paradas son estimados.",
+};
 
 export interface GeoBundle {
   routes: RawRoute[];

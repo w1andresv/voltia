@@ -13,13 +13,20 @@ export interface WindowRule {
   windowKm: number;
 }
 
-export function chartWindowKm(totalKm: number, rules: WindowRule[] = MODEL_PARAMETERS.chart.windows): number {
+export function chartWindowKm(
+  totalKm: number,
+  rules: WindowRule[] = MODEL_PARAMETERS.chart.windows,
+): number {
   for (const r of rules) if (totalKm < r.upToKm) return r.windowKm;
   return rules[rules.length - 1]?.windowKm ?? 5;
 }
 
 /** Valor de una serie acumulada en `km`, interpolando entre muestras (prorrateo por distancia). */
-export function valueAtKm<T extends { km: number }>(samples: T[], km: number, pick: (s: T) => number): number {
+export function valueAtKm<T extends { km: number }>(
+  samples: T[],
+  km: number,
+  pick: (s: T) => number,
+): number {
   if (km <= samples[0]!.km) return pick(samples[0]!);
   for (let i = 1; i < samples.length; i++) {
     const b = samples[i]!;
@@ -63,7 +70,13 @@ export function consumptionWindows(samples: EnergySample[], windowKm: number): C
     const cum = valueAtKm(samples, to, (s) => s.cumulativeKwh);
     const kwh = cum - prev;
     prev = cum;
-    out.push({ fromKm: from, toKm: to, midKm: (from + to) / 2, kwh, kwhPer100: (kwh / (to - from)) * 100 });
+    out.push({
+      fromKm: from,
+      toKm: to,
+      midKm: (from + to) / 2,
+      kwh,
+      kwhPer100: (kwh / (to - from)) * 100,
+    });
   }
   return out;
 }
@@ -187,7 +200,8 @@ export function consumptionBlocks(
     const fromKm = edges[i - 1]!;
     const toKm = edges[i]!;
     const kwh =
-      valueAtKm(samples, toKm, (s) => s.cumulativeKwh) - valueAtKm(samples, fromKm, (s) => s.cumulativeKwh);
+      valueAtKm(samples, toKm, (s) => s.cumulativeKwh) -
+      valueAtKm(samples, fromKm, (s) => s.cumulativeKwh);
     const km = toKm - fromKm;
     out.push({
       fromKm,

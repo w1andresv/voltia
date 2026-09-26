@@ -8,7 +8,14 @@ function route(id: string, distanceKm: number, climbM = 0): RawRoute {
   const n = Math.round(distanceKm / 5) + 1;
   const samples = Array.from({ length: n }, (_, i) => {
     const km = Math.min(distanceKm, i * 5);
-    return { km, lat: 7 + km / 111, lon: -73, elevM: (climbM * km) / distanceKm, slopePct: 0, speedKmh: 80 };
+    return {
+      km,
+      lat: 7 + km / 111,
+      lon: -73,
+      elevM: (climbM * km) / distanceKm,
+      slopePct: 0,
+      speedKmh: 80,
+    };
   });
   return {
     id,
@@ -60,7 +67,16 @@ describe("computePlans", () => {
   it.each(["legacy", "v2"] as const)("es buildPlan + rankPlans por ruta (%s)", (engine) => {
     const expected = rankPlans(
       inputs.routes.map((raw) =>
-        buildPlan({ raw, vehicle, conditions, chargers: [charger], weather: null, origin, destination, engine }),
+        buildPlan({
+          raw,
+          vehicle,
+          conditions,
+          chargers: [charger],
+          weather: null,
+          origin,
+          destination,
+          engine,
+        }),
       ),
       conditions.planningMode,
     );
@@ -76,6 +92,9 @@ describe("computePlans", () => {
   });
 
   it("sin rutas no hay plan elegido", () => {
-    expect(computePlans({ ...inputs, routes: [] }, vehicle, conditions)).toEqual({ plans: [], selectedId: "" });
+    expect(computePlans({ ...inputs, routes: [] }, vehicle, conditions)).toEqual({
+      plans: [],
+      selectedId: "",
+    });
   });
 });

@@ -27,14 +27,25 @@ function speedKmhAt(t: number): number {
   return 75 - 35 * Math.sin(Math.PI * t) ** 2;
 }
 
-function mapboxRoute(bend: number, summary: string, minorFrom = -1, minorTo = -1) {
+/**
+ * `via`: puntos intermedios pedidos (paradas de la pasada 2). La ruta entra a
+ * cada uno desde el punto más cercano de la vía y vuelve a él.
+ */
+function mapboxRoute(bend: number, summary: string, minorFrom = -1, minorTo = -1, via: LatLon[] = []) {
   const pts = Array.from({ length: POINTS }, (_, i) => pointAt(i / (POINTS - 1), bend));
+  for (const v of via) {
+    let best = 0;
+    pts.forEach((p, i) => {
+      if (haversineKm(p, v) < haversineKm(pts[best]!, v)) best = i;
+    });
+    pts.splice(best + 1, 0, v, { ...pts[best]! });
+  }
   const distance: number[] = [];
   const duration: number[] = [];
   for (let i = 1; i < pts.length; i++) {
     const m = haversineKm(pts[i - 1]!, pts[i]!) * 1000;
     distance.push(m);
-    duration.push(m / ((speedKmhAt(i / (POINTS - 1)) * 1000) / 3600));
+    duration.push(m / ((speedKmhAt(Math.min(1, i / (POINTS - 1))) * 1000) / 3600));
   }
   const totalM = distance.reduce((a, b) => a + b, 0);
   const totalS = duration.reduce((a, b) => a + b, 0);
@@ -89,6 +100,15 @@ export function syntheticFetch(): typeof fetch {
     const url = new URL(urlOf(input));
     if (url.hostname === "api.mapbox.com" && url.pathname.startsWith("/directions/")) {
       const exclude = url.searchParams.get("exclude") ?? "";
+      const coords = decodeURIComponent(url.pathname.split("/").pop() ?? "")
+        .split(";")
+        .map((c) => c.split(",").map(Number))
+        .map(([lon, lat]) => ({ lat: lat!, lon: lon! }));
+      if (coords.length > 2) {
+        // Pasada 2: la ruta principal pasando por las paradas.
+        const via = coords.slice(1, -1);
+        return json({ code: "Ok", routes: [mapboxRoute(0, "Ruta 45A, Ruta 62", 100, 140, via)], waypoints: coords.map(() => ({ distance: 0 })) });
+      }
       if (exclude.includes("toll")) {
         return json({ code: "Ok", routes: [mapboxRoute(0.3, "Ruta 45A")], waypoints: [{ distance: 20 }, { distance: 40 }] });
       }

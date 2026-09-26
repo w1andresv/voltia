@@ -28,7 +28,11 @@ describe("chartWindowKm", () => {
 
 describe("consumptionWindows", () => {
   it("la suma de las ventanas es el total (invariante §5.10), con muestras irregulares", () => {
-    const s = samples([0, 0.7, 1.9, 2.2, 4.8, 5.1, 7.3, 9.95, 12.4], 0.17, { from: 4.8, to: 7.3, regen: 0.05 });
+    const s = samples([0, 0.7, 1.9, 2.2, 4.8, 5.1, 7.3, 9.95, 12.4], 0.17, {
+      from: 4.8,
+      to: 7.3,
+      regen: 0.05,
+    });
     const w = consumptionWindows(s, 2);
     const sum = w.reduce((a, x) => a + x.kwh, 0);
     expect(sum).toBeCloseTo(s[s.length - 1]!.cumulativeKwh, 12);

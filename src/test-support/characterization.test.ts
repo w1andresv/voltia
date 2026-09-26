@@ -79,6 +79,7 @@ function summary(res: PlanResponse) {
       totalMinutes: Math.round(p.totalMinutes),
       stops: p.stops.map((s) => `${s.charger.id} ${r1(s.arriveSoc)}→${r1(s.departSoc)} ${Math.round(s.chargeMinutes)} min`),
       departureCharge: p.departureCharge?.additionalPct,
+      ...(p.verification ? { verification: `${p.verification.status} en ${p.verification.iterations}` } : {}),
     })),
   };
 }
@@ -126,6 +127,7 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
   });
 
   // Planificador v2 (F7) en los mismos escenarios: referencia para el modo sombra.
+  // Con v2 el recomendado pasa por la pasada 2 (F8): la ruta sintética entra a cada parada.
   it.each([
     ["modo más rápido, SOC 35 %", {}],
     ["menos paradas, SOC 90 %", { planningMode: "fewer_stops", initialSoc: 90, drivingStyle: "sport" }],

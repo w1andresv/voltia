@@ -11,6 +11,7 @@ import { toPlanningCharger } from "@/domain/stations/to-charger";
 import type { PlanRequest, PlanResponse, RawRoute, RoutePlan, RoutingEngine, TripConditions, Vehicle } from "@/domain/types";
 import { selectRoutes } from "./route-selection";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
+import { verifyPlan } from "./verify-plan";
 
 /**
  * `legacy`: planificador actual. `v2`: planificador por programación dinámica (F7).
@@ -110,11 +111,28 @@ export class EVRoutePlanningService {
     const vehicle = data.vehicle as Vehicle;
     const conditions = data.conditions as TripConditions;
     const responding: PlannerEngine = mode === "v2" ? "v2" : "legacy";
-    const { plans: ranked, selectedId } = computePlans(inputs, vehicle, conditions, responding);
+    let { plans: ranked, selectedId } = computePlans(inputs, vehicle, conditions, responding);
     if (mode === "shadow") {
       logShadow(`${data.origin.label} → ${data.destination.label}`, ranked, conditions.planningMode, () =>
         buildPlans(inputs, vehicle, conditions, "v2"),
       );
+    }
+    // Pasada 2 solo con el v2: una a tres rutas más por plan, y solo para el recomendado.
+    if (mode === "v2" && ranked[0]?.stops.length) {
+      const verified = await verifyPlan(
+        {
+          routing,
+          withElevation: (r) => this.withElevation(r),
+          maxIterations: params.planner.maxVerifyIterations,
+        },
+        { plan: ranked[0], inputs, userWaypoints: data.waypoints, vehicle, conditions, engine: "v2" },
+      );
+      console.log(
+        `[plan-trip:verify] ${verified.verification?.status ?? "sin paradas"} en ${verified.verification?.iterations ?? 0} ruta(s):` +
+          ` ${ranked[0].stops.length} → ${verified.stops.length} paradas, ${ranked[0].distanceKm.toFixed(1)} → ${verified.distanceKm.toFixed(1)} km`,
+      );
+      ranked = rankPlans([verified, ...ranked.slice(1)], conditions.planningMode);
+      selectedId = ranked[0]?.id ?? "";
     }
 
     return {

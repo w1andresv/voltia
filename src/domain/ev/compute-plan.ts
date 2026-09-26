@@ -6,7 +6,15 @@
  * calculan exactamente lo mismo.
  */
 import { buildPlan, rankPlans } from "../planner";
-import type { Charger, Place, RawRoute, RoutePlan, TripConditions, Vehicle, WeatherSnapshot } from "../types";
+import type {
+  Charger,
+  Place,
+  RawRoute,
+  RoutePlan,
+  TripConditions,
+  Vehicle,
+  WeatherSnapshot,
+} from "../types";
 
 export type PlannerEngine = "legacy" | "v2";
 

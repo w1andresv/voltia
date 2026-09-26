@@ -1,13 +1,21 @@
 import { useMemo, type ReactNode } from "react";
 import { Mountain, Timer, Zap } from "lucide-react";
 import { consumptionBlocks } from "@/domain/ev/engines/chart/series";
-import { ROUTING_ENGINE_LABEL, type RoutePlan } from "@/domain/types";
-import { formatElevation, formatKm, formatKwh, formatKwhPer100, formatMinutes, formatPct } from "@/lib/format";
+import { ROUTING_ENGINE_LABEL, VERIFICATION_TEXT, type RoutePlan } from "@/domain/types";
+import {
+  formatElevation,
+  formatKm,
+  formatKwh,
+  formatKwhPer100,
+  formatMinutes,
+  formatPct,
+} from "@/lib/format";
 
 export function PlanStats({ plan }: { plan: RoutePlan }) {
   const next = plan.stops[0];
   const engineHint = plan.engine ? ROUTING_ENGINE_LABEL[plan.engine] : undefined;
-  const detourHint = plan.detourKm >= 0.5 ? `+${formatKm(plan.detourKm, 1)} de desvío a cargadores` : undefined;
+  const detourHint =
+    plan.detourKm >= 0.5 ? `+${formatKm(plan.detourKm, 1)} de desvío a cargadores` : undefined;
   const distanceHint = [detourHint, engineHint].filter(Boolean).join(" · ") || undefined;
   const chargeKwh = plan.stops.reduce((sum, stop) => sum + stop.energyAddedKwh, 0);
   return (
@@ -33,12 +41,29 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
         <Stat
           label="Llegada"
           value={formatPct(plan.arrivalSoc)}
-          tone={plan.arrivalSoc < plan.safetyPct ? "danger" : plan.arrivalSoc < plan.safetyPct + 8 ? "warn" : "ok"}
+          tone={
+            plan.arrivalSoc < plan.safetyPct
+              ? "danger"
+              : plan.arrivalSoc < plan.safetyPct + 8
+                ? "warn"
+                : "ok"
+          }
         />
         <Stat label="Paradas" value={String(plan.stops.length)} />
         <Stat label="Tiempo de carga" value={formatMinutes(plan.chargeMinutes)} />
         <Stat label="Energía a cargar" value={formatKwh(chargeKwh)} className="col-span-2" />
       </div>
+      {plan.verification ? (
+        <p
+          className={`text-xs leading-relaxed ${plan.verification.status === "failed" ? "text-warn" : "text-muted"}`}
+        >
+          {VERIFICATION_TEXT[plan.verification.status]}
+          {plan.verification.status !== "failed" &&
+          Math.abs(plan.distanceKm - plan.verification.baseDistanceKm) >= 0.5
+            ? ` La distancia pasa de ${formatKm(plan.verification.baseDistanceKm, 1)} a ${formatKm(plan.distanceKm, 1)} con la entrada y salida de cada estación.`
+            : ""}
+        </p>
+      ) : null}
 
       <ConsumptionByBlock plan={plan} />
 
@@ -49,13 +74,22 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
       </div>
       <p className="text-xs leading-relaxed text-muted">
         El consumo neto alimenta el SOC, las paradas y el promedio acumulado. Subidas (+
-        {formatElevation(plan.elevation.gainM)}) suben el gasto; bajadas (−{formatElevation(plan.elevation.lossM)})
-        recuperan parte con regeneración. Las recargas solo ocurren en electrolineras reales y verificadas de la ruta.
+        {formatElevation(plan.elevation.gainM)}) suben el gasto; bajadas (−
+        {formatElevation(plan.elevation.lossM)}) recuperan parte con regeneración. Las recargas solo
+        ocurren en electrolineras reales y verificadas de la ruta.
       </p>
 
       <div className="grid grid-cols-3 gap-2 text-center">
-        <Mini icon={<Timer className="size-3.5" />} label="Conducción" value={formatMinutes(plan.driveMinutes)} />
-        <Mini icon={<Zap className="size-3.5" />} label="Carga" value={formatMinutes(plan.chargeMinutes)} />
+        <Mini
+          icon={<Timer className="size-3.5" />}
+          label="Conducción"
+          value={formatMinutes(plan.driveMinutes)}
+        />
+        <Mini
+          icon={<Zap className="size-3.5" />}
+          label="Carga"
+          value={formatMinutes(plan.chargeMinutes)}
+        />
         <Mini
           icon={<Mountain className="size-3.5" />}
           label="Desnivel +"
@@ -65,11 +99,13 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
 
       {plan.canArriveWithoutCharge ? (
         <div className="rounded-lg bg-ok/10 px-3 py-2 text-xs text-ok">
-          Llegas sin recargar. Restan {formatKwh(plan.remainingKwh)} · margen {formatPct(plan.safetyMarginPct)}.
+          Llegas sin recargar. Restan {formatKwh(plan.remainingKwh)} · margen{" "}
+          {formatPct(plan.safetyMarginPct)}.
         </div>
       ) : next ? (
         <div className="rounded-lg bg-bg-elevated px-3 py-2 text-xs text-muted">
-          Próxima carga {formatPct(next.arriveSoc)} → {formatPct(next.departSoc)} · {formatMinutes(next.chargeMinutes)}
+          Próxima carga {formatPct(next.arriveSoc)} → {formatPct(next.departSoc)} ·{" "}
+          {formatMinutes(next.chargeMinutes)}
         </div>
       ) : !plan.feasible ? (
         <div className="rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
@@ -86,16 +122,19 @@ export function PlanPeek({ plan }: { plan: RoutePlan }) {
     <div className="px-4 pb-3">
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-mono text-sm tabular-nums text-fg">
-          {formatKm(plan.distanceKm)} · {formatMinutes(plan.totalMinutes)} · {formatPct(plan.arrivalSoc)}
+          {formatKm(plan.distanceKm)} · {formatMinutes(plan.totalMinutes)} ·{" "}
+          {formatPct(plan.arrivalSoc)}
         </p>
-        <p className="font-mono text-xs tabular-nums text-muted">{formatKwhPer100(plan.avgKwhPer100km)}</p>
+        <p className="font-mono text-xs tabular-nums text-muted">
+          {formatKwhPer100(plan.avgKwhPer100km)}
+        </p>
       </div>
       <p className="mt-1 truncate text-xs text-muted">
         {plan.canArriveWithoutCharge
           ? `Sin recarga · restan ${formatKwh(plan.remainingKwh)}`
           : next
             ? `Próxima carga ${formatPct(next.arriveSoc)} → ${formatPct(next.departSoc)} · ${formatMinutes(next.chargeMinutes)}`
-            : plan.infeasibleReason ?? "Revisa margen o cargadores"}
+            : (plan.infeasibleReason ?? "Revisa margen o cargadores")}
       </p>
     </div>
   );
@@ -112,7 +151,9 @@ function ConsumptionByBlock({ plan }: { plan: RoutePlan }) {
   const avg = plan.avgKwhPer100km;
   return (
     <section className="rounded-md border border-border bg-bg-elevated px-3 py-2.5">
-      <h3 className="text-[11px] font-medium uppercase tracking-wide text-subtle">Consumo cada 100 km</h3>
+      <h3 className="text-[11px] font-medium uppercase tracking-wide text-subtle">
+        Consumo cada 100 km
+      </h3>
       <ul className="mt-2 space-y-2.5">
         {blocks.map((b) => {
           const high = b.kwhPer100 > avg * 1.15;
@@ -159,12 +200,22 @@ function Stat({
   className?: string;
 }) {
   const color =
-    tone === "ok" ? "text-ok" : tone === "warn" ? "text-warn" : tone === "danger" ? "text-danger" : "text-fg";
+    tone === "ok"
+      ? "text-ok"
+      : tone === "warn"
+        ? "text-warn"
+        : tone === "danger"
+          ? "text-danger"
+          : "text-fg";
   return (
     <div className={`rounded-md border border-border bg-bg-elevated px-3 py-2.5 ${className}`}>
       <div className="text-[11px] font-medium uppercase tracking-wide text-subtle">{label}</div>
-      <div className={`mt-1 font-mono text-lg font-medium tabular-nums tracking-tight ${color}`}>{value}</div>
-      {hint ? <div className="mt-0.5 font-mono text-xs tabular-nums text-subtle">{hint}</div> : null}
+      <div className={`mt-1 font-mono text-lg font-medium tabular-nums tracking-tight ${color}`}>
+        {value}
+      </div>
+      {hint ? (
+        <div className="mt-0.5 font-mono text-xs tabular-nums text-subtle">{hint}</div>
+      ) : null}
     </div>
   );
 }

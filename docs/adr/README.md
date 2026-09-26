@@ -12,6 +12,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0006](./0006-f2-en-dos-partes.md) | F2 en dos partes: estructura ahora, malla de elevación y snapshot después | Aceptada |
 | [0007](./0007-planificador-v2-detras-del-flag.md) | El planificador v2 entra detrás de PLANNER_ENGINE | Aceptada |
 | [0008](./0008-blaze-fuente-unica-detras-de-puertos.md) | Blaze (Muvatec) como fuente única, detrás de los puertos | Propuesta |
+| [0009](./0009-pasada-2-solo-plan-recomendado.md) | Pasada 2: solo el plan recomendado, solo con el planificador v2 | Aceptada |
 
 ## Plantilla
 

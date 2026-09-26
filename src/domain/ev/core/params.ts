@@ -56,6 +56,8 @@ export interface ModelParameters {
     socGridPct: number;
     /** Planificador v2: minutos de espera supuestos en una estación reportada ocupada. */
     occupiedWaitMin: SourcedValue<number>;
+    /** Pasada 2: rutas reales que se piden como máximo para verificar un plan (especificación §4). */
+    maxVerifyIterations: number;
   };
   chart: {
     /** Ventana de la gráfica de consumo según el largo de la ruta (especificación §5.10). */
@@ -108,6 +110,7 @@ export const MODEL_PARAMETERS: ModelParameters = {
     belowSafetyFloorPct: 2,
     socGridPct: 1,
     occupiedWaitMin: sourced(15, "estimated", { notes: "Sin datos de ocupación; calibrar." }),
+    maxVerifyIterations: 3,
   },
   chart: {
     windows: [
