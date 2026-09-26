@@ -44,7 +44,7 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | F2a | Datos crudos del proveedor; muestreo y elevación en el dominio | ✅ | — |
 | F2b | Elevación configurable (`ELEVATION_SOURCE`) | ✅ | `mapbox-terrain` por defecto, caché sin vencimiento, túneles, pendiente máxima y error tipado. Solo falta verificar el tileset y el costo con datos reales (O4, O6) |
 | F3 | SOC separado de la energía | ✅ | — |
-| F4 | Corredor, compatibilidad, curva de carga | 🟡 | Desvíos medidos con la matriz de Mapbox |
+| F4 | Corredor, compatibilidad, curva de carga | ✅ | Desvíos medidos detrás de `DETOUR_SOURCE=matrix` (ADR-0013); activarlo tras revisar el cupo (O6) |
 | F5 | Energía v2 y perfil de velocidad (`ENERGY_ENGINE`) | 🟡 | Medir en sombra, datos físicos por vehículo y calibración (0 km/h en tramos, desvío local, tope por vía y frío: ✅ sesión A) |
 | F6 | Quitar los multiplicadores | ⏳ | Todo (depende de F5 medido) |
 | F7 | Planificador por programación dinámica (`PLANNER_ENGINE`) | 🟡 | Medir en sombra y activar `v2` |
@@ -92,6 +92,7 @@ En local van en `.env.local` (no se sube al repo). En Vercel, en *Settings → E
 | `PLANNER_ENGINE` | `legacy` · `shadow` · `v2` | `legacy` | Planificador de paradas (ADR-0007) |
 | `ENERGY_ENGINE` | `legacy` · `shadow` · `v2` | `legacy` | Modelo de energía (ADR-0012) |
 | `ELEVATION_SOURCE` | `open-meteo` · `open-meteo-adaptive` · `mapbox-terrain` | `open-meteo` | Fuente de elevación (ADR-0011) |
+| `DETOUR_SOURCE` | `estimated` · `matrix` | `estimated` | Desvíos a las estaciones (ADR-0013) |
 | `BLAZE_API_URL`, `BLAZE_API_KEY`, `DATA_SOURCE` | — | — | Futuras (FB, §5.7) |
 
 Un valor inválido en `PLANNER_ENGINE`, `ENERGY_ENGINE` o `ELEVATION_SOURCE` cae al valor por defecto; no rompe la app.
@@ -278,7 +279,14 @@ Ver O4. Si hay que cambiarlo: `ModelParameters.elevation.terrain.tileset`. La f�
 
 ---
 
-### 5.2 F4 · Desvíos medidos con la matriz de Mapbox
+### 5.2 F4 · Desvíos medidos con la matriz de Mapbox — ✅ hecho detrás de `DETOUR_SOURCE=matrix` (ADR-0013)
+
+> **Sesión D (2026-09-26):**
+> - **Piezas:** `DistanceMatrixProvider`, `MapboxMatrixProvider` y `plan-trip/detours.ts`; se miden hasta 24 estaciones compatibles por ruta, en pares de ida y vuelta.
+> - **Snapshot y corredor:** `snapshot.detours` guarda los desvíos y `placeOnRoute` usa el medido (`detourSource: "calculated"`).
+> - **Por defecto:** `estimated`, sin consultas.
+> - **Antes de activarlo:** revisar el cupo (O6) y verificar el límite de coordenadas con un token real.
+
 
 - **Contexto:**
   - **Hoy:** el desvío a una estación es `2 × distancia en línea recta × detourRoadFactor (1, estimado)`.

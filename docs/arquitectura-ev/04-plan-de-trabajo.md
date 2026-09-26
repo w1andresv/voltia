@@ -229,7 +229,7 @@ Dividida en dos (ADR-0006).
 | F1 | ✅ Hecha (igualdad con proveedores sintéticos) | ver `git log --grep "^F1:"` |
 | F2 | F2a ✅. F2b ✅ (`mapbox-terrain` por defecto, túneles, pendiente máxima, error tipado); falta verificar el tileset con datos reales | ver `git log --grep "^F2"` |
 | F3 | ✅ Hecha | ver `git log --grep "^F3:"` |
-| F4 | ✅ Hecha (desvío por matriz pendiente) | ver `git log --grep "^F4:"` |
+| F4 | ✅ Hecha (desvío por matriz detrás de `DETOUR_SOURCE`, ADR-0013) | ver `git log --grep "^F4:"` |
 | F5 | ✅ Hecha detrás de `ENERGY_ENGINE` (por defecto `legacy`); falta medir en sombra | ver `git log --grep "^F5:"` |
 | F6 | Pendiente | — |
 | F7 | ✅ Hecha detrás de `PLANNER_ENGINE` (por defecto `legacy`) | ver `git log --grep "^F7:"` |

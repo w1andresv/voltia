@@ -17,6 +17,8 @@ const EnvSchema = z.object({
    */
   /** Modelo de energía (ADR-0012): legacy (actual), shadow (ambos, responde el actual y registra diferencias) o v2. */
   ENERGY_ENGINE: z.enum(["legacy", "shadow", "v2"]).default("legacy").catch("legacy"),
+  /** Desvíos a las estaciones (F4): estimated (línea recta, por defecto) o matrix (medidos con la matriz de Mapbox). */
+  DETOUR_SOURCE: z.enum(["estimated", "matrix"]).default("estimated").catch("estimated"),
   ELEVATION_SOURCE: z
     .enum(["open-meteo", "open-meteo-adaptive", "mapbox-terrain"])
     .default("mapbox-terrain")
@@ -41,6 +43,7 @@ export function getEnv(): AppEnv {
     PLANNER_ENGINE: process.env.PLANNER_ENGINE?.trim() || undefined,
     ELEVATION_SOURCE: process.env.ELEVATION_SOURCE?.trim() || undefined,
     ENERGY_ENGINE: process.env.ENERGY_ENGINE?.trim() || undefined,
+    DETOUR_SOURCE: process.env.DETOUR_SOURCE?.trim() || undefined,
   });
   return cached;
 }

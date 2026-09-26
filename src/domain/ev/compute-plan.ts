@@ -17,6 +17,7 @@ import type {
 } from "../types";
 import type { EnergyEngine } from "./energy-v2";
 import type { PlanningSnapshot } from "./contracts/snapshot";
+import { detoursForRoute, type MeasuredDetour } from "./contracts/detour";
 
 export type { EnergyEngine };
 export type PlannerEngine = "legacy" | "v2";
@@ -28,6 +29,8 @@ export interface PlanInputs {
   weather: WeatherSnapshot | null;
   origin: Place;
   destination: Place;
+  /** Desvíos medidos por vía, por `ruta|estación` (F4); sin ellos, estimados. */
+  detours?: Record<string, MeasuredDetour>;
 }
 
 export interface ComputedPlans {
@@ -55,6 +58,7 @@ export function buildPlans(
       destination: inputs.destination,
       engine,
       energyEngine,
+      detours: detoursForRoute(inputs.detours, raw.id),
     }),
   );
 }
@@ -90,6 +94,7 @@ export function computePlansFromSnapshot(
     weather: snapshot.weather,
     origin: places.origin,
     destination: places.destination,
+    detours: snapshot.detours,
   };
   const engine = snapshot.plannerEngine;
   const energy = snapshot.energyEngine ?? "legacy";

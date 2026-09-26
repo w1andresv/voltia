@@ -129,6 +129,7 @@ const SnapshotObjectSchema = z.object({
   warnings: z.array(z.string()),
   stationsVersion: z.string().optional(),
   dataQuality: z.object({ elevation: z.literal("unavailable").optional() }).optional(),
+  detours: z.record(z.string(), z.object({ distanceKm: z.number(), durationMin: z.number() })).optional(),
   verifiedRoutes: z
     .record(
       z.string(),

@@ -3,7 +3,12 @@
  * proveedores concretos. Solo traen datos: el muestreo, la elevación aplicada
  * y la política de rutas están en el dominio y en la aplicación (F2).
  */
-import { RoutingError, type ProviderRoute, type ProviderRouteSet, type RouteRequest } from "@/domain/ev/contracts/route";
+import {
+  RoutingError,
+  type ProviderRoute,
+  type ProviderRouteSet,
+  type RouteRequest,
+} from "@/domain/ev/contracts/route";
 import type { ElevationProvider } from "@/domain/ports/elevation";
 import type { GeocodingProvider } from "@/domain/ports/geocoding";
 import type { RoutingProvider } from "@/domain/ports/routing";
@@ -11,8 +16,15 @@ import type { WeatherProvider } from "@/domain/ports/weather";
 import type { LatLon } from "@/domain/types";
 import { mapboxTileFetcher, terrainElevations, type TileFetcher } from "./elevation.mapbox-terrain";
 import { fetchElevations } from "./elevation.openmeteo";
+import { MAPBOX_MATRIX_MAX_COORDINATES, fetchMapboxMatrix } from "./matrix.mapbox";
+import type { DistanceMatrixProvider } from "@/domain/ports/distance-matrix";
 import { reversePlace, searchPlaces } from "./geocode.photon";
-import { MapboxRoutingError, fetchMapboxCandidates, mapboxProfileFor, redact } from "./routing.mapbox";
+import {
+  MapboxRoutingError,
+  fetchMapboxCandidates,
+  mapboxProfileFor,
+  redact,
+} from "./routing.mapbox";
 import { fetchOsrmCandidates, type OsrmRoute } from "./routing.osrm";
 import { fetchWeather } from "./weather.openmeteo";
 
@@ -24,13 +36,22 @@ function toLatLon([lon, lat]: [number, number]): LatLon {
 }
 
 /** Límite de Mapbox ({speed, unit} | {unknown} | {none}) en km/h; null si no se sabe o no hay. */
-export function maxspeedKmh(m: { speed?: number; unit?: string; unknown?: boolean; none?: boolean }): number | null {
+export function maxspeedKmh(m: {
+  speed?: number;
+  unit?: string;
+  unknown?: boolean;
+  none?: boolean;
+}): number | null {
   if (m.speed == null || !(m.speed > 0)) return null;
   return m.unit === "mph" ? m.speed * 1.609344 : m.speed;
 }
 
 /** Una ruta en formato Directions (Mapbox y OSRM usan el mismo) → ProviderRoute. */
-export function toProviderRoute(route: OsrmRoute, provider: string, profile: string): ProviderRoute {
+export function toProviderRoute(
+  route: OsrmRoute,
+  provider: string,
+  profile: string,
+): ProviderRoute {
   return {
     provider,
     profile,
@@ -44,7 +65,9 @@ export function toProviderRoute(route: OsrmRoute, provider: string, profile: str
         ? {
             distanceM: leg.annotation.distance,
             durationS: leg.annotation.duration,
-            ...(leg.annotation.maxspeed ? { maxspeedKmh: leg.annotation.maxspeed.map(maxspeedKmh) } : {}),
+            ...(leg.annotation.maxspeed
+              ? { maxspeedKmh: leg.annotation.maxspeed.map(maxspeedKmh) }
+              : {}),
           }
         : undefined,
       steps: leg.steps?.map((step) => ({
@@ -66,7 +89,12 @@ export class MapboxRoutingProvider implements RoutingProvider {
   readonly id = "mapbox";
   readonly label = "Mapbox";
   readonly engine = "mapbox" as const;
-  readonly capabilities = { alternatives: true, avoidTolls: true, avoidPoints: true, roadClasses: true };
+  readonly capabilities = {
+    alternatives: true,
+    avoidTolls: true,
+    avoidPoints: true,
+    roadClasses: true,
+  };
   constructor(private readonly token: string) {}
 
   async calculateRoutes(request: RouteRequest): Promise<ProviderRouteSet> {
@@ -78,7 +106,10 @@ export class MapboxRoutingProvider implements RoutingProvider {
         excludeToll: request.avoid?.tolls,
         excludePoints: request.avoid?.points,
       });
-      return { routes: routes.map((r) => toProviderRoute(r, this.id, profile)), waypointSnapKm: snapKm };
+      return {
+        routes: routes.map((r) => toProviderRoute(r, this.id, profile)),
+        waypointSnapKm: snapKm,
+      };
     } catch (error) {
       // El mensaje nunca lleva el token (viene dentro de la URL).
       throw new RoutingError(redact(error), error instanceof MapboxRoutingError && error.noRoute);
@@ -91,12 +122,20 @@ export class OsrmRoutingProvider implements RoutingProvider {
   readonly id = "osrm";
   readonly label = "OSRM";
   readonly engine = "osrm" as const;
-  readonly capabilities = { alternatives: true, avoidTolls: false, avoidPoints: false, roadClasses: false };
+  readonly capabilities = {
+    alternatives: true,
+    avoidTolls: false,
+    avoidPoints: false,
+    roadClasses: false,
+  };
   readonly notice = OSRM_NO_TOKEN_WARNING;
 
   async calculateRoutes(request: RouteRequest): Promise<ProviderRouteSet> {
     const routes = await fetchOsrmCandidates(request.waypoints);
-    return { routes: routes.map((r) => toProviderRoute(r, this.id, "driving")), waypointSnapKm: [] };
+    return {
+      routes: routes.map((r) => toProviderRoute(r, this.id, "driving")),
+      waypointSnapKm: [],
+    };
   }
 }
 
@@ -118,6 +157,16 @@ export class MapboxTerrainElevationProvider implements ElevationProvider {
   ) {}
   getElevations(points: LatLon[]) {
     return terrainElevations(points, { ...this.opts, fetchTile: this.fetchTile });
+  }
+}
+
+/** Matriz de distancias de Mapbox para medir desvíos (DETOUR_SOURCE=matrix, F4). */
+export class MapboxMatrixProvider implements DistanceMatrixProvider {
+  readonly id = "mapbox-matrix";
+  readonly maxCoordinates = MAPBOX_MATRIX_MAX_COORDINATES;
+  constructor(private readonly token: string) {}
+  matrix(sources: LatLon[], destinations: LatLon[]) {
+    return fetchMapboxMatrix(this.token, sources, destinations);
   }
 }
 

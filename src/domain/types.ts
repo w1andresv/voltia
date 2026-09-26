@@ -95,6 +95,10 @@ export interface Charger {
   /** ISO date or datetime of the last known source update. */
   updatedAt?: string;
   detourKm?: number;
+  /** Minutos de ida y vuelta al cargador cuando el desvío se midió por vía (F4). */
+  detourMinutes?: number;
+  /** "calculated": desvío medido con la matriz de distancias; "estimated": en línea recta. */
+  detourSource?: "estimated" | "calculated";
   nearestKm?: number;
   nearestSampleIndex?: number;
   fromRouteKm?: number;
@@ -163,6 +167,8 @@ export interface ChargeStop {
   fromRouteKm: number;
   detourKm: number;
   detourMinutes: number;
+  /** De dónde sale el desvío: medido por vía o estimado en línea recta (F4). */
+  detourSource?: "estimated" | "calculated";
   /** Energía del desvío (ida y vuelta) hasta el cargador, ya descontada en arriveSoc. */
   detourEnergyKwh?: number;
   chargeKw: number;
@@ -337,6 +343,8 @@ export interface GeoBundle {
   plannerEngine?: "legacy" | "v2";
   /** Modelo de energía con que respondió el servidor (F5); el navegador recalcula con el mismo. */
   energyEngine?: "legacy" | "v2";
+  /** Desvíos medidos por vía, por `ruta|estación` (F4, DETOUR_SOURCE=matrix). */
+  detours?: Record<string, { distanceKm: number; durationMin: number }>;
   /**
    * Calidad de los datos (solo si algo faltó, F2b). `elevation: "unavailable"`:
    * ninguna fuente de elevación respondió y alguna ruta quedó plana; es un error

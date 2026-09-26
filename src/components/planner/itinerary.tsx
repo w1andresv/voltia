@@ -3,7 +3,14 @@ import { isDcSocket } from "@/domain/charging";
 import { adapterNote } from "@/lib/adapter-note";
 import type { ChargeStop, ItineraryNode, RoutePlan } from "@/domain/types";
 import { CHARGER_SOURCE_LABEL, CONNECTOR_LABEL } from "@/domain/types";
-import { formatKm, formatKwh, formatKw, formatMinutes, formatPct, formatUpdatedAt } from "@/lib/format";
+import {
+  formatKm,
+  formatKwh,
+  formatKw,
+  formatMinutes,
+  formatPct,
+  formatUpdatedAt,
+} from "@/lib/format";
 
 export function Itinerary({ plan }: { plan: RoutePlan }) {
   let stopN = 0;
@@ -33,7 +40,9 @@ export function Itinerary({ plan }: { plan: RoutePlan }) {
                     {formatKm(node.km, node.km < 10 ? 1 : 0)}
                   </div>
                 </div>
-                <div className="font-mono text-sm tabular-nums text-accent">{formatPct(node.soc)}</div>
+                <div className="font-mono text-sm tabular-nums text-accent">
+                  {formatPct(node.soc)}
+                </div>
               </div>
               {node.charge ? <StopFacts stop={node.charge} /> : null}
             </div>
@@ -50,7 +59,8 @@ function optionTitle(stop: ChargeStop, index: number): string {
   if (option.mode === "adapter" && option.adapter) {
     return `Carga rápida con adaptador · ${CONNECTOR_LABEL[option.adapter.from]} → ${CONNECTOR_LABEL[option.adapter.to]}`;
   }
-  if (option.mode === "ac") return `Carga lenta — sin adaptador · ${CONNECTOR_LABEL[option.socket.connector]}`;
+  if (option.mode === "ac")
+    return `Carga lenta — sin adaptador · ${CONNECTOR_LABEL[option.socket.connector]}`;
   return `Carga directa · ${CONNECTOR_LABEL[option.socket.connector]}`;
 }
 
@@ -80,24 +90,33 @@ function ChargeOptions({ stop }: { stop: ChargeStop }) {
     return (
       <div className="space-y-2">
         {stop.options.map((option, i) => (
-          <div key={`${option.socket.connector}-${i}`} className={i > 0 ? "border-t border-border pt-2" : ""}>
-            <div className={i === 0 ? "font-medium text-fg" : "font-medium text-warn"}>{optionTitle(stop, i)}</div>
+          <div
+            key={`${option.socket.connector}-${i}`}
+            className={i > 0 ? "border-t border-border pt-2" : ""}
+          >
+            <div className={i === 0 ? "font-medium text-fg" : "font-medium text-warn"}>
+              {optionTitle(stop, i)}
+            </div>
             <div>
               Estación {CONNECTOR_LABEL[option.socket.connector]}
               {option.adapter ? ` · vehículo ${CONNECTOR_LABEL[option.adapter.to]}` : ""}
-              {option.adapter ? ` · adaptador ${CONNECTOR_LABEL[option.adapter.from]} → ${CONNECTOR_LABEL[option.adapter.to]}` : ""}
+              {option.adapter
+                ? ` · adaptador ${CONNECTOR_LABEL[option.adapter.from]} → ${CONNECTOR_LABEL[option.adapter.to]}`
+                : ""}
             </div>
             <div>
               Nominal {formatKw(option.nominalKw)} · aprovechable {formatKw(option.chargeKw)}
             </div>
             <div>
-              Llegas al {formatPct(option.arriveSoc)} · mínimo {formatPct(option.minDepartSoc)} · sales al{" "}
-              {formatPct(option.departSoc)}
+              Llegas al {formatPct(option.arriveSoc)} · mínimo {formatPct(option.minDepartSoc)} ·
+              sales al {formatPct(option.departSoc)}
             </div>
             <div>
               {formatKwh(option.energyAddedKwh)} · {formatMinutes(option.chargeMinutes)} · alcance{" "}
               {formatKm(option.rangeGainKm)}
-              {option.reachesNext ? " · sigue al siguiente punto" : " · no cubre el siguiente tramo"}
+              {option.reachesNext
+                ? " · sigue al siguiente punto"
+                : " · no cubre el siguiente tramo"}
             </div>
           </div>
         ))}
@@ -109,7 +128,8 @@ function ChargeOptions({ stop }: { stop: ChargeStop }) {
     <div className="space-y-1">
       {stop.adapter ? (
         <div className="font-medium text-warn">
-          Carga rápida con adaptador · {CONNECTOR_LABEL[stop.adapter.from]} → {CONNECTOR_LABEL[stop.adapter.to]}
+          Carga rápida con adaptador · {CONNECTOR_LABEL[stop.adapter.from]} →{" "}
+          {CONNECTOR_LABEL[stop.adapter.to]}
         </div>
       ) : slow ? (
         <div className="font-medium text-warn">Carga lenta — sin adaptador</div>
@@ -119,8 +139,8 @@ function ChargeOptions({ stop }: { stop: ChargeStop }) {
         {formatPct(stop.departSoc)}
       </div>
       <div>
-        {formatKwh(stop.energyAddedKwh)} · {formatKw(stop.chargeKw)} · {formatMinutes(stop.chargeMinutes)} ·
-        alcance {formatKm(stop.rangeGainKm)}
+        {formatKwh(stop.energyAddedKwh)} · {formatKw(stop.chargeKw)} ·{" "}
+        {formatMinutes(stop.chargeMinutes)} · alcance {formatKm(stop.rangeGainKm)}
       </div>
     </div>
   );
@@ -141,6 +161,7 @@ function StopFacts({ stop }: { stop: NonNullable<ItineraryNode["charge"]> }) {
       {stop.fromRouteKm > 0.15 ? (
         <div>
           {formatKm(stop.fromRouteKm, 1)} desde la ruta · desvío {formatKm(stop.detourKm, 1)}
+          {stop.detourSource === "calculated" ? " por vía" : " estimado"}
           {stop.detourMinutes >= 1 ? ` · +${formatMinutes(stop.detourMinutes)}` : ""}
         </div>
       ) : (
@@ -148,7 +169,8 @@ function StopFacts({ stop }: { stop: NonNullable<ItineraryNode["charge"]> }) {
       )}
       {stop.kmToNext > 0 ? (
         <div>
-          Siguiente: {stop.nextLabel || "destino"} en {formatKm(stop.kmToNext, stop.kmToNext < 10 ? 1 : 0)}
+          Siguiente: {stop.nextLabel || "destino"} en{" "}
+          {formatKm(stop.kmToNext, stop.kmToNext < 10 ? 1 : 0)}
         </div>
       ) : null}
     </div>
@@ -172,9 +194,7 @@ function NodeIcon({ node, n }: { node: ItineraryNode; n: number }) {
     );
   }
   if (node.kind === "charger") {
-    return (
-      <span className={`${wrap} bg-accent text-sm font-semibold text-accent-fg`}>{n}</span>
-    );
+    return <span className={`${wrap} bg-accent text-sm font-semibold text-accent-fg`}>{n}</span>;
   }
   return (
     <span className={`${wrap} bg-surface-2 text-muted`}>

@@ -6,6 +6,7 @@ import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import type { GeocodingProvider } from "@/domain/ports/geocoding";
 import { getEnv } from "@/infrastructure/config/env";
 import {
+  MapboxMatrixProvider,
   MapboxRoutingProvider,
   MapboxTerrainElevationProvider,
   OpenMeteoElevationProvider,
@@ -39,7 +40,8 @@ export function elevationDeps(source: string, token: string): ElevationDeps {
       elevationFallback: openMeteo,
     };
   }
-  if (source === "mapbox-terrain") console.warn("[elevation] mapbox-terrain sin token de Mapbox: se usa open-meteo");
+  if (source === "mapbox-terrain")
+    console.warn("[elevation] mapbox-terrain sin token de Mapbox: se usa open-meteo");
   if (source === "open-meteo-adaptive") {
     return { elevation: openMeteo, elevationSampling: "adaptive", elevationFallback: openMeteo };
   }
@@ -47,7 +49,9 @@ export function elevationDeps(source: string, token: string): ElevationDeps {
 }
 
 /** Servicio de planificación con los proveedores de producción. `overrides` reemplaza piezas (tests, grabación). */
-export function createPlanningService(overrides: Partial<PlanningDeps> = {}): EVRoutePlanningService {
+export function createPlanningService(
+  overrides: Partial<PlanningDeps> = {},
+): EVRoutePlanningService {
   const token = mapboxServerToken();
   return new EVRoutePlanningService({
     routing: token ? new MapboxRoutingProvider(token) : new OsrmRoutingProvider(),
@@ -57,6 +61,9 @@ export function createPlanningService(overrides: Partial<PlanningDeps> = {}): EV
     params: MODEL_PARAMETERS,
     engineMode: getEnv().PLANNER_ENGINE as PlannerEngineMode,
     energyMode: getEnv().ENERGY_ENGINE as EnergyEngineMode,
+    // Desvíos medidos (F4): solo con DETOUR_SOURCE=matrix y token de Mapbox.
+    detourMatrix:
+      getEnv().DETOUR_SOURCE === "matrix" && token ? new MapboxMatrixProvider(token) : undefined,
     ...overrides,
   });
 }

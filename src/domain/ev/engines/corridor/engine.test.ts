@@ -47,7 +47,10 @@ describe("stationsNearRoutes", () => {
 
   it("evalúa cada ruta por separado y une el resultado en el orden de entrada", () => {
     const other = [0, 0.1].map((d, i) => ({ lat: 8 + d, lon: -73, km: i * 11 }));
-    expect(stationsNearRoutes([far, near], [route, other], 12).map((s) => s.id)).toEqual(["far", "near"]);
+    expect(stationsNearRoutes([far, near], [route, other], 12).map((s) => s.id)).toEqual([
+      "far",
+      "near",
+    ]);
   });
 
   it("no une las rutas en una línea: un punto entre dos rutas no queda cerca de un segmento falso", () => {
@@ -72,5 +75,29 @@ describe("placeOnRoute", () => {
     expect(out.map((o) => o.id)).toEqual(["a", "b"]);
     expect(out[0]!.detourKm).toBeCloseTo(2 * out[0]!.fromRouteKm * 1.3, 12);
     expect(out[0]!.nearestKm).toBe(route[out[0]!.nearestSampleIndex]!.km);
+  });
+});
+
+describe("placeOnRoute con desvíos medidos (F4)", () => {
+  it("usa la distancia y el tiempo medidos por vía cuando los hay", () => {
+    const samples = [0, 1, 2, 3].map((km) => ({ km, lat: 7 + km / 111.195, lon: -73 }));
+    const items = [
+      { id: "m", lat: 7 + 1 / 111.195, lon: -72.99 },
+      { id: "e", lat: 7 + 2 / 111.195, lon: -72.99 },
+    ];
+    const out = placeOnRoute(items, samples, {
+      maxKm: 12,
+      detourRoadFactor: 1,
+      measured: { m: { distanceKm: 3.4, durationMin: 6 } },
+    });
+    expect(out[0]).toMatchObject({
+      id: "m",
+      detourKm: 3.4,
+      detourMinutes: 6,
+      detourSource: "calculated",
+    });
+    expect(out[1]!.detourSource).toBe("estimated");
+    expect(out[1]!.detourMinutes).toBeUndefined();
+    expect(out[1]!.detourKm).toBeCloseTo(2 * out[1]!.fromRouteKm, 9);
   });
 });

@@ -1,3 +1,4 @@
+import type { DistanceMatrixProvider } from "@/domain/ports/distance-matrix";
 import type { ElevationProvider } from "@/domain/ports/elevation";
 import type { RoutingProvider } from "@/domain/ports/routing";
 import type { StationCatalog } from "@/domain/ports/station-catalog";
@@ -13,8 +14,10 @@ import {
 import { rankPlans } from "@/domain/planner";
 import { stationsNearRoutes } from "@/domain/ev/engines/corridor/engine";
 import { toPlanningCharger } from "@/domain/stations/to-charger";
+import type { MeasuredDetour } from "@/domain/ev/contracts/detour";
 import {
   ELEVATION_UNAVAILABLE_TEXT,
+  type Charger,
   type PlanRequest,
   type PlanResponse,
   type RawRoute,
@@ -34,6 +37,7 @@ import {
   type ElevationReport,
   type ElevationSampling,
 } from "./elevation-profile";
+import { measureDetours } from "./detours";
 import { selectRoutes } from "./route-selection";
 import { buildEnergyShadowReport, formatEnergyShadowReport } from "./energy-shadow-report";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
@@ -61,6 +65,8 @@ export interface PlanningDeps {
   engineMode: PlannerEngineMode;
   /** Modelo de energía; por defecto el actual. */
   energyMode?: EnergyEngineMode;
+  /** Con él, los desvíos a las estaciones se miden por vía (DETOUR_SOURCE=matrix, F4). */
+  detourMatrix?: DistanceMatrixProvider;
   /** Reloj inyectable (tests deterministas). */
   clock?: () => Date;
 }
@@ -177,12 +183,16 @@ export class EVRoutePlanningService {
       .map(toPlanningCharger);
 
     const mode = this.deps.engineMode;
+    const detours = this.deps.detourMatrix
+      ? await this.measure(this.deps.detourMatrix, routes, chargers, data.vehicle as Vehicle)
+      : undefined;
     const inputs: PlanInputs = {
       routes,
       chargers,
       weather: snapshot,
       origin: data.origin,
       destination: data.destination,
+      ...(detours ? { detours } : {}),
     };
     const vehicle = data.vehicle as Vehicle;
     const conditions = data.conditions as TripConditions;
@@ -256,6 +266,7 @@ export class EVRoutePlanningService {
           warnings,
           stationsVersion: dataset.version,
           ...(elevationUnavailable ? { dataQuality: { elevation: "unavailable" as const } } : {}),
+          ...(detours ? { detours } : {}),
         },
         plans: ranked,
         selectedId,
@@ -263,6 +274,38 @@ export class EVRoutePlanningService {
       engine: routed.engine,
       chargerCount: chargers.length,
     };
+  }
+
+  /** Desvíos medidos por vía; si la matriz falla, los desvíos quedan estimados. */
+  private async measure(
+    matrix: DistanceMatrixProvider,
+    routes: RawRoute[],
+    chargers: Charger[],
+    vehicle: Vehicle,
+  ): Promise<Record<string, MeasuredDetour> | undefined> {
+    const t0 = Date.now();
+    try {
+      const { detours, report } = await measureDetours(
+        matrix,
+        routes,
+        chargers,
+        vehicle,
+        this.deps.params,
+      );
+      console.log(
+        `[detours] ${report.measured} desvíos medidos en ${report.requests} consulta(s) de matriz, ${Date.now() - t0} ms` +
+          (report.failedBatches
+            ? ` (${report.failedBatches} lote(s) fallaron: quedan estimados)`
+            : ""),
+      );
+      return Object.keys(detours).length ? detours : undefined;
+    } catch (error) {
+      console.error(
+        "[detours] la matriz falló; desvíos estimados:",
+        error instanceof Error ? error.message : String(error),
+      );
+      return undefined;
+    }
   }
 
   /**
@@ -283,6 +326,7 @@ export class EVRoutePlanningService {
       weather: snapshot.weather,
       origin: request.origin,
       destination: request.destination,
+      detours: snapshot.detours,
     };
     const energyEngine = snapshot.energyEngine ?? "legacy";
     const [plan] = computePlans(

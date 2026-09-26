@@ -48,7 +48,9 @@ function request(overrides: Partial<TripConditions> = {}): PlanRequest {
 /** Números con 10 cifras significativas: estable ante diferencias de último bit entre versiones de V8. */
 function normalized(value: unknown): string {
   return JSON.stringify(value, (_k, v: unknown) =>
-    typeof v === "number" && Number.isFinite(v) && !Number.isInteger(v) ? Number(v.toPrecision(10)) : v,
+    typeof v === "number" && Number.isFinite(v) && !Number.isInteger(v)
+      ? Number(v.toPrecision(10))
+      : v,
   );
 }
 
@@ -77,9 +79,14 @@ function summary(res: PlanResponse) {
       arrivalSoc: r1(p.arrivalSoc),
       minSoc: r1(p.minSoc),
       totalMinutes: Math.round(p.totalMinutes),
-      stops: p.stops.map((s) => `${s.charger.id} ${r1(s.arriveSoc)}→${r1(s.departSoc)} ${Math.round(s.chargeMinutes)} min`),
+      stops: p.stops.map(
+        (s) =>
+          `${s.charger.id} ${r1(s.arriveSoc)}→${r1(s.departSoc)} ${Math.round(s.chargeMinutes)} min`,
+      ),
       departureCharge: p.departureCharge?.additionalPct,
-      ...(p.verification ? { verification: `${p.verification.status} en ${p.verification.iterations}` } : {}),
+      ...(p.verification
+        ? { verification: `${p.verification.status} en ${p.verification.iterations}` }
+        : {}),
     })),
   };
 }
@@ -121,13 +128,17 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
   });
 
   it("menos paradas, SOC 90 %", async () => {
-    const res = await plan(request({ planningMode: "fewer_stops", initialSoc: 90, drivingStyle: "sport" }));
+    const res = await plan(
+      request({ planningMode: "fewer_stops", initialSoc: 90, drivingStyle: "sport" }),
+    );
     expect(summary(res)).toMatchSnapshot();
     expect(digest(res)).toMatchSnapshot();
   });
 
   it("más segura, SOC 15 %, margen conservador (pide carga antes de salir)", async () => {
-    const res = await plan(request({ planningMode: "safer", initialSoc: 15, safetyMode: "conservative" }));
+    const res = await plan(
+      request({ planningMode: "safer", initialSoc: 15, safetyMode: "conservative" }),
+    );
     expect(summary(res)).toMatchSnapshot();
     expect(digest(res)).toMatchSnapshot();
   });
@@ -136,7 +147,10 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
   // Con v2 el recomendado pasa por la pasada 2 (F8): la ruta sintética entra a cada parada.
   it.each([
     ["modo más rápido, SOC 35 %", {}],
-    ["menos paradas, SOC 90 %", { planningMode: "fewer_stops", initialSoc: 90, drivingStyle: "sport" }],
+    [
+      "menos paradas, SOC 90 %",
+      { planningMode: "fewer_stops", initialSoc: 90, drivingStyle: "sport" },
+    ],
     ["más segura, SOC 15 %", { planningMode: "safer", initialSoc: 15, safetyMode: "conservative" }],
   ] as [string, Partial<TripConditions>][])("planificador v2: %s", async (_name, over) => {
     const res = await plan(request(over), "v2");
@@ -147,9 +161,15 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
   // con el planificador actual. Referencia para el modo sombra de energía.
   it.each([
     ["modo más rápido, SOC 35 %", {}],
-    ["menos paradas, SOC 90 %, sport", { planningMode: "fewer_stops", initialSoc: 90, drivingStyle: "sport" }],
+    [
+      "menos paradas, SOC 90 %, sport",
+      { planningMode: "fewer_stops", initialSoc: 90, drivingStyle: "sport" },
+    ],
     ["más segura, SOC 15 %", { planningMode: "safer", initialSoc: 15, safetyMode: "conservative" }],
-    ["eficiente, SOC 60 %", { planningMode: "efficient", initialSoc: 60, drivingStyle: "efficient" }],
+    [
+      "eficiente, SOC 60 %",
+      { planningMode: "efficient", initialSoc: 60, drivingStyle: "efficient" },
+    ],
   ] as [string, Partial<TripConditions>][])("energía v2: %s", async (_name, over) => {
     const res = await plan(request(over), "legacy", "v2");
     expect(res.plans.every((p) => p.energyEngine === "v2")).toBe(true);
@@ -160,10 +180,15 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
     const req = request({ planningMode: "safer", initialSoc: 15, safetyMode: "conservative" });
     const res = await plan(req);
     const { computePlans } = await import("@/domain/ev/compute-plan");
-    const { parsePlanningSnapshot, snapshotInputs } = await import("@/domain/ev/contracts/snapshot");
+    const { parsePlanningSnapshot, snapshotInputs } =
+      await import("@/domain/ev/contracts/snapshot");
     const stored = parsePlanningSnapshot(JSON.parse(JSON.stringify(res.geo)));
     expect(stored).not.toBeNull();
-    expect(stored).toMatchObject({ schemaVersion: 1, modelVersion: "0.1.0-legacy", createdAt: "2026-09-01T12:00:00.000Z" });
+    expect(stored).toMatchObject({
+      schemaVersion: 1,
+      modelVersion: "0.1.0-legacy",
+      createdAt: "2026-09-01T12:00:00.000Z",
+    });
     const again = computePlans(
       { ...snapshotInputs(stored!), origin: req.origin, destination: req.destination },
       req.vehicle as Vehicle,
@@ -192,8 +217,15 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
     expect(verified![id!]!.verification.status).toBe("verified");
 
     // Guardado y leído como JSON, con la verificación: sin consultar proveedores.
-    const stored = parsePlanningSnapshot(JSON.parse(JSON.stringify({ ...snapshot, verifiedRoutes: verified })))!;
-    const shared = computePlansFromSnapshot(stored, req, req.vehicle as Vehicle, req.conditions as TripConditions);
+    const stored = parsePlanningSnapshot(
+      JSON.parse(JSON.stringify({ ...snapshot, verifiedRoutes: verified })),
+    )!;
+    const shared = computePlansFromSnapshot(
+      stored,
+      req,
+      req.vehicle as Vehicle,
+      req.conditions as TripConditions,
+    );
     const plan = shared.plans.find((p) => p.id === id)!;
     expect(plan.verification?.status).toBe("verified");
     // El mismo plan verificado que respondió el servidor al planificar.
@@ -202,6 +234,43 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
       normalized(live.stops.map((s) => [s.charger.id, s.arriveSoc, s.departSoc])),
     );
     expect(plan.distanceKm).toBeCloseTo(live.distanceKm, 9);
+  });
+
+  it("DETOUR_SOURCE=matrix: las paradas usan el desvío medido y el snapshot lo reproduce", async () => {
+    vi.resetModules();
+    vi.stubEnv("DETOUR_SOURCE", "matrix");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const req = request();
+      const measured = await plan(req);
+      const estimated = await (async () => {
+        vi.resetModules();
+        vi.stubEnv("DETOUR_SOURCE", "estimated");
+        return plan(req);
+      })();
+      const stop = measured.plans[0]!.stops[0]!;
+      expect(stop.detourSource).toBe("calculated");
+      expect(estimated.plans[0]!.stops[0]!.detourSource).toBe("estimated");
+      // Por vía (≈ 1,3 × línea recta) el desvío es más largo que la estimación.
+      expect(stop.detourKm).toBeGreaterThan(estimated.plans[0]!.stops[0]!.detourKm);
+      expect(Object.keys(measured.geo.detours ?? {}).length).toBeGreaterThan(0);
+      expect(log.mock.calls.some(([l]) => String(l).startsWith("[detours]"))).toBe(true);
+
+      const { computePlansFromSnapshot } = await import("@/domain/ev/compute-plan");
+      const { parsePlanningSnapshot } = await import("@/domain/ev/contracts/snapshot");
+      const stored = parsePlanningSnapshot(JSON.parse(JSON.stringify(measured.geo)))!;
+      const again = computePlansFromSnapshot(
+        stored,
+        req,
+        req.vehicle as Vehicle,
+        req.conditions as TripConditions,
+      );
+      expect(normalized(again.plans)).toBe(normalized(measured.plans));
+    } finally {
+      log.mockRestore();
+      vi.stubEnv("DETOUR_SOURCE", "estimated");
+      vi.resetModules();
+    }
   });
 
   it("es determinista", async () => {

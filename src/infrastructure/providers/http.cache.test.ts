@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const calls: { key: string[]; opts: { revalidate?: number | false } }[] = [];
 vi.mock("next/cache", () => ({
-  unstable_cache: (fn: () => Promise<unknown>, key: string[], opts: { revalidate?: number | false }) => {
+  unstable_cache: (
+    fn: () => Promise<unknown>,
+    key: string[],
+    opts: { revalidate?: number | false },
+  ) => {
     calls.push({ key, opts });
     return fn;
   },

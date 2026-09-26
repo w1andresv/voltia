@@ -143,7 +143,7 @@ export function rankedPlansFor(
   if (!geo?.routes.length || !origin || !destination) return [];
   const vehicle = s.vehicles.find((v) => v.id === s.selectedVehicleId) ?? VEHICLE_CATALOG[0]!;
   return computePlans(
-    { routes: geo.routes, chargers: geo.chargers, weather: geo.weather, origin, destination },
+    { routes: geo.routes, chargers: geo.chargers, weather: geo.weather, origin, destination, detours: geo.detours },
     vehicle,
     conditions,
     geo.plannerEngine,

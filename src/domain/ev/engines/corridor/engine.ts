@@ -89,6 +89,9 @@ export function stationsNearRoutes<T extends LatLon>(items: T[], routes: RoutePo
 export interface CorridorPlacement {
   fromRouteKm: number;
   detourKm: number;
+  /** Solo con desvío medido: minutos de ida y vuelta. */
+  detourMinutes?: number;
+  detourSource: "estimated" | "calculated";
   /** Km de la muestra donde se ubica la parada. */
   nearestKm: number;
   nearestSampleIndex: number;
@@ -96,21 +99,29 @@ export interface CorridorPlacement {
 
 /**
  * Proyecta cada estación sobre una ruta; deja las que están a `maxKm` o menos,
- * ordenadas por su km en la ruta. El desvío es una estimación (2 × distancia × factor).
+ * ordenadas por su km en la ruta. El desvío es el medido por vía si viene en
+ * `measured` (por id de estación), o una estimación (2 × distancia × factor).
  */
-export function placeOnRoute<T extends LatLon>(
+export function placeOnRoute<T extends LatLon & { id?: string }>(
   items: T[],
   samples: RoutePoint[],
-  opts: { maxKm: number; detourRoadFactor: number },
+  opts: {
+    maxKm: number;
+    detourRoadFactor: number;
+    measured?: Record<string, { distanceKm: number; durationMin: number }>;
+  },
 ): (T & CorridorPlacement)[] {
   const out: (T & CorridorPlacement)[] = [];
   for (const it of items) {
     const proj = projectOnRoute(it, samples);
     if (!proj || proj.lateralKm > opts.maxKm) continue;
+    const m = it.id != null ? opts.measured?.[it.id] : undefined;
     out.push({
       ...it,
       fromRouteKm: proj.lateralKm,
-      detourKm: 2 * proj.lateralKm * opts.detourRoadFactor,
+      ...(m
+        ? { detourKm: m.distanceKm, detourMinutes: m.durationMin, detourSource: "calculated" as const }
+        : { detourKm: 2 * proj.lateralKm * opts.detourRoadFactor, detourSource: "estimated" as const }),
       nearestKm: samples[proj.sampleIndex]!.km,
       nearestSampleIndex: proj.sampleIndex,
     });

@@ -16,6 +16,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0010](./0010-snapshot-con-rutas-muestreadas.md) | PlanningSnapshot con rutas ya muestreadas, guardado solo en la cuenta | Aceptada |
 | [0011](./0011-fuente-de-elevacion-configurable.md) | Fuente de elevación configurable (B6) | Aceptada |
 | [0012](./0012-energia-v2-detras-de-energy-engine.md) | Energía v2 (física sin multiplicadores y perfil de velocidad) detrás de ENERGY_ENGINE | Aceptada |
+| [0013](./0013-desvios-medidos-con-la-matriz.md) | Desvíos medidos con la matriz de Mapbox, detrás de DETOUR_SOURCE | Aceptada |
 
 ## Plantilla
 

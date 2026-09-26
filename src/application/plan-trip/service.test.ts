@@ -242,4 +242,25 @@ describe("EVRoutePlanningService", () => {
     expect(response.geo.energyEngine).toBe("v2");
     expect(response.plans.every((p) => p.energyEngine === "v2")).toBe(true);
   });
+
+  it("si la matriz de desvíos falla, los desvíos quedan estimados y el plan sigue", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { response } = await new EVRoutePlanningService(
+      deps({
+        detourMatrix: {
+          id: "fake",
+          maxCoordinates: 25,
+          matrix: async () => {
+            throw new Error("sin cupo");
+          },
+        },
+      }),
+    ).plan(request);
+    expect(response.geo.detours).toBeUndefined();
+    expect(response.plans.length).toBeGreaterThan(0);
+    expect(log.mock.calls.some(([l]) => String(l).includes("lote(s) fallaron"))).toBe(true);
+    err.mockRestore();
+    log.mockRestore();
+  });
 });

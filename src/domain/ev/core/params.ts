@@ -59,6 +59,10 @@ export interface ModelParameters {
     preferredFromRouteKm: number;
     /** Desvío estimado = 2 × distancia a la ruta × este factor (sin matriz de rutas). */
     detourRoadFactor: SourcedValue<number>;
+    /** DETOUR_SOURCE=matrix: estaciones compatibles que se miden por ruta, las más cercanas (cuida el cupo). */
+    maxMatrixStationsPerRoute: number;
+    /** A menos de esta distancia de la ruta el desvío es despreciable y no se mide. */
+    minLateralKmToMeasure: number;
   };
   charging: {
     /** Minutos fijos por parada: estacionar, abrir la app, conectar, desconectar y salir. */
@@ -172,6 +176,8 @@ export const MODEL_PARAMETERS: ModelParameters = {
     detourRoadFactor: sourced(1, "estimated", {
       notes: "Línea recta ida y vuelta; se reemplaza con la matriz de rutas.",
     }),
+    maxMatrixStationsPerRoute: 24,
+    minLateralKmToMeasure: 0.05,
   },
   charging: {
     connectionOverheadMin: sourced(5, "estimated", {

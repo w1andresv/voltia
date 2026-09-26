@@ -20,7 +20,8 @@ const POINTS = 240;
 
 function pointAt(t: number, bend: number): LatLon {
   const lat = SYNTHETIC_A.lat + (SYNTHETIC_B.lat - SYNTHETIC_A.lat) * t;
-  const lon = SYNTHETIC_A.lon + (SYNTHETIC_B.lon - SYNTHETIC_A.lon) * t + bend * Math.sin(Math.PI * t);
+  const lon =
+    SYNTHETIC_A.lon + (SYNTHETIC_B.lon - SYNTHETIC_A.lon) * t + bend * Math.sin(Math.PI * t);
   return { lat, lon };
 }
 
@@ -33,7 +34,13 @@ function speedKmhAt(t: number): number {
  * `via`: puntos intermedios pedidos (paradas de la pasada 2). La ruta entra a
  * cada uno desde el punto más cercano de la vía y vuelve a él.
  */
-function mapboxRoute(bend: number, summary: string, minorFrom = -1, minorTo = -1, via: LatLon[] = []) {
+function mapboxRoute(
+  bend: number,
+  summary: string,
+  minorFrom = -1,
+  minorTo = -1,
+  via: LatLon[] = [],
+) {
   const pts = Array.from({ length: POINTS }, (_, i) => pointAt(i / (POINTS - 1), bend));
   for (const v of via) {
     let best = 0;
@@ -90,7 +97,10 @@ function mapboxRoute(bend: number, summary: string, minorFrom = -1, minorTo = -1
 }
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 function elevationAt(lat: number, lon: number): number {
@@ -140,10 +150,18 @@ export function syntheticFetch(): typeof fetch {
       if (coords.length > 2) {
         // Pasada 2: la ruta principal pasando por las paradas.
         const via = coords.slice(1, -1);
-        return json({ code: "Ok", routes: [mapboxRoute(0, "Ruta 45A, Ruta 62", 100, 140, via)], waypoints: coords.map(() => ({ distance: 0 })) });
+        return json({
+          code: "Ok",
+          routes: [mapboxRoute(0, "Ruta 45A, Ruta 62", 100, 140, via)],
+          waypoints: coords.map(() => ({ distance: 0 })),
+        });
       }
       if (exclude.includes("toll")) {
-        return json({ code: "Ok", routes: [mapboxRoute(0.3, "Ruta 45A")], waypoints: [{ distance: 20 }, { distance: 40 }] });
+        return json({
+          code: "Ok",
+          routes: [mapboxRoute(0.3, "Ruta 45A")],
+          waypoints: [{ distance: 20 }, { distance: 40 }],
+        });
       }
       if (exclude.includes("point(")) {
         return json({ code: "Ok", routes: [mapboxRoute(-0.05, "Ruta 45A, Ruta 62")] });
@@ -154,10 +172,31 @@ export function syntheticFetch(): typeof fetch {
         waypoints: [{ distance: 20 }, { distance: 40 }],
       });
     }
-    const tile = url.hostname === "api.mapbox.com" && url.pathname.match(/^\/v4\/[^/]+\/(\d+)\/(\d+)\/(\d+)\.pngraw$/);
+    if (url.hostname === "api.mapbox.com" && url.pathname.startsWith("/directions-matrix/")) {
+      // Distancia por vía ≈ 1,3 × línea recta, a 40 km/h.
+      const coords = decodeURIComponent(url.pathname.split("/").pop() ?? "")
+        .split(";")
+        .map((c) => c.split(",").map(Number))
+        .map(([lon, lat]) => ({ lat: lat!, lon: lon! }));
+      const idx = (k: string) => (url.searchParams.get(k) ?? "").split(";").map(Number);
+      const src = idx("sources").map((i) => coords[i]!);
+      const dst = idx("destinations").map((i) => coords[i]!);
+      const distances = src.map((a) => dst.map((b) => haversineKm(a, b) * 1300));
+      return json({
+        code: "Ok",
+        distances,
+        durations: distances.map((row) => row.map((m) => (m / 40_000) * 3600)),
+      });
+    }
+    const tile =
+      url.hostname === "api.mapbox.com" &&
+      url.pathname.match(/^\/v4\/[^/]+\/(\d+)\/(\d+)\/(\d+)\.pngraw$/);
     if (tile) {
       const [, z, x, y] = tile.map(Number) as [number, number, number, number];
-      return new Response(Buffer.from(terrainTile(z, x, y)), { status: 200, headers: { "content-type": "image/png" } });
+      return new Response(Buffer.from(terrainTile(z, x, y)), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
     }
     if (url.hostname === "api.open-meteo.com" && url.pathname === "/v1/elevation") {
       const lats = (url.searchParams.get("latitude") ?? "").split(",").map(Number);
@@ -165,13 +204,21 @@ export function syntheticFetch(): typeof fetch {
       return json({ elevation: lats.map((lat, i) => elevationAt(lat, lons[i]!)) });
     }
     if (url.hostname === "api.open-meteo.com" && url.pathname === "/v1/forecast") {
-      return json({ elevation: 1200, current: { temperature_2m: 22, wind_speed_10m: 12, wind_direction_10m: 200 } });
+      return json({
+        elevation: 1200,
+        current: { temperature_2m: 22, wind_speed_10m: 12, wind_direction_10m: 200 },
+      });
     }
     throw new Error(`Petición no simulada: ${url.hostname}${url.pathname}`);
   };
 }
 
-function station(id: string, p: LatLon, powerKw: number, standard: "ccs2" | "type2" | "gb_t" = "ccs2"): ConsolidatedStation {
+function station(
+  id: string,
+  p: LatLon,
+  powerKw: number,
+  standard: "ccs2" | "type2" | "gb_t" = "ccs2",
+): ConsolidatedStation {
   return {
     id,
     name: `Estación ${id}`,
@@ -221,7 +268,22 @@ export function syntheticStations(): StationDataset {
     version: "synthetic-1",
     generatedAt: "2026-09-01T00:00:00Z",
     stations,
-    sources: [{ id: "osm", ok: true, stale: false, records: stations.length, accepted: stations.length, rejected: {} }],
-    stats: { raw: stations.length, valid: stations.length, stations: stations.length, merged: 0, eligible: stations.length },
+    sources: [
+      {
+        id: "osm",
+        ok: true,
+        stale: false,
+        records: stations.length,
+        accepted: stations.length,
+        rejected: {},
+      },
+    ],
+    stats: {
+      raw: stations.length,
+      valid: stations.length,
+      stations: stations.length,
+      merged: 0,
+      eligible: stations.length,
+    },
   };
 }

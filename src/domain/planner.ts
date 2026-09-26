@@ -22,6 +22,7 @@ import { kwhToSocPct } from "./ev/core/units";
 import { placeOnRoute } from "./ev/engines/corridor/engine";
 import { STYLE_SPEED_FACTOR, annotateEnergy, energyMode, segmentEnergyKwh } from "./energy";
 import { detourEnergyV2, energyProfileForRoute, type EnergyEngine } from "./ev/energy-v2";
+import type { MeasuredDetour } from "./ev/contracts/detour";
 import type { EnergySample } from "./ev/contracts/energy";
 import type { SocEvent } from "./ev/contracts/soc";
 import { legSoc, requiredStartSoc, simulateSoc, walkSoc } from "./ev/engines/soc/simulate";
@@ -92,6 +93,7 @@ function detourEnergyKwh(
 function placeChargers(
   chargers: Charger[],
   samples: { lat: number; lon: number; km: number }[],
+  measured?: Record<string, MeasuredDetour>,
 ): Charger[] {
   return placeOnRoute(
     chargers.filter((c) => isVerifiedForPlanning(c)),
@@ -99,6 +101,7 @@ function placeChargers(
     {
       maxKm: MAX_FROM_ROUTE_KM,
       detourRoadFactor: MODEL_PARAMETERS.corridor.detourRoadFactor.value,
+      measured,
     },
   );
 }
@@ -592,7 +595,8 @@ function pickStops(args: {
       kmAlongRoute: pick.charger.nearestKm ?? samples[pick.sIdx]!.km,
       fromRouteKm: pick.fromRouteKm,
       detourKm,
-      detourMinutes: detourMinutesOf(detourKm),
+      detourMinutes: pick.charger.detourMinutes ?? detourMinutesOf(detourKm),
+      detourSource: pick.charger.detourSource,
       detourEnergyKwh: pick.detourKwh,
       chargeKw: chosen.chargeKw,
       kmToNext: 0,
@@ -902,7 +906,7 @@ function planStopsV2(args: StopsArgs): StopsChoice {
       detourPct: kwhToSocPct(detourKwh, cap),
       detourKm,
       detourKwh,
-      detourMin: detourMinutesOf(detourKm),
+      detourMin: c.detourMinutes ?? detourMinutesOf(detourKm),
       waitMin: c.availability === "occupied" ? MODEL_PARAMETERS.planner.occupiedWaitMin.value : 0,
       chargeMinutes: chargeMinutesTable(plugs[i]!, vehicle, cap),
     };
@@ -996,6 +1000,7 @@ function planStopsV2(args: StopsArgs): StopsChoice {
       fromRouteKm: fromRouteKmOf(charger),
       detourKm: node.detourKm,
       detourMinutes: node.detourMin,
+      detourSource: charger.detourSource,
       detourEnergyKwh: node.detourKwh,
       chargeKw: plug.powerKw,
       kmToNext:
@@ -1131,6 +1136,8 @@ export function buildPlan(args: {
   engine?: "legacy" | "v2";
   /** Modelo de energía: el actual (por defecto) o el v2, física sin multiplicadores y perfil de velocidad (F5). */
   energyEngine?: EnergyEngine;
+  /** Desvíos medidos por vía para esta ruta, por id de estación (F4). */
+  detours?: Record<string, MeasuredDetour>;
 }): RoutePlan {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
   const { reservePct: safety, arrivalTargetPct } = socFloors(vehicle, conditions);
@@ -1144,7 +1151,7 @@ export function buildPlan(args: {
       : s.speedKmh * styleSpeed,
   }));
 
-  const attached = placeChargers(args.chargers, samplesPre);
+  const attached = placeChargers(args.chargers, samplesPre, args.detours);
   // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
   const energyV2 =
     args.energyEngine === "v2" ? energyProfileForRoute(raw, vehicle, conditions, weather) : null;

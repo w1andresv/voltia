@@ -313,7 +313,12 @@ function ChargerPopup({ charger, action }: { charger: Charger; action: ChargerAc
             className="h-11 text-sm text-muted"
             onClick={() => {
               suppressMapClicks(900);
-              setSeed({ lat: charger.lat, lon: charger.lon, address: charger.address, editId: charger.id });
+              setSeed({
+                lat: charger.lat,
+                lon: charger.lon,
+                address: charger.address,
+                editId: charger.id,
+              });
             }}
           >
             Editar ficha
@@ -374,10 +379,7 @@ function ChargerDots({
     },
   });
 
-  const dots = useMemo(
-    () => cullChargers(chargers, view.bounds, view.zoom),
-    [chargers, view],
-  );
+  const dots = useMemo(() => cullChargers(chargers, view.bounds, view.zoom), [chargers, view]);
 
   return (
     <>
@@ -503,7 +505,10 @@ export function LeafletMap({
     return pts;
   }, [drawn, drawnAlts, origin, destination]);
 
-  const segs = useMemo(() => (drawn ? coloredSegments(drawn.samples, colors) : []), [drawn, colors]);
+  const segs = useMemo(
+    () => (drawn ? coloredSegments(drawn.samples, colors) : []),
+    [drawn, colors],
+  );
   const hover = drawn && hoverKm != null ? sampleAt(drawn.samples, hoverKm) : null;
   const extras = useMemo(() => {
     if (!showAllChargers) return [];
@@ -548,7 +553,13 @@ export function LeafletMap({
           <Fragment key={`alt-${alt.id}`}>
             <Polyline
               positions={positions}
-              pathOptions={{ color: colors.alternative, weight: 5, opacity: 0.55, lineCap: "round", lineJoin: "round" }}
+              pathOptions={{
+                color: colors.alternative,
+                weight: 5,
+                opacity: 0.55,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
               interactive={false}
             />
             {/* Línea ancha e invisible: más fácil de tocar en el celular. */}
@@ -558,7 +569,8 @@ export function LeafletMap({
               eventHandlers={{ click: select }}
             >
               <Tooltip sticky>
-                {alt.label} · {formatKm(alt.distanceKm)} · {formatMinutes(alt.totalMinutes)} — toca para elegirla
+                {alt.label} · {formatKm(alt.distanceKm)} · {formatMinutes(alt.totalMinutes)} — toca
+                para elegirla
               </Tooltip>
             </Polyline>
           </Fragment>
@@ -569,7 +581,13 @@ export function LeafletMap({
         <Polyline
           key={`seg-${i}`}
           positions={seg.positions}
-          pathOptions={{ color: seg.color, weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round" }}
+          pathOptions={{
+            color: seg.color,
+            weight: 5,
+            opacity: 0.92,
+            lineCap: "round",
+            lineJoin: "round",
+          }}
         />
       ))}
 
@@ -607,7 +625,9 @@ export function LeafletMap({
                   <div>{adapterNote(st.adapterNeeded).withoutLine}</div>
                 </div>
               ) : !isDcSocket(st.bestSocket) ? (
-                <div className="mt-1 text-xs font-medium text-warn">Carga lenta — sin adaptador</div>
+                <div className="mt-1 text-xs font-medium text-warn">
+                  Carga lenta — sin adaptador
+                </div>
               ) : null}
               <div className="mt-1 text-xs text-accent">
                 Llegas al {formatPct(st.arriveSoc)} · mínimo {formatPct(st.minDepartSoc)} · sales al{" "}
@@ -616,15 +636,18 @@ export function LeafletMap({
               {st.alternative && !st.adapterNeeded ? (
                 <div className="text-xs text-warn">
                   Carga lenta — sin adaptador · {formatKw(st.alternative.chargeKw)} ·{" "}
-                  {formatMinutes(st.alternative.chargeMinutes)} · alcance {formatKm(st.alternative.rangeGainKm)}
+                  {formatMinutes(st.alternative.chargeMinutes)} · alcance{" "}
+                  {formatKm(st.alternative.rangeGainKm)}
                 </div>
               ) : null}
               <div className="text-xs text-muted">
-                {formatKwh(st.energyAddedKwh)} · {formatMinutes(st.chargeMinutes)} · {formatKw(st.chargeKw)}
+                {formatKwh(st.energyAddedKwh)} · {formatMinutes(st.chargeMinutes)} ·{" "}
+                {formatKw(st.chargeKw)}
               </div>
               {st.fromRouteKm > 0.15 ? (
                 <div className="text-xs text-muted">
                   {formatKm(st.fromRouteKm, 1)} de la ruta · desvío {formatKm(st.detourKm, 1)}
+                  {st.detourSource === "calculated" ? " por vía" : " estimado"}
                   {st.detourMinutes >= 1 ? ` · +${formatMinutes(st.detourMinutes)}` : ""}
                 </div>
               ) : (
@@ -643,13 +666,20 @@ export function LeafletMap({
         </Marker>
       ))}
 
-      {extras.length ? <ChargerDots chargers={extras} action={chargerAction} icons={icons} /> : null}
+      {extras.length ? (
+        <ChargerDots chargers={extras} action={chargerAction} icons={icons} />
+      ) : null}
 
       {hover ? (
         <CircleMarker
           center={[hover.lat, hover.lon]}
           radius={8}
-          pathOptions={{ color: socColor(hover.soc, colors), fillColor: socColor(hover.soc, colors), fillOpacity: 1, weight: 2 }}
+          pathOptions={{
+            color: socColor(hover.soc, colors),
+            fillColor: socColor(hover.soc, colors),
+            fillOpacity: 1,
+            weight: 2,
+          }}
         />
       ) : null}
     </MapContainer>
