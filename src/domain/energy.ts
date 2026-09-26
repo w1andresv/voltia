@@ -1,4 +1,5 @@
 import type { BodyType, RegenLevel, RouteSample, TripConditions, Vehicle, WeatherSnapshot } from "./types";
+import type { EnergySample } from "./ev/contracts/energy";
 import { tripMassKg } from "./types";
 import { MODEL_PARAMETERS } from "./ev/core/params";
 import { socFloors } from "./ev/core/trip-config";
@@ -155,13 +156,6 @@ export function regenRecovery(conditions: TripConditions): number {
   return REGEN_RECOVERY[conditions.regenLevel] ?? REGEN_RECOVERY.medium;
 }
 
-/** Recuperación con la batería llena: completa hasta 80 %, baja en línea y es 0 desde 98 %. */
-export function effectiveRegen(conditions: TripConditions, socPct = 50): number {
-  if (socPct >= 98) return 0;
-  const r = regenRecovery(conditions);
-  return socPct > 80 ? (r * (98 - socPct)) / 18 : r;
-}
-
 export function climateMultiplier(tempC: number): number {
   const pts = CLIMATE_POINTS;
   if (tempC <= pts[0]![0]) return pts[0]![1];
@@ -267,7 +261,6 @@ function physicsSlice(
   elevDeltaM: number,
   speedKmh: number,
   ctx: EnergyContext,
-  socPct: number,
   geo: SegmentGeo = {},
   opts?: { includeCycle?: boolean },
 ): EnergySlice {
@@ -301,9 +294,11 @@ function physicsSlice(
     traction = (wheelKwh / eff) * climateMultiplier(temp);
   } else {
     // Solo el excedente se puede regenerar, y no más rápido que el tope del motor.
+    // Es la regeneración POTENCIAL: cuánto acepta la batería según su SOC lo
+    // decide el SOCEngine (engines/soc), no este cálculo (F3).
     const speedRegen = speed < 15 ? speed / 15 : 1;
     const capKwh = Math.max(0, vehicle.motorKw * REGEN_POWER_SHARE * hours);
-    regen = Math.min(-wheelKwh * effectiveRegen(conditions, socPct) * speedRegen, capKwh);
+    regen = Math.min(-wheelKwh * regenRecovery(conditions) * speedRegen, capKwh);
   }
   const gross = traction + aux;
   return { grossKwh: gross, regenKwh: regen, netKwh: gross - regen };
@@ -314,7 +309,6 @@ function manualSlice(
   elevDeltaM: number,
   speedKmh: number,
   ctx: EnergyContext,
-  socPct: number,
   geo: SegmentGeo = {},
 ): EnergySlice {
   const { vehicle, conditions } = ctx;
@@ -335,10 +329,8 @@ function manualSlice(
     acPowerKw(conditions.ac, temp) * hours;
   // Efecto del desnivel = física con pendiente − física en llano (sin el ciclo, que
   // ya viene en el consumo manual). En bajada es negativo y descuenta de la base.
-  const phys = physicsSlice(distanceKm, elevDeltaM, speed, ctx, socPct, geo, {
-    includeCycle: false,
-  });
-  const flat = physicsSlice(distanceKm, 0, speed, ctx, socPct, geo, { includeCycle: false });
+  const phys = physicsSlice(distanceKm, elevDeltaM, speed, ctx, geo, { includeCycle: false });
+  const flat = physicsSlice(distanceKm, 0, speed, ctx, geo, { includeCycle: false });
   const net = road + (phys.netKwh - flat.netKwh);
   const regen = phys.regenKwh;
   const gross = Math.max(0, net + regen);
@@ -346,21 +338,19 @@ function manualSlice(
 }
 
 /**
- * Energía del tramo. `netKwh` puede ser negativo en una bajada fuerte: la
- * batería gana carga.
+ * Energía del tramo, sin depender del SOC. `regenKwh` es la regeneración
+ * potencial; `netKwh` puede ser negativo en una bajada fuerte: la batería gana carga.
  */
 export function segmentEnergyBreakdown(
   distanceKm: number,
   elevDeltaM: number,
   speedKmh: number,
   ctx: EnergyContext,
-  socPct = 50,
   geo: SegmentGeo = {},
 ): EnergySlice {
   if (distanceKm <= 0) return { grossKwh: 0, regenKwh: 0, netKwh: 0 };
-  if (hasManualConsumption(ctx.vehicle))
-    return manualSlice(distanceKm, elevDeltaM, speedKmh, ctx, socPct, geo);
-  return physicsSlice(distanceKm, elevDeltaM, speedKmh, ctx, socPct, geo);
+  if (hasManualConsumption(ctx.vehicle)) return manualSlice(distanceKm, elevDeltaM, speedKmh, ctx, geo);
+  return physicsSlice(distanceKm, elevDeltaM, speedKmh, ctx, geo);
 }
 
 /** Mixed-cycle reference at ~70 km/h on flat, kWh/100 km. */
@@ -370,40 +360,38 @@ export function mixedCycleKwhPer100(
   weather: WeatherSnapshot | null,
 ): number {
   if (hasManualConsumption(vehicle)) return vehicle.consumptionKwhPer100km as number;
-  const e = physicsSlice(100, 0, REF_SPEED, { vehicle, conditions, weather }, 50).netKwh;
+  const e = physicsSlice(100, 0, REF_SPEED, { vehicle, conditions, weather }).netKwh;
   return Math.max(8, e);
 }
 
-/**
- * Net energy for a route slice. Same engine as SOC, charge stops and the chart.
- */
+/** Energía neta de un tramo (con regeneración potencial). Mismo modelo que el perfil de la ruta. */
 export function segmentEnergyKwh(
   distanceKm: number,
   elevDeltaM: number,
   speedKmh: number,
   ctx: EnergyContext,
-  socPct = 50,
   geo: SegmentGeo = {},
 ): number {
-  return segmentEnergyBreakdown(distanceKm, elevDeltaM, speedKmh, ctx, socPct, geo).netKwh;
+  return segmentEnergyBreakdown(distanceKm, elevDeltaM, speedKmh, ctx, geo).netKwh;
 }
 
+/**
+ * Perfil de energía de la ruta: gross, regeneración potencial y neto por tramo,
+ * y el acumulado. No depende del SOC (F3): el SOC lo calcula el SOCEngine.
+ */
 export function annotateEnergy(
   samples: Omit<
     RouteSample,
     "energyKwh" | "energyGrossKwh" | "energyRegenKwh" | "cumulativeKwh" | "avgKwhPer100" | "soc"
   >[],
   ctx: EnergyContext,
-  initialSoc: number,
-): RouteSample[] {
-  const cap = Math.max(ctx.vehicle.batteryKwh, 1);
+): EnergySample[] {
   const energyCtx: EnergyContext = {
     ...ctx,
     originAltitudeM: ctx.originAltitudeM ?? samples[0]?.elevM,
   };
   let cum = 0;
-  let soc = initialSoc;
-  const out: RouteSample[] = [];
+  const out: EnergySample[] = [];
   for (let i = 0; i < samples.length; i++) {
     const s = samples[i]!;
     let gross = 0;
@@ -417,13 +405,12 @@ export function annotateEnergy(
         altitudeM: (prev.elevM + s.elevM) / 2,
         headingDeg: bearingDeg(prev, s),
       };
-      const slice = segmentEnergyBreakdown(dKm, dElev, s.speedKmh, energyCtx, soc, geo);
+      const slice = segmentEnergyBreakdown(dKm, dElev, s.speedKmh, energyCtx, geo);
       gross = slice.grossKwh;
       regen = slice.regenKwh;
       net = slice.netKwh;
     }
     cum += net;
-    soc = clamp(soc - (net / cap) * 100, 0, 100);
     const avg = s.km > 0.3 ? (cum / s.km) * 100 : 0;
     out.push({
       ...s,
@@ -432,13 +419,12 @@ export function annotateEnergy(
       energyRegenKwh: regen,
       cumulativeKwh: cum,
       avgKwhPer100: avg,
-      soc,
     });
   }
   return out;
 }
 
-export function energyBetween(samples: RouteSample[], fromIdx: number, toIdx: number): number {
+export function energyBetween(samples: EnergySample[], fromIdx: number, toIdx: number): number {
   const a = samples[Math.max(0, fromIdx)]!;
   const b = samples[Math.min(samples.length - 1, toIdx)]!;
   return b.cumulativeKwh - a.cumulativeKwh;

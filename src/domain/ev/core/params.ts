@@ -1,4 +1,5 @@
 import type { BodyType } from "../../types";
+import type { RegenAcceptance } from "../contracts/soc";
 import { sourced, type SourcedValue } from "./provenance";
 
 /**
@@ -21,6 +22,10 @@ export interface ModelParameters {
     smoothingWindow: number;
     /** Desnivel mínimo entre muestras para contar como subida o bajada, m. */
     gainThresholdM: number;
+  };
+  soc: {
+    /** Regeneración que acepta la batería según su SOC: completa hasta 80 %, cero desde 98 %. */
+    regenAcceptance: RegenAcceptance;
   };
   corridor: {
     /** Distancia máxima de una estación a la ruta para considerarla. */
@@ -64,6 +69,9 @@ export const MODEL_PARAMETERS: ModelParameters = {
     probesPerRoute: 96,
     smoothingWindow: 5,
     gainThresholdM: 2,
+  },
+  soc: {
+    regenAcceptance: { fullBelowPct: 80, zeroFromPct: 98 },
   },
   corridor: {
     maxFromRouteKm: 12,

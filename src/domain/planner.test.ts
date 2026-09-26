@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { annotateEnergy, energyBetween } from "./energy";
+import { simulateSoc } from "./ev/engines/soc/simulate";
 import { buildPlan, classifyFirstChargerCharge, rankPlans } from "./planner";
 import { DEFAULT_CURVE } from "./charging";
 import {
@@ -483,7 +484,6 @@ function legSocPct(raw: RawRoute, ev: Vehicle, cond: TripConditions, chargerKm: 
   const annotated = annotateEnergy(
     samples,
     { vehicle: ev, conditions: cond, weather: null, originAltitudeM: samples[0]?.elevM },
-    100,
   );
   const idx = samples.findIndex((s) => Math.abs(s.km - chargerKm) < 0.05);
   return (energyBetween(annotated, 0, idx) / ev.batteryKwh) * 100;
@@ -693,11 +693,10 @@ describe("buildPlan — reserva con el mínimo recomendado del vehículo (C8)", 
   const cond = conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 });
   const destination: Place = { label: "Destino", lat: 4 + distance / 111, lon: -74 };
   // Cargador donde el vehículo llega con 10–15 %: entre el margen "bajo" y el mínimo del vehículo.
-  const soc = annotateEnergy(
-    straightRoute(distance).samples,
-    { vehicle: vehicle(), conditions: cond, weather: null },
-    cond.initialSoc,
-  );
+  const soc = simulateSoc(annotateEnergy(straightRoute(distance).samples, { vehicle: vehicle(), conditions: cond, weather: null }), {
+    initialSocPct: cond.initialSoc,
+    capacityKwh: vehicle().batteryKwh,
+  }).samples;
   const hit = soc.find((s) => s.soc < 14)!;
   const plan = (minSocRecommended: number) =>
     buildPlan({
@@ -857,5 +856,46 @@ describe("buildPlan — el piso de SOC se respeta en todo el tramo, no solo al l
     expect(p.feasible).toBe(true);
     expect(p.stops).toHaveLength(1);
     expect(p.minSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+  });
+});
+
+describe("buildPlan — la regeneración depende del SOC real después de cargar (C6)", () => {
+  // Llano a 2500 m hasta el km 160, baja 2000 m hasta el km 220 y sigue en llano.
+  const distance = 300;
+  const elev = (km: number) => (km <= 160 ? 2500 : km <= 220 ? 2500 - ((km - 160) / 60) * 2000 : 500);
+  const route = (): RawRoute => {
+    const base = straightRoute(distance, 2);
+    const samples = base.samples.map((s) => ({ ...s, elevM: elev(s.km), speedKmh: 70 }));
+    return { ...base, samples, elevation: { gainM: 0, lossM: 2000, minM: 500, maxM: 2500 } };
+  };
+  const plan = buildPlan({
+    raw: route(),
+    vehicle: vehicle({ maxSocTravel: 100 }),
+    conditions: conditions({ initialSoc: 45, planningMode: "fewer_stops", avgSpeedKmh: null, regenLevel: "high" }),
+    chargers: [chargerAt(150)],
+    weather: null,
+    origin: ORIGIN,
+    destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+  });
+  const stop = plan.stops[0]!;
+
+  it("carga alto antes de la bajada", () => {
+    expect(plan.feasible).toBe(true);
+    expect(stop.departSoc).toBeGreaterThanOrEqual(80);
+  });
+
+  it("la batería casi llena no acepta toda la regeneración de la bajada", () => {
+    expect(plan.regenCurtailedKwh).toBeGreaterThan(0);
+  });
+
+  it("la llegada descuenta la regeneración que no entró", () => {
+    const at = plan.samples.findIndex((s) => s.km >= stop.kmAlongRoute);
+    const after = plan.samples.slice(at + 1);
+    // energyRegenKwh de la curva es la regeneración aceptada.
+    const acceptedNet = after.reduce((a, s) => a + s.energyGrossKwh - s.energyRegenKwh, 0);
+    expect(plan.arrivalSoc).toBeCloseTo(stop.departSoc - (acceptedNet / 60) * 100, 6);
+    // Queda por debajo de lo que daría aceptar toda la regeneración potencial.
+    const optimistic = stop.departSoc - ((acceptedNet - plan.regenCurtailedKwh!) / 60) * 100;
+    expect(plan.arrivalSoc).toBeLessThan(optimistic);
   });
 });

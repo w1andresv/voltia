@@ -11,7 +11,6 @@ import {
   climateMultiplier,
   consumptionBlocks,
   dragAreaM2,
-  effectiveRegen,
   energyMode,
   hasManualConsumption,
   manualSpeedFactor,
@@ -115,19 +114,22 @@ describe("acPowerKw", () => {
   });
 });
 
-describe("effectiveRegen", () => {
-  it("es 0 cuando el SOC está casi lleno (>=98%)", () => {
-    expect(effectiveRegen(conditions(), 99)).toBe(0);
+describe("regeneración potencial", () => {
+  it("no depende del SOC: el mismo tramo da la misma energía (C6)", () => {
+    // La batería casi llena la recorta en el SOCEngine (engines/soc), no aquí.
+    const c = { vehicle: vehicle(), conditions: conditions(), weather: null };
+    const a = segmentEnergyBreakdown(5, -400, 60, c);
+    const b = segmentEnergyBreakdown(5, -400, 60, c);
+    expect(a).toEqual(b);
+    expect(a.regenKwh).toBeGreaterThan(0);
   });
 
-  it("a SOC medio vale la recuperación del nivel elegido", () => {
-    expect(effectiveRegen(conditions({ regenLevel: "low" }), 50)).toBe(REGEN_RECOVERY.low);
-    expect(effectiveRegen(conditions({ regenLevel: "medium" }), 50)).toBe(REGEN_RECOVERY.medium);
-    expect(effectiveRegen(conditions({ regenLevel: "high" }), 50)).toBe(REGEN_RECOVERY.high);
-  });
-
-  it("entre 80 % y 98 % baja en línea: a 89 % vale la mitad", () => {
-    expect(effectiveRegen(conditions(), 89)).toBeCloseTo(REGEN_RECOVERY.medium / 2, 6);
+  it("crece con el nivel de regeneración elegido", () => {
+    const at = (regenLevel: TripConditions["regenLevel"]) =>
+      segmentEnergyBreakdown(5, -400, 60, { vehicle: vehicle(), conditions: conditions({ regenLevel }), weather: null })
+        .regenKwh;
+    expect(at("low")).toBeLessThan(at("medium"));
+    expect(at("medium")).toBeLessThan(at("high"));
   });
 
   it("los niveles van de menor a mayor", () => {
@@ -233,8 +235,8 @@ describe("altitud y temperatura por tramo", () => {
 
   it("el mismo tramo llano gasta menos a 2600 m que a nivel del mar", () => {
     const c = { vehicle: vehicle(), conditions: conditions(), weather: null };
-    const sea = segmentEnergyBreakdown(10, 0, 100, c, 50, { altitudeM: 0 });
-    const high = segmentEnergyBreakdown(10, 0, 100, c, 50, { altitudeM: 2600 });
+    const sea = segmentEnergyBreakdown(10, 0, 100, c, { altitudeM: 0 });
+    const high = segmentEnergyBreakdown(10, 0, 100, c, { altitudeM: 2600 });
     expect(high.netKwh).toBeLessThan(sea.netKwh);
   });
 
@@ -292,10 +294,10 @@ describe("annotateEnergy", () => {
       { ...base, km: 2, lat: 7.018, elevM: 1340 },
     ];
     const ctx = { vehicle: vehicle(), conditions: conditions(), weather: null };
-    const out = annotateEnergy(samples, ctx, 50);
+    const out = annotateEnergy(samples, ctx);
     expect(out[0]!.energyKwh).toBe(0);
     expect(out[2]!.cumulativeKwh).toBeLessThan(0);
-    expect(out[2]!.soc).toBeGreaterThan(50);
+    expect(out[2]!.energyRegenKwh).toBeGreaterThan(0);
   });
 });
 
@@ -411,8 +413,8 @@ describe("coeficientes físicos por carrocería", () => {
 
   it("más arrastre, más consumo a velocidad de carretera", () => {
     const ctx = (v: Vehicle) => ({ vehicle: v, conditions: conditions(), weather: null });
-    const sedan = segmentEnergyBreakdown(100, 0, 90, ctx(vehicle({ bodyType: "sedan" })), 50);
-    const suv = segmentEnergyBreakdown(100, 0, 90, ctx(vehicle({ bodyType: "suv_large" })), 50);
+    const sedan = segmentEnergyBreakdown(100, 0, 90, ctx(vehicle({ bodyType: "sedan" })));
+    const suv = segmentEnergyBreakdown(100, 0, 90, ctx(vehicle({ bodyType: "suv_large" })));
     expect(suv.netKwh).toBeGreaterThan(sedan.netKwh);
   });
 });

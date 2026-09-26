@@ -225,7 +225,10 @@ export interface RoutePlan {
   totalMinutes: number;
   energyKwh: number;
   energyGrossKwh: number;
+  /** Regeneración que la batería aceptó (con el recorte por SOC alto). */
   energyRegenKwh: number;
+  /** Regeneración potencial que la batería no aceptó por ir casi llena (F3). */
+  regenCurtailedKwh?: number;
   avgKwhPer100km: number;
   energyMode: EnergyMode;
   arrivalSoc: number;

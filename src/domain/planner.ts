@@ -1,12 +1,9 @@
 import { compareByHierarchy } from "./road-hierarchy";
 import { chargeTimeMinutes, effectiveChargeKw, isDc, routePlugs, routeSocket } from "./charging";
-import {
-  STYLE_SPEED_FACTOR,
-  annotateEnergy,
-  energyBetween,
-  energyMode,
-  segmentEnergyKwh,
-} from "./energy";
+import { STYLE_SPEED_FACTOR, annotateEnergy, energyMode, segmentEnergyKwh } from "./energy";
+import type { EnergySample } from "./ev/contracts/energy";
+import type { SocEvent } from "./ev/contracts/soc";
+import { legSoc, requiredStartSoc, simulateSoc } from "./ev/engines/soc/simulate";
 import { haversineKm } from "./geo";
 import type {
   ChargeChoice,
@@ -18,7 +15,6 @@ import type {
   Place,
   RawRoute,
   RoutePlan,
-  RouteSample,
   TripConditions,
   Vehicle,
   WeatherSnapshot,
@@ -106,38 +102,24 @@ function detourMinutesOf(km: number): number {
   return (km / DETOUR_SPEED_KMH) * 60;
 }
 
-/**
- * Mayor consumo acumulado (kWh) desde fromIdx hasta cualquier punto del tramo,
- * hasta toIdx. En montaña el punto más bajo de batería puede estar en la cima,
- * no al final del tramo (C1).
- */
-function maxDrawdownKwh(samples: RouteSample[], fromIdx: number, toIdx: number): number {
-  const base = samples[Math.max(0, fromIdx)]?.cumulativeKwh ?? 0;
-  const end = Math.min(samples.length - 1, toIdx);
-  let worst = 0;
-  for (let k = Math.max(0, fromIdx) + 1; k <= end; k++) {
-    worst = Math.max(worst, samples[k]!.cumulativeKwh - base);
-  }
-  return worst;
-}
-
-/** SOC más bajo en el tramo por la vía, saliendo de fromIdx con fromSoc. */
+/** SOC más bajo en el tramo por la vía, saliendo de fromIdx con fromSoc (C1). */
 function lowestSocOnLeg(
-  samples: RouteSample[],
+  samples: EnergySample[],
   fromIdx: number,
   toIdx: number,
   fromSoc: number,
   capacity: number,
 ): number {
-  return socAfter(fromSoc, maxDrawdownKwh(samples, fromIdx, toIdx), capacity);
+  return legSoc(samples, fromIdx, toIdx, fromSoc, capacity).lowestSoc;
 }
 
 /**
- * SOC de salida para llegar con arrivalTarget y, además, no bajar de floorPct
- * en ningún punto del tramo.
+ * SOC de salida para llegar con arrivalTarget (después del desvío) y, además,
+ * no bajar de floorPct en ningún punto del tramo. Lo calcula el SOCEngine, que
+ * recorta la regeneración si la batería va casi llena (F3).
  */
 function neededDepartSoc(args: {
-  samples: RouteSample[];
+  samples: EnergySample[];
   fromIdx: number;
   destIdx: number;
   arrivalTarget: number;
@@ -145,11 +127,12 @@ function neededDepartSoc(args: {
   capacity: number;
   detourKwh: number;
 }): number {
-  const e = energyBetween(args.samples, args.fromIdx, args.destIdx) + args.detourKwh;
-  const toArrive = args.arrivalTarget + (e / args.capacity) * 100;
-  const draw = maxDrawdownKwh(args.samples, args.fromIdx, args.destIdx);
-  const toStayAbove = args.floorPct + (draw / args.capacity) * 100;
-  return Math.max(toArrive, toStayAbove);
+  return requiredStartSoc(args.samples, args.fromIdx, args.destIdx, args.capacity, {
+    arrivalTargetPct: args.arrivalTarget,
+    floorPct: args.floorPct,
+    extraKwh: args.detourKwh,
+    tolerancePct: ARRIVE_TOLERANCE,
+  });
 }
 
 interface Candidate {
@@ -167,19 +150,19 @@ function arriveAt(
   charger: Charger,
   fromIdx: number,
   soc: number,
-  samples: RouteSample[],
+  samples: EnergySample[],
   cap: number,
   ctx: EnergyCtx,
 ): { arrive: number; lowest: number; detourKwh: number; sIdx: number } | null {
   const sIdx = charger.nearestSampleIndex ?? 0;
   if (sIdx <= fromIdx) return null;
-  const detourKwh = segmentEnergyKwh(charger.detourKm ?? 0, 0, DETOUR_SPEED_KMH, ctx, soc, {
+  const detourKwh = segmentEnergyKwh(charger.detourKm ?? 0, 0, DETOUR_SPEED_KMH, ctx, {
     altitudeM: samples[sIdx]?.elevM,
   });
-  const e = energyBetween(samples, fromIdx, sIdx) + detourKwh;
-  const arrive = socAfter(soc, e, cap);
+  const leg = legSoc(samples, fromIdx, sIdx, soc, cap);
+  const arrive = socAfter(leg.endSoc, detourKwh, cap);
   // El mínimo del tramo: por la vía hasta el cargador, o la llegada tras el desvío.
-  const lowest = Math.min(arrive, lowestSocOnLeg(samples, fromIdx, sIdx, soc, cap));
+  const lowest = Math.min(arrive, leg.lowestSoc);
   return { arrive, lowest, detourKwh, sIdx };
 }
 
@@ -215,7 +198,7 @@ function unreachable(): { stops: ChargeStop[]; feasible: boolean; reason: string
 }
 
 function pickStops(args: {
-  samples: RouteSample[];
+  samples: EnergySample[];
   chargers: Charger[];
   vehicle: Vehicle;
   conditions: TripConditions;
@@ -237,10 +220,13 @@ function pickStops(args: {
   const stops: ChargeStop[] = [];
 
   // Llega al destino con el objetivo y sin bajar del piso en ningún punto (C1).
-  const canReachDestFrom = (fromIdx: number, fromSoc: number, extraKwh = 0) =>
-    socAfter(fromSoc, energyBetween(samples, fromIdx, destIdx) + extraKwh, cap) >=
-      arrivalTarget - ARRIVE_TOLERANCE &&
-    lowestSocOnLeg(samples, fromIdx, destIdx, fromSoc, cap) >= floor - ARRIVE_TOLERANCE;
+  const canReachDestFrom = (fromIdx: number, fromSoc: number, extraKwh = 0) => {
+    const leg = legSoc(samples, fromIdx, destIdx, fromSoc, cap);
+    return (
+      socAfter(leg.endSoc, extraKwh, cap) >= arrivalTarget - ARRIVE_TOLERANCE &&
+      leg.lowestSoc >= floor - ARRIVE_TOLERANCE
+    );
+  };
 
   if (canReachDestFrom(0, soc)) {
     return { stops: [], feasible: true };
@@ -607,23 +593,19 @@ function pickStops(args: {
   return { stops: labeled, feasible: true };
 }
 
-function applyStopsToSamples(
-  base: RouteSample[],
-  stops: ChargeStop[],
-  vehicle: Vehicle,
-  initialSoc: number,
-): RouteSample[] {
-  const cap = vehicle.batteryKwh;
-  const ordered = [...stops].sort((a, b) => a.kmAlongRoute - b.kmAlongRoute);
-  return base.map((s) => {
-    let added = 0;
-    for (const st of ordered) {
-      // La carga suma y el desvío (ida y vuelta) resta, igual que en arriveSoc (C2).
-      if (s.km + 0.05 >= st.kmAlongRoute) added += st.energyAddedKwh - (st.detourEnergyKwh ?? 0);
-    }
-    const soc = initialSoc - ((s.cumulativeKwh - added) / cap) * 100;
-    return { ...s, soc };
-  });
+/**
+ * Cargas y desvíos como eventos del SOCEngine (C2): el desvío resta al llegar al
+ * cargador y la carga suma después. La muestra de la parada es la primera en su km.
+ */
+function stopEvents(samples: EnergySample[], stops: ChargeStop[]): SocEvent[] {
+  const events: SocEvent[] = [];
+  for (const st of stops) {
+    const atIndex = samples.findIndex((s) => s.km + 0.05 >= st.kmAlongRoute);
+    if (atIndex < 0) continue;
+    if (st.detourEnergyKwh) events.push({ atIndex, energyKwh: -st.detourEnergyKwh });
+    events.push({ atIndex, energyKwh: st.energyAddedKwh });
+  }
+  return events;
 }
 
 function hasFixedSpeed(conditions: TripConditions): boolean {
@@ -661,14 +643,12 @@ export function classifyFirstChargerCharge(
   return { kind: "precharge", additionalPct, requiredStartSoc };
 }
 
-type BareSample = Parameters<typeof annotateEnergy>[0][number];
-
 /**
  * Primera electrolinera verificada y usable a la que el vehículo puede llegar
  * con menos batería. El consumo es el del tramo (ruta + desvío), no una distancia fija.
  */
 function assessFirstCharger(args: {
-  samplesPre: BareSample[];
+  samples: EnergySample[];
   chargers: Charger[];
   vehicle: Vehicle;
   conditions: TripConditions;
@@ -682,17 +662,17 @@ function assessFirstCharger(args: {
       requiredStartSoc: number;
       charger: Charger;
     } {
-  const { samplesPre, vehicle, conditions, weather } = args;
-  if (samplesPre.length < 2) return { kind: "skip" };
+  const { samples, vehicle, conditions, weather } = args;
+  if (samples.length < 2) return { kind: "skip" };
 
   const cap = Math.max(vehicle.batteryKwh, 1);
-  const destIdx = samplesPre.length - 1;
+  const destIdx = samples.length - 1;
   const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(vehicle, conditions);
   const energyCtx: EnergyCtx = {
     vehicle,
     conditions,
     weather,
-    originAltitudeM: samplesPre[0]?.elevM,
+    originAltitudeM: samples[0]?.elevM,
   };
   const usable = args.chargers.filter((c) => {
     if (!isVerifiedForPlanning(c)) return false;
@@ -701,30 +681,18 @@ function assessFirstCharger(args: {
     return sIdx > 0 && sIdx < destIdx;
   });
 
-  const cache = new Map<number, RouteSample[]>();
-  const samplesAt = (soc: number) => {
-    const key = Math.round(soc * 1000) / 1000;
-    let hit = cache.get(key);
-    if (!hit) {
-      hit = annotateEnergy(samplesPre, energyCtx, soc);
-      cache.set(key, hit);
-    }
-    return hit;
-  };
-
   // Igual que pickStops: primero exigir el margen de seguridad al llegar a la
   // primera electrolinera; solo se baja a "llega justo" si ni al 100 % cabe.
   const floor = conditions.allowBelowSafety ? MODEL_PARAMETERS.planner.belowSafetyFloorPct : safety;
   const reachFloor = conditions.allowBelowSafety ? MODEL_PARAMETERS.planner.belowSafetyFloorPct : 0;
 
-  const currentSamples = samplesAt(conditions.initialSoc);
-  const destSoc = socAfter(conditions.initialSoc, energyBetween(currentSamples, 0, destIdx), cap);
-  const destLowest = lowestSocOnLeg(currentSamples, 0, destIdx, conditions.initialSoc, cap);
-  const destOk = destSoc >= arrivalTarget && destLowest >= floor - ARRIVE_TOLERANCE;
+  // El perfil de energía no depende del SOC: se evalúa con cualquier SOC de salida (F3).
+  const toDest = legSoc(samples, 0, destIdx, conditions.initialSoc, cap);
+  const destLowest = lowestSocOnLeg(samples, 0, destIdx, conditions.initialSoc, cap);
+  const destOk = toDest.endSoc >= arrivalTarget && destLowest >= floor - ARRIVE_TOLERANCE;
   if (destOk || !usable.length) return { kind: "skip" };
 
   const reachableCharger = (soc: number, minArrive: number): Charger | null => {
-    const samples = samplesAt(soc);
     let best: Charger | null = null;
     let bestKm = Infinity;
     for (const charger of usable) {
@@ -797,8 +765,11 @@ export function buildPlan(args: {
   }));
 
   const attached = attachChargersToRoute(args.chargers, samplesPre);
+  // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
+  const energySamples = annotateEnergy(samplesPre, ctx);
+  const cap = Math.max(vehicle.batteryKwh, 1);
   const gate = assessFirstCharger({
-    samplesPre,
+    samples: energySamples,
     chargers: attached,
     vehicle,
     conditions,
@@ -807,7 +778,6 @@ export function buildPlan(args: {
   const planningSoc = gate.kind === "precharge" ? gate.requiredStartSoc : conditions.initialSoc;
   const planningConditions =
     planningSoc === conditions.initialSoc ? conditions : { ...conditions, initialSoc: planningSoc };
-  const energySamples = annotateEnergy(samplesPre, ctx, planningSoc);
   const picked =
     gate.kind === "impossible"
       ? { stops: [] as ChargeStop[], feasible: false, reason: FIRST_CHARGER_UNREACHABLE_REASON }
@@ -835,7 +805,14 @@ export function buildPlan(args: {
   const feasible = picked.feasible;
   const reason = picked.reason;
 
-  const samples = applyStopsToSamples(energySamples, stops, vehicle, planningSoc);
+  // La curva de batería sale del SOCEngine: regeneración recortada según el SOC
+  // real, y desvíos y cargas como eventos (C2, C6).
+  const sim = simulateSoc(energySamples, {
+    initialSocPct: planningSoc,
+    capacityKwh: cap,
+    events: stopEvents(energySamples, stops),
+  });
+  const samples = sim.samples;
   const last = samples[samples.length - 1]!;
   const detourKwh = stops.reduce((a, s) => a + (s.detourEnergyKwh ?? 0), 0);
   const energyKwh = last.cumulativeKwh + detourKwh;
@@ -847,10 +824,7 @@ export function buildPlan(args: {
   const detourMin = stops.reduce((a, s) => a + (s.detourMinutes ?? 0), 0);
   const arrivalSoc = last.soc;
   // El punto más bajo puede ser la llegada a un cargador (la curva muestra la salida).
-  const minSoc = Math.min(
-    samples.reduce((m, s) => Math.min(m, s.soc), 100),
-    ...stops.map((s) => s.arriveSoc),
-  );
+  const minSoc = sim.minSoc;
   const remainingKwh = Math.max(0, (arrivalSoc / 100) * vehicle.batteryKwh);
   const canArriveWithoutCharge =
     stops.length === 0 &&
@@ -915,6 +889,7 @@ export function buildPlan(args: {
     energyKwh,
     energyGrossKwh,
     energyRegenKwh,
+    regenCurtailedKwh: sim.curtailedRegenKwh,
     avgKwhPer100km:
       raw.distanceKm + detourKm > 0 ? (energyKwh / (raw.distanceKm + detourKm)) * 100 : 0,
     energyMode: energyMode(vehicle),

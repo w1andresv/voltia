@@ -92,12 +92,13 @@ Dividida en dos (ADR-0006).
 
 - **Objetivo:** que la energía de un tramo no dependa del SOC (C6).
 - **Tareas:**
-  - [ ] `engines/soc/simulate.ts`: recorte de regeneración por SOC, eventos de carga y desvío, piso en todo punto, déficit sin recortar a 0.
-  - [ ] `annotateEnergy` deja de calcular SOC; `effectiveRegen` pasa al SOCEngine.
-  - [ ] La carga previa reutiliza el perfil (ya no re-anota la ruta por cada SOC probado).
+  - [x] `engines/soc/simulate.ts`: recorte de regeneración por SOC, eventos de carga y desvío, piso en todo punto, déficit sin recortar a 0.
+  - [x] `annotateEnergy` deja de calcular SOC; `effectiveRegen` pasa al SOCEngine.
+  - [x] La carga previa reutiliza el perfil (ya no re-anota la ruta por cada SOC probado).
 - **Tests:** especificación §8.3 sobre SOC: recorte al 100 %, SOC negativo y `maxDeficitKWh`.
 - **Cierre:** la energía de la bajada de C6 es igual con 60, 85 y 95 %. Las diferencias con el motor actual quedan explicadas en el PR.
 - **Especificación:** parte de F2 (SOCEngine).
+- **Hecho:** `engines/soc/simulate.ts` (`regenAcceptance`, `legSoc`, `requiredStartSoc`, `simulateSoc`); la energía por tramo ya no recibe SOC; el planificador evalúa cada tramo desde su SOC de salida real; el plan informa `regenCurtailedKwh`. En la caracterización, energía, SOC de llegada, paradas y tiempos quedan iguales (diferencias < 1e-13 en la curva); cambian los casos que C6 describía: después de una parada con SOC > 80 % o con el tope de potencia de regeneración activo.
 
 ### F4 · Corredor, compatibilidad y curva
 
@@ -185,7 +186,7 @@ Dividida en dos (ADR-0006).
 | F0 | ✅ Hecha salvo la cassette (P1) | commits en `engine-v2` |
 | F1 | ✅ Hecha (igualdad con proveedores sintéticos; con la cassette real al grabarla) | ver `git log --grep "^F1:"` |
 | F2 | F2a ✅ hecha (sin cambio de resultados). F2b pendiente de B6 | ver `git log --grep "^F2"` |
-| F3 | Pendiente | — |
+| F3 | ✅ Hecha | ver `git log --grep "^F3:"` |
 | F4 | Pendiente | — |
 | F5 | Pendiente | — |
 | F6 | Pendiente | — |
