@@ -29,6 +29,28 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "off",
     },
   },
+  // El dominio es TypeScript puro: no depende de capas externas ni del framework
+  // (docs/arquitectura-ev/02-plan-arquitectura-modular.md, sección 2.2).
+  {
+    files: ["src/domain/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/infrastructure/*", "@/application/*", "@/server/*", "@/lib/*", "@/components/*"],
+              message: "El dominio no depende de capas externas.",
+            },
+            {
+              group: ["next", "next/*", "react", "react-dom", "server-only"],
+              message: "El dominio es TypeScript puro.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Disable rules that conflict with Prettier formatting.
   prettier,
 );
