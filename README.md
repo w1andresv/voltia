@@ -1,5 +1,7 @@
 # EV-on-way
 
+![EV-on-way: route planner for electric vehicles](public/brand/ev-on-way-logo.png)
+
 Planificador de viajes en vehículo eléctrico. Next.js 16, español, Colombia.
 
 ## Local

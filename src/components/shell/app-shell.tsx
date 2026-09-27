@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { History, Home, LogIn, MapPinned, Menu, Route as RouteIcon, Trash2, X, Zap } from "lucide-react";
+import { History, Home, LogIn, MapPinned, Menu, Route as RouteIcon, Trash2, X } from "lucide-react";
 import { useActor } from "@/infrastructure/auth/use-actor";
 import { useUserContext } from "@/components/user/user-context";
 import { AccountMenu, useSignOut } from "@/components/auth/account-menu";
@@ -16,6 +16,7 @@ import { ThemeToggle } from "@/components/shell/theme";
 import { Button } from "@/components/ui/button";
 import { engineOfPath, guideEngineOfPath, plannerHref, type PlannerEngine } from "@/lib/planner-routes";
 import { canSeeStationsMenu } from "@/lib/stations-access";
+import { BrandMark, BrandName } from "@/components/brand/brand";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -96,12 +97,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Menu className="size-5" />
         </Button>
         <Link href="/" className="flex min-w-0 items-center gap-2 rounded-md" aria-label="EV-on-way, ir al inicio">
-          <span className="grid size-8 place-items-center rounded-md bg-accent text-accent-fg">
-            <Zap className="size-4" />
-          </span>
-          <div className="min-w-0">
+          <BrandMark className="size-8" />
+          <div className="min-w-0 leading-tight">
             <div className="truncate text-sm font-semibold tracking-tight">{title}</div>
-            <div className="truncate text-xs text-muted">EV-on-way</div>
+            <BrandName className="block truncate text-xs" />
           </div>
         </Link>
         <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -113,12 +112,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Drawer open={open} onClose={() => setOpen(false)}>
         <div className="flex items-center justify-between gap-3 px-4 pt-4">
           <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-lg bg-accent text-accent-fg">
-              <Zap className="size-5" />
-            </span>
+            <BrandMark className="size-11" />
             <div>
-              <div className="font-display text-lg font-semibold">EV-on-way</div>
-              <div className="text-sm text-muted">Viajes en eléctrico</div>
+              <BrandName className="block text-lg" />
+              <div className="text-sm text-muted">Rutas para vehículos eléctricos</div>
             </div>
           </div>
           <Button type="button" variant="ghost" size="icon" aria-label="Cerrar menú" onClick={() => setOpen(false)}>

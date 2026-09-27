@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandMark, BrandName } from "@/components/brand/brand";
 import { RouteProfile } from "./route-profile";
 
 /**
@@ -182,9 +183,15 @@ export function Landing() {
         <header className="grid gap-8">
           <div className="grid items-end gap-8 md:grid-cols-[1.35fr_1fr] md:gap-14">
             <div className="grid gap-4">
-              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-subtle">
-                Viajes en eléctrico por Colombia
-              </span>
+              <div className="mb-4 flex items-center gap-3">
+                <BrandMark className="size-14 md:size-16" />
+                <div className="grid gap-1">
+                  <BrandName className="text-3xl md:text-4xl" />
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-subtle">
+                    Rutas para vehículos eléctricos · Colombia
+                  </span>
+                </div>
+              </div>
               <h1 className="text-[clamp(2.4rem,6.2vw,4.6rem)] font-extrabold leading-[0.98] tracking-[-0.03em]">
                 De la cordillera al <span className="text-accent">plan de carga</span>
               </h1>
