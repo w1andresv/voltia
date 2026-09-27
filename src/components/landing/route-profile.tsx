@@ -1,205 +1,279 @@
+import {
+  formatElevation,
+  formatKm,
+  formatKwh,
+  formatKwhPer100,
+  formatMinutes,
+  formatPct,
+} from "@/lib/format";
+import { BUC_BOG } from "./bucaramanga-bogota";
+
 /**
- * Perfil de elevación aproximado de Piedecuesta → Vélez para el landing: el
- * mismo que usan las demos de la documentación. Se dibuja en el servidor; solo
- * ilustra por qué la montaña pesa en el consumo, no sale del modelo real.
+ * Gráfico del landing: Bucaramanga → Bogotá con el MG S5 EV. Altura de la vía
+ * (área) y batería (línea) calculadas con el planificador real (ver
+ * bucaramanga-bogota.ts). Se dibuja en el servidor.
  */
-const TOWNS: readonly (readonly [km: number, name: string, elevationM: number])[] = [
-  [0, "Piedecuesta", 1000],
-  [15, "Los Curos", 1500],
-  [35, "Pescadero", 500],
-  [52, "Aratoca", 1800],
-  [76, "San Gil", 1100],
-  [98, "Socorro", 1230],
-  [128, "Oiba", 1420],
-  [150, "Suaita", 1500],
-  [168, "Santana", 1550],
-  [193, "Barbosa", 1600],
-  [213, "Vélez", 2100],
-];
+const W = 1000;
+const X0 = 60;
+const X1 = 940;
+const Y_TOP = 70;
+const Y_BOT = 262;
+const E_MAX = 4000;
 
-const STOPS = [
-  { name: "San Gil", km: 76, detail: "AC 22 kW", dc: false },
-  { name: "Socorro", km: 98, detail: "DC 60 kW", dc: true },
-  { name: "Santana", km: 168, detail: "DC 60 kW", dc: true },
-] as const;
+const x = (km: number) => X0 + ((X1 - X0) * km) / BUC_BOG.distanceKm;
+const yElev = (m: number) => Y_BOT - ((Y_BOT - Y_TOP) * m) / E_MAX;
+const ySoc = (pct: number) => Y_BOT - ((Y_BOT - Y_TOP) * pct) / 100;
+const f = (n: number) => n.toFixed(1);
 
-const DIST = 213;
-const X0 = 56;
-const X1 = 976;
-const Y_TOP = 58;
-const Y_BOT = 222;
-const E_MAX = 2400;
-const LABEL_ABOVE = new Set(["Los Curos", "Aratoca", "Vélez"]);
-
-const x = (km: number) => X0 + ((X1 - X0) * km) / DIST;
-const y = (m: number) => Y_BOT - ((Y_BOT - Y_TOP) * m) / E_MAX;
-
-function elevationAt(km: number): number {
-  for (let i = 1; i < TOWNS.length; i++) {
-    const [k1, , e1] = TOWNS[i]!;
-    const [k0, , e0] = TOWNS[i - 1]!;
-    if (km <= k1) return e0 + ((e1 - e0) * (km - k0)) / (k1 - k0);
-  }
-  return TOWNS[TOWNS.length - 1]![2];
+/** Batería por km, con el salto vertical de cada carga en el km de la parada. */
+function socPath(): string {
+  const pts: [number, number][] = [];
+  let next = 0;
+  BUC_BOG.soc.forEach((soc, km) => {
+    const stop = BUC_BOG.stops[next];
+    if (stop && km > stop.km) {
+      pts.push([stop.km, stop.arrive], [stop.km, stop.depart]);
+      next += 1;
+    }
+    pts.push([km, soc]);
+  });
+  pts.push([BUC_BOG.distanceKm, BUC_BOG.arrivalSoc]);
+  return pts.map(([km, s], i) => `${i ? "L" : "M"}${f(x(km))},${f(ySoc(s))}`).join("");
 }
 
-/** Curva suave (Catmull-Rom a Bézier) que pasa por cada pueblo. */
-function profilePath(): string {
-  const pts = TOWNS.map(([km, , m]) => [x(km), y(m)] as const);
-  const f = (n: number) => n.toFixed(1);
-  let d = `M${f(pts[0]![0])},${f(pts[0]![1])}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] ?? pts[i]!;
-    const p1 = pts[i]!;
-    const p2 = pts[i + 1]!;
-    const p3 = pts[i + 2] ?? p2;
-    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
-    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
-    d += ` C${f(c1[0]!)},${f(c1[1]!)} ${f(c2[0]!)},${f(c2[1]!)} ${f(p2[0])},${f(p2[1])}`;
-  }
-  return d;
+function elevationPaths() {
+  const line = BUC_BOG.elevM.map((m, km) => `${km ? "L" : "M"}${f(x(km))},${f(yElev(m))}`).join("");
+  return { line, area: `${line} L${f(x(BUC_BOG.elevM.length - 1))},${Y_BOT} L${X0},${Y_BOT} Z` };
+}
+
+function Stat({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div className="grid content-start gap-0.5">
+      <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-subtle">
+        {label}
+      </span>
+      <span className="text-lg font-bold tabular-nums tracking-tight">{value}</span>
+      <span className="text-xs text-muted">{note}</span>
+    </div>
+  );
 }
 
 export function RouteProfile() {
-  const line = profilePath();
-  const area = `${line} L${X1},${Y_BOT} L${X0},${Y_BOT} Z`;
-  const stopKms = new Set<number>(STOPS.map((s) => s.km));
+  const elev = elevationPaths();
+  const soc = socPath();
+  const d = BUC_BOG;
 
   return (
-    <figure className="m-0 grid gap-3 rounded-xl border border-border bg-surface p-4 shadow-panel md:p-5">
+    <figure className="m-0 grid gap-4 rounded-xl border border-border bg-surface p-4 shadow-panel md:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-2">
-        <h2 className="text-base font-bold tracking-tight">Piedecuesta → Vélez · 213 km</h2>
+        <h2 className="text-base font-bold tracking-tight">
+          Bucaramanga → Bogotá · {formatKm(d.distanceKm)} · {d.vehicle}
+        </h2>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-full bg-accent" /> Carga rápida DC 60 kW
+            <span className="h-2.5 w-4 rounded-sm bg-fg/15" /> Altura de la vía
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-full border-2 border-muted" /> Carga AC 22 kW
-            (ejemplo)
+            <span className="h-0.5 w-4 rounded bg-accent" /> Batería
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2.5 rounded-full bg-accent" /> Carga rápida 60 kW
           </span>
         </div>
       </div>
+
       <div className="overflow-x-auto">
         <svg
-          viewBox="0 0 1000 280"
+          viewBox={`0 0 ${W} 310`}
           role="img"
-          className="block h-auto w-full min-w-[620px]"
-          aria-label="Perfil de elevación aproximado de Piedecuesta a Vélez: baja a 500 m en el cañón del Chicamocha, sube a 1.800 m en Aratoca y termina a 2.100 m en Vélez. Estaciones en San Gil (km 76), Socorro (km 98) y Santana (km 168)."
+          className="block h-auto w-full min-w-[640px]"
+          aria-label={`Bucaramanga a Bogotá con el ${d.vehicle}: sale al 100 %, baja al cañón del Chicamocha (${d.canyon.elevM} m), sube hasta ${formatElevation(d.maxM)} cerca de Tunja, carga en ${d.stops.map((s) => `${s.name} (${Math.round(s.arrive)} a ${s.depart} %)`).join(" y ")} y llega a Bogotá con ${Math.round(d.arrivalSoc)} %.`}
         >
           <defs>
             <linearGradient id="landing-terrain" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="var(--color-accent)" stopOpacity="0.22" />
-              <stop offset="1" stopColor="var(--color-accent)" stopOpacity="0.02" />
+              <stop offset="0" stopColor="var(--color-fg)" stopOpacity="0.16" />
+              <stop offset="1" stopColor="var(--color-fg)" stopOpacity="0.03" />
             </linearGradient>
           </defs>
-          {[0, 500, 1000, 1500, 2000].map((m) => (
-            <g key={m}>
-              <line x1={X0} x2={X1} y1={y(m)} y2={y(m)} stroke="var(--color-border)" />
+
+          {/* Rejilla y ejes: altura a la izquierda, batería a la derecha */}
+          {[0, 25, 50, 75, 100].map((p) => (
+            <g key={p}>
+              <line x1={X0} x2={X1} y1={ySoc(p)} y2={ySoc(p)} stroke="var(--color-border)" />
+              <text x={X1 + 8} y={ySoc(p) + 4} className="fill-accent font-mono text-[11px]">
+                {p} %
+              </text>
               <text
                 x={X0 - 8}
-                y={y(m) + 4}
+                y={ySoc(p) + 4}
                 textAnchor="end"
                 className="fill-subtle font-mono text-[11px]"
               >
-                {m === 0 ? "0 m" : m.toLocaleString("es-CO")}
-              </text>
-            </g>
-          ))}
-          {[0, 50, 100, 150, 200].map((km) => (
-            <text
-              key={km}
-              x={x(km)}
-              y={Y_BOT + 18}
-              textAnchor="middle"
-              className="fill-subtle font-mono text-[11px]"
-            >
-              km {km}
-            </text>
-          ))}
-          <path d={area} fill="url(#landing-terrain)" />
-          <path
-            d={line}
-            pathLength={1}
-            className="landing-draw"
-            fill="none"
-            stroke="var(--color-fg)"
-            strokeOpacity={0.75}
-            strokeWidth={2}
-            strokeLinejoin="round"
-          />
-
-          {TOWNS.filter(([km]) => !stopKms.has(km)).map(([km, name, m]) => (
-            <g key={name}>
-              <circle cx={x(km)} cy={y(m)} r={2.5} fill="var(--color-muted)" />
-              <text
-                x={x(km)}
-                y={LABEL_ABOVE.has(name) ? y(m) - 10 : y(m) + 18}
-                textAnchor={km === 0 ? "start" : km === DIST ? "end" : "middle"}
-                className="fill-fg text-[11.5px] font-semibold"
-              >
-                {name}
+                {((p / 100) * E_MAX).toLocaleString("es-CO")}
               </text>
             </g>
           ))}
           <text
-            x={x(35)}
-            y={y(500) + 32}
+            x={X0 - 8}
+            y={Y_TOP - 12}
+            textAnchor="end"
+            className="fill-subtle font-mono text-[10.5px]"
+          >
+            m
+          </text>
+
+          {/* Altura */}
+          <path d={elev.area} fill="url(#landing-terrain)" />
+          <path
+            d={elev.line}
+            fill="none"
+            stroke="var(--color-fg)"
+            strokeOpacity={0.35}
+            strokeWidth={1.2}
+          />
+          <text
+            x={x(d.canyon.km)}
+            y={yElev(d.canyon.elevM) + 16}
             textAnchor="middle"
             className="fill-subtle font-mono text-[10.5px]"
           >
-            cañón del Chicamocha
+            Chicamocha {d.canyon.elevM} m
           </text>
 
-          {STOPS.map((s) => {
-            const cx = x(s.km);
-            const cy = y(elevationAt(s.km));
-            const top = Y_TOP - 34;
-            const left = s.name === "San Gil";
-            const tx = left ? cx - 6 : cx;
-            const anchor = left ? "end" : "middle";
-            return (
-              <g key={s.name}>
-                <line
-                  x1={cx}
-                  x2={cx}
-                  y1={top + 22}
-                  y2={cy - 6}
-                  stroke={s.dc ? "var(--color-accent)" : "var(--color-muted)"}
-                  strokeWidth={1.5}
-                  strokeDasharray={s.dc ? undefined : "3 3"}
-                />
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={6}
-                  fill={s.dc ? "var(--color-accent)" : "var(--color-surface)"}
-                  stroke={s.dc ? "none" : "var(--color-muted)"}
-                  strokeWidth={2}
-                />
-                <text
-                  x={tx}
-                  y={top + 2}
-                  textAnchor={anchor}
-                  className="fill-fg text-[12px] font-bold"
-                >
-                  {s.name}
-                </text>
-                <text
-                  x={tx}
-                  y={top + 16}
-                  textAnchor={anchor}
-                  className="fill-subtle font-mono text-[10.5px]"
-                >
-                  km {s.km} · {s.detail}
-                </text>
-              </g>
-            );
-          })}
+          {/* Margen de seguridad */}
+          <line
+            x1={X0}
+            x2={X1}
+            y1={ySoc(d.safetyPct)}
+            y2={ySoc(d.safetyPct)}
+            stroke="var(--color-danger)"
+            strokeDasharray="5 4"
+            strokeOpacity={0.7}
+          />
+          <text x={x(140)} y={ySoc(d.safetyPct) - 6} className="fill-danger text-[11px]">
+            margen {d.safetyPct} %
+          </text>
+
+          {/* Batería */}
+          <path
+            d={soc}
+            pathLength={1}
+            className="landing-draw"
+            fill="none"
+            stroke="var(--color-accent)"
+            strokeWidth={2.4}
+            strokeLinejoin="round"
+          />
+          <text x={x(0) + 4} y={ySoc(100) - 8} className="fill-accent text-[11.5px] font-bold">
+            {d.initialSoc} %
+          </text>
+          <text
+            x={X1 - 4}
+            y={ySoc(d.arrivalSoc) + 20}
+            textAnchor="end"
+            className="fill-accent text-[11.5px] font-bold"
+          >
+            llega con {Math.round(d.arrivalSoc)} %
+          </text>
+
+          {/* Paradas */}
+          {d.stops.map((s) => (
+            <g key={s.name}>
+              <line
+                x1={x(s.km)}
+                x2={x(s.km)}
+                y1={Y_TOP - 22}
+                y2={ySoc(s.depart)}
+                stroke="var(--color-accent)"
+                strokeWidth={1.2}
+                strokeDasharray="2 3"
+              />
+              <circle
+                cx={x(s.km)}
+                cy={ySoc(s.arrive)}
+                r={5}
+                fill="var(--color-surface)"
+                stroke="var(--color-accent)"
+                strokeWidth={2}
+              />
+              <circle cx={x(s.km)} cy={ySoc(s.depart)} r={5} fill="var(--color-accent)" />
+              <text
+                x={x(s.km)}
+                y={Y_TOP - 44}
+                textAnchor="middle"
+                className="fill-fg text-[12px] font-bold"
+              >
+                {s.name}
+              </text>
+              <text
+                x={x(s.km)}
+                y={Y_TOP - 29}
+                textAnchor="middle"
+                className="fill-subtle font-mono text-[10.5px]"
+              >
+                {Math.round(s.arrive)} → {s.depart} % · {s.minutes} min
+              </text>
+            </g>
+          ))}
+
+          {/* Pueblos */}
+          {d.towns.map(([name, km], i) => (
+            <g key={name}>
+              <line x1={x(km)} x2={x(km)} y1={Y_BOT} y2={Y_BOT + 5} stroke="var(--color-muted)" />
+              <text
+                x={x(km)}
+                y={Y_BOT + 20}
+                textAnchor={i === 0 ? "start" : i === d.towns.length - 1 ? "end" : "middle"}
+                className="fill-fg text-[11.5px] font-semibold"
+              >
+                {name}
+              </text>
+              <text
+                x={x(km)}
+                y={Y_BOT + 35}
+                textAnchor={i === 0 ? "start" : i === d.towns.length - 1 ? "end" : "middle"}
+                className="fill-subtle font-mono text-[10.5px]"
+              >
+                km {Math.round(km)}
+              </text>
+            </g>
+          ))}
         </svg>
       </div>
-      <figcaption className="text-xs text-muted">
-        Perfil aproximado. En el planificador la elevación sale de Mapbox Terrain-RGB (zoom 11 @2x,
-        unos 38 m por píxel), muestreada cada 100 m de la ruta.
+
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border pt-4 sm:grid-cols-3 lg:grid-cols-5">
+        <Stat
+          label="Energía"
+          value={formatKwh(d.energyKwh)}
+          note={`${formatKwhPer100(d.kwhPer100km)} · regenera ${formatKwh(d.regenKwh)}`}
+        />
+        <Stat
+          label="Paradas"
+          value={`${d.stops.length}`}
+          note={`${formatMinutes(d.chargeMinutes)} cargando`}
+        />
+        <Stat
+          label="Llegada"
+          value={formatPct(d.arrivalSoc)}
+          note={`sale con ${formatPct(d.initialSoc)}`}
+        />
+        <Stat
+          label="Tiempo total"
+          value={formatMinutes(d.totalMinutes)}
+          note={`${formatMinutes(d.driveMinutes)} manejando`}
+        />
+        <Stat
+          label="Desnivel"
+          value={`+${formatElevation(d.gainM)}`}
+          note={`−${formatElevation(d.lossM)} · máx. ${formatElevation(d.maxM)}`}
+        />
+      </div>
+
+      <figcaption className="text-xs leading-relaxed text-muted">
+        Calculado con el planificador v2 y el modelo de energía v2 de EV-on-way: sale al 100 %, 1
+        pasajero, margen normal, estrategia más rápida. Vía real de Overture Maps y altura de
+        Copernicus GLO-30 cada 100 m; estaciones de Blaze en Santana y Tunja con ubicación
+        aproximada. En el planificador la altura sale de Mapbox, así que los números pueden variar.
       </figcaption>
     </figure>
   );
