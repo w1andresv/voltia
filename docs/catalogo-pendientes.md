@@ -33,3 +33,22 @@ respaldados por una fuente. Lo demás queda aquí, con lo que sí se encontró y
 
 Cuando consigas la ficha de una de estas versiones, agrega la fila al seed con sus fuentes y vuelve a
 correr `npm run db:seed`.
+
+## Parámetros físicos por vehículo (2026-09-27)
+
+Cada cifra tiene su fuente en `seeds/0001_vehicle_catalog.sql`, en las líneas que empiezan con `física`. El área frontal se estima como 0,85 × ancho × alto sin espejos, porque ningún fabricante la publica.
+
+| Vehículo | Cd | Ancho × alto (mm) | Área (m²) | Cd·A (antes) | Regeneración máx. |
+|---|---|---|---|---|---|
+| MG S5 EV (Comfort y Deluxe) | 0,27–0,28 → 0,275 | 1.849 × 1.621 | 2,55 | **0,70** (0,75) | 60 kW, asumido |
+| Tesla Model 3 LR AWD | 0,219 | 1.849 × 1.441 | 2,26 | **0,50** (0,55) | 75 kW, medido por usuarios |
+| Tesla Model Y RWD y LR AWD | 0,22 | 1.920 × 1.624 | 2,65 | **0,58** (0,75) | 75 kW, asumido del Model 3 |
+| Volvo EX30 SM ER | 0,28 | 1.837 × 1.549 | 2,42 | **0,68** (0,75) | 60 kW, asumido |
+
+**Sin fuente para ningún vehículo** (quedan con los valores por defecto marcados "estimado"):
+- rodadura (Crr 0,009);
+- eficiencia de tracción (0,90) y de regeneración (0,80);
+- factor de inercia (1,05);
+- auxiliares (0,45 kW).
+
+Se ajustarán con la calibración de "¿Con cuánto llegaste?".

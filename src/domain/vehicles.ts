@@ -27,8 +27,9 @@ export const VEHICLE_CATALOG: Vehicle[] = [
     consumptionKwhPer100km: null,
     consumptionManual: false,
     bodyType: "suv_compact",
-    dragAreaM2: 0.75,
+    dragAreaM2: 0.7,
     rollingResistance: 0.009,
+    maxRegenPowerKw: 60,
   },
 ];
 

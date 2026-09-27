@@ -45,7 +45,7 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | F2b | Elevación configurable (`ELEVATION_SOURCE`) | ✅ | `mapbox-terrain` por defecto, caché sin vencimiento, túneles, pendiente máxima y error tipado. Tileset verificado con datos reales (O4, `mediciones/elevacion-2026-09-26.md`); falta el costo (O6) |
 | F3 | SOC separado de la energía | ✅ | — |
 | F4 | Corredor, compatibilidad, curva de carga | ✅ | Desvíos medidos detrás de `DETOUR_SOURCE=matrix` (ADR-0013); activarlo tras revisar el cupo (O6) |
-| F5 | Energía v2 y perfil de velocidad (`ENERGY_ENGINE`) | 🟡 | Medir en sombra, datos físicos por vehículo y calibración (0 km/h en tramos, desvío local, tope por vía y frío: ✅ sesión A) |
+| F5 | Energía v2 y perfil de velocidad (`ENERGY_ENGINE`) | 🟡 | Medir en sombra, publicar Cd·A por vehículo (`db:seed`) y calibración (0 km/h en tramos, desvío local, tope por vía y frío: ✅ sesión A) |
 | F6 | Quitar los multiplicadores | ⏳ | Todo (depende de F5 medido) |
 | F7 | Planificador por programación dinámica (`PLANNER_ENGINE`) | 🟡 | Medir en sombra y activar `v2` |
 | F8 | Composición, gráficas, pasada 2, snapshot | 🟡 | Activar `v2` (D2). La verificación al compartir está hecha |
@@ -367,7 +367,21 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
 #### 5.3.5 Temperatura (D4) — ✅ hecho (sesión A)
 **Decidido (D4): se hace ya.** Se agrega un `EfficiencyModel` en `engines/energy/`: la eficiencia del tren motriz como función de la temperatura, con puntos `estimated` y la extensión que prevé la especificación §5.4. Se usa en `segmentEnergyV2` en vez de `drivetrainEfficiency` constante. Tests: a 20 °C, el mismo resultado que hoy; a 5 °C, menos eficiencia.
 
-#### 5.3.6 Parámetros físicos por vehículo en el catálogo — ⏳ tarea de datos (6 vehículos)
+#### 5.3.6 Parámetros físicos por vehículo en el catálogo — 🟡 Cd·A y regeneración cargados (2026-09-27); falta publicarlos con `npm run db:seed`
+
+> **2026-09-27:** fuentes en `seeds/0001_vehicle_catalog.sql` (líneas `física`).
+> - **Cd·A:** para cada vehículo, Cd publicado × área frontal estimada (0,85 × ancho × alto).
+>   - MG S5: 0,70 (Cd 0,27–0,28);
+>   - Model 3: 0,50 (Cd 0,219);
+>   - Model Y: 0,58 (Cd 0,22);
+>   - EX30: 0,68 (Cd 0,28).
+> - **Regeneración máxima:**
+>   - Model 3: 75 kW, medida por usuarios;
+>   - Model Y: 75 kW, asumido del Model 3;
+>   - MG S5 y EX30: 60 kW, asumido.
+> - **Sin cargar:** Crr, eficiencias, inercia y auxiliares. Nadie los publica, y copiarlos los haría pasar por dato del vehículo; siguen como `estimated` hasta que haya calibración (§5.8).
+> - **Para publicarlos:** `npm run db:seed`, que escribe en producción.
+
 
 > Revisado en la sesión D: los Cd se publican (p. ej. Tesla Model 3 actualizado, 0,219), pero el área frontal y las eficiencias casi nunca vienen del fabricante; solo hay estimaciones de terceros. Para no meter cifras sin fuente, queda como tarea de datos. Hay que conseguir la ficha o prueba publicada de cada vehículo (`mg-s5-ev-comfort`, `mg-s5-ev-deluxe`, `tesla-model-3-lr-awd`, `tesla-model-y-rwd`, `tesla-model-y-lr-awd`, `volvo-ex30-sm-er`) y registrar cada cifra con su referencia. La calibración (§5.8) es la otra vía.
 
