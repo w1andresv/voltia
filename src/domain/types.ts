@@ -110,6 +110,11 @@ export interface Charger {
   nearestKm?: number;
   nearestSampleIndex?: number;
   fromRouteKm?: number;
+  /**
+   * Solo en el mapa: por qué la estación no sirve para planificar (no elegible,
+   * conectores que no se reconocen). La compatibilidad con el vehículo se ve aparte.
+   */
+  planningIssues?: string[];
 }
 
 export interface ChargeChoice {

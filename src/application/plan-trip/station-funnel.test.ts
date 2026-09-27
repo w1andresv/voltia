@@ -22,7 +22,7 @@ describe("stationFunnel", () => {
     const chademoOnly: ConsolidatedStation = {
       ...c,
       id: "cha",
-      connectors: c.connectors.map((k) => ({ ...k, standard: "chademo" as const })),
+      connectors: c.connectors.map((k) => ({ ...k, standard: "chademo" as const, rawLabel: "CHAdeMO" })),
     };
     const unapproved: ConsolidatedStation = { ...a, id: "com", coordSource: "community" };
     const f = stationFunnel(40, [a, offline, ineligible, chademoOnly, unapproved], vehicle);
@@ -36,9 +36,9 @@ describe("stationFunnel", () => {
     });
     expect(f.usable.map((u) => u.id)).toEqual([a.id]);
     expect(f.discarded.map((d) => [d.id, d.reason])).toEqual([
-      ["bad", "no elegible: Coordenadas inválidas"],
+      ["bad", "no elegible: Coordenadas inválidas (conectores: type2→type2)"],
       ["com", 'no verificada para planificar (fuente "community")'],
-      ["cha", "sin conector compatible (tiene chademo)"],
+      ["cha", "sin conector compatible (tiene CHAdeMO→chademo)"],
       ["off", "fuera de servicio"],
     ]);
     const text = formatStationFunnel(f, "blaze", "MG S5 EV", 12);

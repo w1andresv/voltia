@@ -1,4 +1,4 @@
-import type { Charger } from "@/domain/types";
+import type { Charger, Vehicle } from "@/domain/types";
 import {
   CHARGER_SOURCE_LABEL,
   CONNECTOR_LABEL,
@@ -9,7 +9,21 @@ import {
 import { formatKw, formatPrice, formatUpdatedAt } from "@/lib/format";
 import { stationPhotoUrl } from "@/infrastructure/storage/station-photos";
 import { Badge } from "@/components/ui/badge";
+import { routeSocket } from "@/domain/ev/engines/compatibility/engine";
+import { vehicleLabel } from "@/domain/vehicles";
+import { usePlanner } from "@/lib/store";
 import { LiveChargerStatus } from "./live-charger-status";
+
+/** Por qué esta estación no entra en el plan del vehículo elegido; vacío si sí entra. */
+function planningIssues(charger: Charger, vehicle: Vehicle): string[] {
+  const issues = [...(charger.planningIssues ?? [])];
+  if (charger.sockets.length && !routeSocket(charger, vehicle)) {
+    const has = [...new Set(charger.sockets.map((s) => CONNECTOR_LABEL[s.connector]))].join(", ");
+    const uses = vehicle.connectors.map((c) => CONNECTOR_LABEL[c]).join(", ");
+    issues.push(`Ningún conector sirve para ${vehicleLabel(vehicle)}: la estación tiene ${has} y el vehículo usa ${uses}`);
+  }
+  return issues;
+}
 
 export function ChargerFacts({ charger, compact = false }: { charger: Charger; compact?: boolean }) {
   const maxKw = charger.sockets.reduce((m, s) => Math.max(m, s.powerKw), 0);
@@ -17,6 +31,8 @@ export function ChargerFacts({ charger, compact = false }: { charger: Charger; c
   const status = charger.status;
   const avail = charger.availability ?? "unknown";
   const coords = `${charger.lat.toFixed(5)}, ${charger.lon.toFixed(5)}`;
+  const vehicle = usePlanner((s) => s.selectedVehicle());
+  const issues = planningIssues(charger, vehicle);
   const verified = isVerifiedForPlanning(charger);
 
   return (
@@ -42,6 +58,9 @@ export function ChargerFacts({ charger, compact = false }: { charger: Charger; c
           {STATION_AVAIL_LABEL[avail]}
         </Badge>
       </div>
+      {issues.length ? (
+        <div className="text-xs text-warn">No se usa para planificar: {issues.join(" · ")}.</div>
+      ) : null}
       {!verified && charger.source === "community" ? (
         <div className="text-xs text-warn">No se usa para planificar hasta que la comunidad la confirme.</div>
       ) : null}

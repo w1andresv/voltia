@@ -65,5 +65,16 @@ export function toPlanningCharger(station: ConsolidatedStation): Charger {
  * mapa" aunque no sirva para planificar (decisión 4 del plan).
  */
 export function toDisplayCharger(station: StationForCharger): Charger {
-  return { ...toChargerBase(station, toSockets(station, false)), verified: station.planning.eligible };
+  const unknown = station.connectors
+    .filter((c) => !PLANNING_STANDARDS.includes(c.standard))
+    .map((c) => c.rawLabel || c.standard);
+  const issues = [
+    ...(station.planning.eligible ? [] : station.planning.reasons),
+    ...(unknown.length ? [`Conector sin reconocer: ${unknown.join(", ")}`] : []),
+  ];
+  return {
+    ...toChargerBase(station, toSockets(station, false)),
+    verified: station.planning.eligible,
+    ...(issues.length ? { planningIssues: issues } : {}),
+  };
 }

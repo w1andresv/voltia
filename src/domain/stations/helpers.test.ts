@@ -222,4 +222,16 @@ describe("toPlanningCharger / toDisplayCharger", () => {
   it("sin disponibilidad conocida, available es null", () => {
     expect(toDisplayCharger(station()).available).toBeNull();
   });
+
+  it("para el mapa dice por qué no sirve para planificar, con los conectores que no reconoce", () => {
+    const c = toDisplayCharger(
+      station({
+        planning: { eligible: false, reasons: ["Sin conectores compatibles conocidos"] },
+        connectors: [connector({ standard: "other", rawLabel: "CCS" })],
+      }),
+    );
+    expect(c.sockets).toEqual([]);
+    expect(c.planningIssues).toEqual(["Sin conectores compatibles conocidos", "Conector sin reconocer: CCS"]);
+    expect(toDisplayCharger(station()).planningIssues).toBeUndefined();
+  });
 });

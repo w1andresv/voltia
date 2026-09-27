@@ -20,6 +20,13 @@ export interface StationFunnel {
   discarded: { id: string; name: string; reason: string }[];
 }
 
+/** Conectores como llegan de la fuente y cómo se leyeron: "CCS→other" es uno sin reconocer. */
+function rawConnectors(station: ConsolidatedStation | undefined): string {
+  return (station?.connectors ?? [])
+    .map((k) => `${k.rawLabel || k.standard}→${k.standard}`)
+    .join(", ");
+}
+
 function isOffline(c: Charger): boolean {
   return c.availability === "offline" || c.available === false;
 }
@@ -30,12 +37,13 @@ export function stationFunnel(
   vehicle: Vehicle,
 ): StationFunnel {
   const discarded: StationFunnel["discarded"] = [];
+  const byId = new Map(corridor.map((s) => [s.id, s]));
   const eligible = corridor.filter((s) => {
     if (s.planning.eligible) return true;
     discarded.push({
       id: s.id,
       name: s.name,
-      reason: `no elegible: ${s.planning.reasons.join(", ") || "sin motivo"}`,
+      reason: `no elegible: ${s.planning.reasons.join(", ") || "sin motivo"} (conectores: ${rawConnectors(s) || "ninguno"})`,
     });
     return false;
   });
@@ -51,7 +59,10 @@ export function stationFunnel(
   });
   const compatible = verified.filter((c) => {
     if (routeSocket(c, vehicle)) return true;
-    const sockets = [...new Set(c.sockets.map((s) => s.connector))].join(", ") || "ninguno";
+    const sockets =
+      rawConnectors(byId.get(c.id)) ||
+      [...new Set(c.sockets.map((s) => s.connector))].join(", ") ||
+      "ninguno";
     discarded.push({
       id: c.id,
       name: c.name,
