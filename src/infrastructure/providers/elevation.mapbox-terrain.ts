@@ -3,8 +3,10 @@ import { CACHE_FOREVER, fetchBytes } from "./http";
 import { decodePng, type DecodedPng } from "./png";
 
 /**
- * Elevación desde las teselas de terreno de Mapbox (terrain-RGB): altura =
- * −10000 + (R·65536 + G·256 + B) × 0,1 m. Se descargan solo las teselas que
+ * Elevación desde las teselas de terreno de Mapbox. Terrain-RGB v1 y
+ * Terrain-DEM v1 codifican igual: altura = −10000 + (R·65536 + G·256 + B) × 0,1 m.
+ * Terrain-DEM trae un borde de 1 px por lado (514 = 512 + 2) que se descuenta
+ * al ubicar el punto (`tileBorder`). Se descargan solo las teselas que
  * tocan los puntos pedidos y se guardan en la Data Cache de Next sin
  * vencimiento (el terreno no cambia; compartida por todos los usuarios y entre
  * despliegues) y en memoria (las últimas `MEMORY_TILES`), así rutas
@@ -60,20 +62,51 @@ function remember(key: string, tile: Promise<DecodedPng>): Promise<DecodedPng> {
 
 export type TileFetcher = (tileset: string, z: number, x: number, y: number) => Promise<Uint8Array>;
 
-export function mapboxTileFetcher(token: string): TileFetcher {
+/** De bytes a píxeles. Por defecto PNG (`decodePng`); se inyecta otro para WebP. */
+export type TileDecoder = (bytes: Uint8Array) => DecodedPng | Promise<DecodedPng>;
+
+/**
+ * Píxeles de borde por lado: los que sobran sobre la potencia de 2 (514 → 1,
+ * 258 → 1, 256 y 512 → 0). Terrain-DEM los trae para interpolar entre teselas.
+ */
+export function tileBorder(size: number): number {
+  const base = 2 ** Math.floor(Math.log2(size));
+  const border = (size - base) / 2;
+  return Number.isInteger(border) && border <= 4 ? border : 0;
+}
+
+export interface MapboxTileOptions {
+  /** @2x: teselas de 512 px en vez de 256, el doble de resolución en cada consulta. */
+  retina?: boolean;
+}
+
+/** Raster Tiles API v4 (`.pngraw`, el formato sin pérdida que Mapbox pide para terreno). */
+export function mapboxTileFetcher(token: string, options: MapboxTileOptions = {}): TileFetcher {
+  const scale = options.retina ? "@2x" : "";
   return (tileset, z, x, y) =>
-    fetchBytes(`https://api.mapbox.com/v4/${tileset}/${z}/${x}/${y}.pngraw?access_token=${token}`, {
-      timeoutMs: 10_000,
-      cacheTtlMs: TILE_TTL_MS,
-      cacheKey: `terrain:${tileset}:${z}/${x}/${y}`,
-    });
+    fetchBytes(
+      `https://api.mapbox.com/v4/${tileset}/${z}/${x}/${y}${scale}.pngraw?access_token=${token}`,
+      {
+        timeoutMs: 10_000,
+        cacheTtlMs: TILE_TTL_MS,
+        cacheKey: `terrain:${tileset}${scale}:${z}/${x}/${y}`,
+      },
+    );
 }
 
 /** Alturas (m) de los puntos pedidos, en el mismo orden. Lanza si alguna tesela no se pudo obtener. */
 export async function terrainElevations(
   points: LatLon[],
-  opts: { zoom: number; tileset: string; fetchTile: TileFetcher },
+  opts: {
+    zoom: number;
+    tileset: string;
+    fetchTile: TileFetcher;
+    decode?: TileDecoder;
+    /** Clave de la caché en memoria; distinta si cambia el tamaño o el formato de la tesela. */
+    cacheId?: string;
+  },
 ): Promise<number[]> {
+  const decode = opts.decode ?? decodePng;
   const size = 256;
   const where = points.map((p) => tileCoords(p, opts.zoom, size));
   const keys = [...new Set(where.map((w) => `${w.x}/${w.y}`))];
@@ -81,13 +114,13 @@ export async function terrainElevations(
   for (let i = 0; i < keys.length; i += CONCURRENCY) {
     await Promise.all(
       keys.slice(i, i + CONCURRENCY).map(async (k) => {
-        const memKey = `${opts.tileset}:${opts.zoom}/${k}`;
+        const memKey = `${opts.cacheId ?? opts.tileset}:${opts.zoom}/${k}`;
         const [x, y] = k.split("/").map(Number) as [number, number];
         const tile =
           memory.get(memKey) ??
           remember(
             memKey,
-            opts.fetchTile(opts.tileset, opts.zoom, x, y).then((bytes) => decodePng(bytes)),
+            opts.fetchTile(opts.tileset, opts.zoom, x, y).then((bytes) => decode(bytes)),
           );
         tiles.set(k, await tile);
       }),
@@ -95,7 +128,13 @@ export async function terrainElevations(
   }
   return where.map((w) => {
     const tile = tiles.get(`${w.x}/${w.y}`)!;
-    return sampleTile(tile, (w.px * tile.width) / size, (w.py * tile.height) / size);
+    const bx = tileBorder(tile.width);
+    const by = tileBorder(tile.height);
+    return sampleTile(
+      tile,
+      bx + (w.px * (tile.width - 2 * bx)) / size,
+      by + (w.py * (tile.height - 2 * by)) / size,
+    );
   });
 }
 

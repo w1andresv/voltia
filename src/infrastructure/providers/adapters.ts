@@ -14,7 +14,12 @@ import type { GeocodingProvider } from "@/domain/ports/geocoding";
 import type { RoutingProvider } from "@/domain/ports/routing";
 import type { WeatherProvider } from "@/domain/ports/weather";
 import type { LatLon } from "@/domain/types";
-import { mapboxTileFetcher, terrainElevations, type TileFetcher } from "./elevation.mapbox-terrain";
+import {
+  mapboxTileFetcher,
+  terrainElevations,
+  type TileDecoder,
+  type TileFetcher,
+} from "./elevation.mapbox-terrain";
 import { fetchElevations } from "./elevation.openmeteo";
 import { MAPBOX_MATRIX_MAX_COORDINATES, fetchMapboxMatrix } from "./matrix.mapbox";
 import type { DistanceMatrixProvider } from "@/domain/ports/distance-matrix";
@@ -152,11 +157,20 @@ export class MapboxTerrainElevationProvider implements ElevationProvider {
   readonly id = "mapbox-terrain";
   constructor(
     private readonly token: string,
-    private readonly opts: { zoom: number; tileset: string },
-    private readonly fetchTile: TileFetcher = mapboxTileFetcher(token),
+    private readonly opts: { zoom: number; tileset: string; retina?: boolean },
+    private readonly fetchTile: TileFetcher = mapboxTileFetcher(token, { retina: opts.retina }),
+    private readonly decode?: TileDecoder,
+    /** Distingue en la caché en memoria teselas del mismo tileset con otro tamaño o formato. */
+    private readonly cacheId: string = `${opts.tileset}${opts.retina ? "@2x" : ""}`,
   ) {}
   getElevations(points: LatLon[]) {
-    return terrainElevations(points, { ...this.opts, fetchTile: this.fetchTile });
+    return terrainElevations(points, {
+      zoom: this.opts.zoom,
+      tileset: this.opts.tileset,
+      fetchTile: this.fetchTile,
+      decode: this.decode,
+      cacheId: this.cacheId,
+    });
   }
 }
 

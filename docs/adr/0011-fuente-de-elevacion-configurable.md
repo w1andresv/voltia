@@ -52,3 +52,21 @@ Detalle en `docs/arquitectura-ev/mediciones/elevacion-2026-09-26.md` (Bucaramang
   - reintento con pausa (1 s y 2,5 s) ante 429;
   - OpenTopoData encadenado con 1,1 s entre consultas;
   - errores HTTP con la URL recortada a 140 caracteres.
+
+## Prueba de Terrain-DEM v1 (2026-09-27)
+El dueño del producto pidió comparar `mapbox.mapbox-terrain-dem-v1` con el tileset actual (`mapbox.terrain-rgb`).
+- **Lo que dice la documentación de Mapbox:**
+  - misma fórmula de altura que Terrain-RGB;
+  - teselas de 514 px (512 más 1 px de borde por lado);
+  - datos hasta zoom 14;
+  - se sirve por `raster/v1` en WebP, que es la API de Mapbox GL JS, y no figura en la Raster Tiles API v4 que usamos hoy. Por eso no basta con cambiar el nombre del tileset: cambian la API, el formato y quizá la facturación.
+- **Código:** la lectura de teselas ahora
+  - descuenta el borde (`tileBorder`);
+  - acepta otro decodificador (`TileDecoder`);
+  - puede pedir teselas @2x de 512 px por la misma API v4.
+  El comportamiento de producción no cambia.
+- **`npm run elevation:dem`** compara, sobre Piedecuesta → Vélez por defecto:
+  - por qué API responde Terrain-DEM v1 con el token del proyecto;
+  - teselas (consultas facturables), resolución, desnivel, energía y diferencia de alturas;
+  - también Terrain-RGB y Terrain-DEM a zoom 11 con teselas de 512 px: la misma resolución que hoy (~38 m/píxel) con unas la mitad de teselas.
+  Se validó sin red con un Mapbox simulado. Falta la corrida real: el entorno de desarrollo no llega a api.mapbox.com.

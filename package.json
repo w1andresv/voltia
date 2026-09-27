@@ -21,6 +21,7 @@
     "diagnose:route": "node scripts/diagnose-route.mjs",
     "snapshot:record": "vitest run --config vitest.record.config.ts src/test-support/record-snapshot.record.ts",
     "elevation:compare": "vitest run --config vitest.record.config.ts src/test-support/compare-elevation.record.ts",
+    "elevation:dem": "vitest run --config vitest.record.config.ts --reporter=verbose src/test-support/compare-terrain-dem.record.ts",
     "report": "vitest run --config vitest.record.config.ts src/test-support/report.record.ts",
     "calibration:report": "node scripts/calibration-report.mjs",
     "blaze:check": "node scripts/blaze-check.mjs"
