@@ -106,7 +106,7 @@ export const GUIDE_V2: GuideContent = {
   title: "Planificador v2: de elegir origen y destino al plan de paradas",
   lead: (
     <>
-      Cómo calcula Voltia un viaje en <Code>/v2</Code>: qué pide el navegador, qué endpoints
+      Cómo calcula EV-on-way un viaje en <Code>/v2</Code>: qué pide el navegador, qué endpoints
       consulta el servidor, qué entra a cada algoritmo y qué sale. El ejemplo es Piedecuesta → Vélez
       con un MG S5 EV.
     </>
@@ -127,7 +127,7 @@ export const GUIDE_V2: GuideContent = {
   participants: [
     { id: "U", label: "Usuario", actor: "user" },
     { id: "B", label: "Navegador", actor: "browser" },
-    { id: "S", label: "Servidor Voltia", actor: "server" },
+    { id: "S", label: "Servidor EV-on-way", actor: "server" },
     { id: "P", label: "Photon", actor: "provider" },
     { id: "BZ", label: "Blaze API", actor: "provider" },
     { id: "MB", label: "Mapbox", actor: "provider" },
@@ -615,7 +615,7 @@ export const GUIDE_V1: GuideContent = {
   title: "Planificador v1: de elegir origen y destino al plan de paradas",
   lead: (
     <>
-      Cómo calcula Voltia un viaje en <Code>/v1</Code>, el motor que responde por defecto (
+      Cómo calcula EV-on-way un viaje en <Code>/v1</Code>, el motor que responde por defecto (
       <Code>PLANNER_ENGINE=legacy</Code>): qué pide el navegador, qué endpoints consulta el
       servidor, qué entra a cada algoritmo y qué sale. El ejemplo es Piedecuesta → Vélez con un MG
       S5 EV.
@@ -634,7 +634,7 @@ export const GUIDE_V1: GuideContent = {
   participants: [
     { id: "U", label: "Usuario", actor: "user" },
     { id: "B", label: "Navegador", actor: "browser" },
-    { id: "S", label: "Servidor Voltia", actor: "server" },
+    { id: "S", label: "Servidor EV-on-way", actor: "server" },
     { id: "DB", label: "Postgres", actor: "provider" },
     { id: "SRC", label: "OSM / SIVEEIC", actor: "provider" },
     { id: "P", label: "Photon", actor: "provider" },
@@ -963,7 +963,7 @@ export const GUIDE_V1: GuideContent = {
       "Buscar o tocar un lugar",
       "2–5 min",
     ],
-    ["Voltia", <Code key="s">GET /api/stations</Code>, "Mapa y planificación", "cookie 6 h"],
+    ["EV-on-way", <Code key="s">GET /api/stations</Code>, "Mapa y planificación", "cookie 6 h"],
     ["OSM Overpass", <Code key="o">/api/interpreter</Code>, "Refresco del dataset", "6 h"],
     [
       "SIVEEIC (MinEnergía)",

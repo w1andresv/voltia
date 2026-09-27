@@ -109,7 +109,7 @@ export async function fetchOsrmCandidates(waypoints: LatLon[]): Promise<OsrmRout
       const raw = await fetchJson<unknown>(url, {
         timeoutMs: 18000,
         cacheTtlMs: 90_000,
-        headers: { "user-agent": "Voltia/1.0 (EV trip planner)" },
+        headers: { "user-agent": "EV-on-way/1.0 (EV trip planner)" },
       });
       const data: OsrmResponse = OsrmResponseSchema.parse(raw);
       if (data.code !== "Ok" || !data.routes?.length) {

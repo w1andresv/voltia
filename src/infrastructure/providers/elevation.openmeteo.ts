@@ -35,7 +35,7 @@ async function fromOpenTopo(lats: number[], lons: number[]): Promise<number[]> {
     timeoutMs: 14000,
     // La elevación no cambia: sin vencimiento.
     cacheTtlMs: CACHE_FOREVER,
-    headers: { "user-agent": "Voltia/1.0 (EV trip planner)" },
+    headers: { "user-agent": "EV-on-way/1.0 (EV trip planner)" },
   });
   if (data.status !== "OK" || !data.results) throw new Error("opentopo");
   return data.results.map((r) => r.elevation ?? 0);

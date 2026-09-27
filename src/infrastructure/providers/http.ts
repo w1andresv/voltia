@@ -23,7 +23,7 @@ export function asciiHeader(value: string): string {
 
 const CONTACT =
   process.env.PROVIDER_CONTACT?.trim() || "sin contacto configurado - ver PROVIDER_CONTACT";
-export const USER_AGENT = asciiHeader(`Voltia/1.0 (EV trip planner; ${CONTACT})`);
+export const USER_AGENT = asciiHeader(`EV-on-way/1.0 (EV trip planner; ${CONTACT})`);
 
 /**
  * Caché de proveedores externos, en dos capas:

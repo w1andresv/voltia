@@ -26,7 +26,7 @@ function navLinks(engine: PlannerEngine | null): NavLink[] {
     {
       to: "/",
       label: "Inicio",
-      hint: "Qué es Voltia y cómo decide cada motor",
+      hint: "Qué es EV-on-way y cómo decide cada motor",
       icon: <Home className="size-5" />,
       active: (path) => path === "/" || guideEngineOfPath(path) != null,
     },
@@ -95,13 +95,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <Menu className="size-5" />
         </Button>
-        <Link href="/" className="flex min-w-0 items-center gap-2 rounded-md" aria-label="Voltia, ir al inicio">
+        <Link href="/" className="flex min-w-0 items-center gap-2 rounded-md" aria-label="EV-on-way, ir al inicio">
           <span className="grid size-8 place-items-center rounded-md bg-accent text-accent-fg">
             <Zap className="size-4" />
           </span>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold tracking-tight">{title}</div>
-            <div className="truncate text-xs text-muted">Voltia</div>
+            <div className="truncate text-xs text-muted">EV-on-way</div>
           </div>
         </Link>
         <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -117,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Zap className="size-5" />
             </span>
             <div>
-              <div className="font-display text-lg font-semibold">Voltia</div>
+              <div className="font-display text-lg font-semibold">EV-on-way</div>
               <div className="text-sm text-muted">Viajes en eléctrico</div>
             </div>
           </div>

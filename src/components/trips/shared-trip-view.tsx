@@ -75,7 +75,7 @@ export function SharedTripView({
           </h1>
           {plan.firstChargerUnreachable ? null : (
             <p className="text-xs text-muted">
-              Viaje compartido en Voltia · {request.vehicle.brand} {request.vehicle.model} ·{" "}
+              Viaje compartido en EV-on-way · {request.vehicle.brand} {request.vehicle.model} ·{" "}
               {formatKm(plan.distanceKm)} · {formatMinutes(plan.totalMinutes)}
             </p>
           )}

@@ -45,7 +45,7 @@ export function SaveChoiceDialog({
         <DialogHeader>
           <DialogTitle>¿Cómo quieres guardar esta ruta?</DialogTitle>
           <DialogDescription>
-            Puedes usar Voltia con o sin cuenta. Esto es lo que pasa con tu ruta en cada caso.
+            Puedes usar EV-on-way con o sin cuenta. Esto es lo que pasa con tu ruta en cada caso.
           </DialogDescription>
         </DialogHeader>
 

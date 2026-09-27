@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { RouteProfile } from "./route-profile";
 
 /**
- * Landing en "/": qué hace Voltia y en qué se diferencian los dos motores.
+ * Landing en "/": qué hace EV-on-way y en qué se diferencian los dos motores.
  * Cada motor tiene su ruta: /v1 (por puntaje) y /v2 (programación dinámica).
  * v1 usa el ámbar (warn) y v2 el acento de la app, igual que en las guías.
  */
@@ -22,7 +22,7 @@ const ENGINES: {
     id: "v1",
     tag: "Actual · por defecto",
     title: "Planificador por puntaje",
-    when: "El motor con el que nació Voltia. Es el que responde en el servidor si no se elige otro.",
+    when: "El motor con el que nació EV-on-way. Es el que responde en el servidor si no se elige otro.",
     facts: [
       [
         "Estaciones",
@@ -191,8 +191,8 @@ export function Landing() {
             </div>
             <div className="grid gap-5">
               <p className="text-lg text-muted">
-                Voltia calcula cuánta batería gasta tu carro en cada subida y bajada, y decide dónde
-                parar y cuánto cargar.{" "}
+                EV-on-way calcula cuánta batería gasta tu carro en cada subida y bajada, y decide
+                dónde parar y cuánto cargar.{" "}
                 <span className="font-semibold text-fg">Hay dos motores de cálculo</span>: elige uno
                 para planificar, o compáralos con la misma ruta.
               </p>
@@ -359,7 +359,7 @@ export function Landing() {
         </section>
 
         <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-6 text-sm text-muted">
-          <span>Voltia · planificación energética de viajes en vehículo eléctrico.</span>
+          <span>EV-on-way · planificación energética de viajes en vehículo eléctrico.</span>
           <div className="flex flex-wrap gap-3">
             <EngineButton engine="v1">Planificador v1</EngineButton>
             <EngineButton engine="v2">Planificador v2</EngineButton>

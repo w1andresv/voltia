@@ -5,7 +5,7 @@ import { plannerHref } from "@/lib/planner-routes";
 import { plannerEngineFor } from "@/server/planner-route";
 
 export const metadata: Metadata = {
-  title: "Voltia · Planificador v1",
+  title: "EV-on-way · Planificador v1",
   description: "Planificador de viajes en eléctrico con el motor v1: paradas elegidas por puntaje.",
 };
 

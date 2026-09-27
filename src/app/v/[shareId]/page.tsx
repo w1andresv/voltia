@@ -22,10 +22,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { shareId } = await params;
   const trip = await loadSharedTrip(shareId);
-  if (!trip) return { title: "Viaje no encontrado — Voltia" };
+  if (!trip) return { title: "Viaje no encontrado — EV-on-way" };
 
   const { originLabel, destinationLabel, distanceKm, totalMinutes, stops } = trip.summary;
-  const title = `${originLabel} → ${destinationLabel} — Voltia`;
+  const title = `${originLabel} → ${destinationLabel} — EV-on-way`;
   const description = `${formatKm(distanceKm)} · ${formatMinutes(totalMinutes)} · ${stops} ${
     stops === 1 ? "parada de recarga" : "paradas de recarga"
   }`;

@@ -25,7 +25,7 @@ describe("User-Agent de las llamadas a proveedores", () => {
     vi.resetModules();
     process.env.PROVIDER_CONTACT = "Weymar — Girón, Santander";
     ({ USER_AGENT } = await import("./http"));
-    expect(USER_AGENT).toBe("Voltia/1.0 (EV trip planner; Weymar - Giron, Santander)");
+    expect(USER_AGENT).toBe("EV-on-way/1.0 (EV trip planner; Weymar - Giron, Santander)");
     expect(() => new Headers({ "user-agent": USER_AGENT })).not.toThrow();
   });
 
@@ -38,6 +38,6 @@ describe("User-Agent de las llamadas a proveedores", () => {
     });
     const { fetchJson } = await import("./http");
     await expect(fetchJson("https://api.mapbox.com/x")).resolves.toEqual({});
-    expect(seen[0]?.get("user-agent")).toMatch(/^Voltia\/1\.0 /);
+    expect(seen[0]?.get("user-agent")).toMatch(/^EV-on-way\/1\.0 /);
   });
 });

@@ -5,7 +5,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import "@/styles.css";
 
 export const metadata: Metadata = {
-  title: "Voltia",
+  title: "EV-on-way",
   description: "Planificación energética de viajes en vehículo eléctrico: autonomía, elevación y recargas.",
 };
 

@@ -100,7 +100,7 @@ async function searchPhotonLang(
   const data = await fetchJson<PhotonResponse>(url, {
     timeoutMs: 5000,
     cacheTtlMs: 120_000,
-    headers: { "user-agent": "Voltia/1.0 (EV trip planner)" },
+    headers: { "user-agent": "EV-on-way/1.0 (EV trip planner)" },
   });
   const ranked = (data.features ?? [])
     .map((f, i) => ({ f, i, rank: photonRank(f.properties) }))
@@ -214,7 +214,7 @@ export async function reversePlace(lat: number, lon: number): Promise<Place> {
     const data = await fetchJson<PhotonResponse>(url, {
       timeoutMs: 7000,
       cacheTtlMs: 300_000,
-      headers: { "user-agent": "Voltia/1.0 (EV trip planner)" },
+      headers: { "user-agent": "EV-on-way/1.0 (EV trip planner)" },
     });
     const f = data.features?.[0];
     if (f) {

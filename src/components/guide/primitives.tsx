@@ -19,12 +19,12 @@ export const ENGINE_TONE = {
   },
 } as const;
 
-/** Quién actúa en cada paso o mensaje: navegador, servidor de Voltia o un proveedor externo. */
+/** Quién actúa en cada paso o mensaje: navegador, servidor de EV-on-way o un proveedor externo. */
 export type Actor = "browser" | "server" | "provider";
 
 export const ACTOR_TONE: Record<Actor, { text: string; bg: string; label: string }> = {
   browser: { text: "text-info", bg: "bg-info", label: "Navegador" },
-  server: { text: "text-ok", bg: "bg-ok", label: "Servidor Voltia (Next.js, server actions)" },
+  server: { text: "text-ok", bg: "bg-ok", label: "Servidor EV-on-way (Next.js, server actions)" },
   provider: { text: "text-muted", bg: "bg-subtle", label: "Proveedor externo o base de datos" },
 };
 
