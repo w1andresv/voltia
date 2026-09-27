@@ -1,6 +1,6 @@
 # 0008. Blaze (Muvatec) como fuente única, detrás de los puertos
 
-- Estado: propuesta (falta mapear los endpoints: la documentación no se pudo leer desde el entorno de desarrollo)
+- Estado: aceptada (2026-09-27): listado y detalle implementados detrás de `DATA_SOURCE`
 - Fecha: 2026-09-26
 - Fase: FB (transversal; ver plan 04 §4)
 
@@ -30,3 +30,50 @@ Blaze se usa **solo para electrolineras**: un endpoint de listado, que reemplaza
 - Tests: contrato del mapper con respuestas grabadas de Blaze (fixtures sin credenciales, con el mismo `assertNoSecrets` de la cassette), más una caracterización con `DATA_SOURCE=blaze` sobre esos fixtures.
 - Si Blaze reemplaza las cinco fuentes de estaciones, la fusión (`merge.ts`, `registry.ts`) y sus fuentes se borran en F9. Mientras tanto quedan detrás de `legacy`.
 - **Pendiente:** leer la documentación y llenar la tabla de correspondencia del plan 04 §4 (FB). Hasta entonces el estado es "propuesta".
+
+## Implementación (2026-09-27)
+La documentación está en `docs/blaze/api-publica-v1.md`.
+
+### Correspondencia de campos
+| Blaze | Dominio (`ConsolidatedStation`) | Nota |
+|---|---|---|
+| `id` | `id = "blz_" + id`, `sources[0].externalId` | El prefijo evita choques con los ids del dataset consolidado |
+| `name` | `name` | |
+| `city`, `address` | `address.city`, `address.full` | `address` solo si llega |
+| `lat`, `lon` | `lat`, `lon`, `coordSource: "blaze"` | Sin coordenadas (key sin `location:read`) la estación se descarta y se cuenta en `rejected["sin coordenadas"]` |
+| `operator` | `operator` | |
+| `status` | `availability.value` | `en_servicio` → `available`, `mantenimiento`/`fuera_servicio` → `offline`, `desconocido` o un estado nuevo → `unknown`. "En servicio" es operativa, no "libre": Blaze no publica ocupación |
+| `connectors` ("CCS2, Tipo 2") | `connectors[].standard` | Se separa por comas; "Tipo" se lee como "Type" y "CCS 2" como "CCS2", y luego `standardizeConnector` |
+| `maxKw` | `connectors[].powerKw` | Es la máxima de la estación. Con DC, va a los conectores DC (`reported`) y los AC toman la del estándar acotada a `maxKw` (`assumed`). Con solo AC (≤ 43 kW), va a los AC. Sin `maxKw`, la del estándar |
+| `chargersCount` | `connectors[].quantity` | Solo si hay un único tipo de conector; si no, `null` |
+| `verified`, `status`, `maxKw`, `chargersCount` | `attributes.blaze` | Crudos, para diagnóstico |
+| detalle `chargers[]` | `connectors[]` por estándar | `quantity` = número de cargadores, `powerKw` = el máximo, `status` = `available` si alguno está en servicio, `offline` si todos están fuera o en mantenimiento. Si ningún cargador está en servicio, la estación queda `offline` |
+
+- Los conectores de Blaze cuentan como **confirmados**, porque es la fuente oficial del operador, y `access` es `public`.
+- La elegibilidad para planificar es la misma de siempre (`evaluateEligibility`).
+
+### Código
+- `src/infrastructure/blaze/`:
+  - `schemas.ts`: zod tolerante; solo `id` y `name` son obligatorios, porque lo demás depende de los scopes;
+  - `mappers.ts`: funciones puras;
+  - `client.ts`: key en la cabecera `X-API-Key`; listado en caché 15 min y detalle 2 min;
+  - `catalog.ts`: `BlazeStationCatalog` y `BlazeStationDetails`.
+- **Puerto nuevo:** `src/domain/ports/station-details.ts` (`get(id)`).
+- **Selección** (`container.ts`):
+  - `DATA_SOURCE=blaze|legacy`;
+  - sin definir, `blaze` si hay `BLAZE_API_KEY`;
+  - `blaze` sin key cae a `legacy` con un aviso.
+  - El planificador, `/api/stations` (el mapa), `/api/stations/{id}` y el reporte usan la misma fuente.
+- **Planificación** (`plan-trip/stop-details.ts`):
+  - después de elegir el plan recomendado, se pide el detalle **solo de sus paradas** (en paralelo, 5 s como máximo);
+  - si una parada no tiene ningún cargador en servicio, se marca `offline` y se replanifica una vez (los dos planificadores descartan las `offline`), con un aviso al usuario;
+  - si el detalle trae potencias distintas, también se replanifica;
+  - si el detalle falla, se sigue con el listado.
+- **UI:** la ficha de una estación de Blaze pide el detalle al abrirse y muestra el estado de cada tipo de cargador (`live-charger-status.tsx`). El popup del mapa no lo pide, para no gastar el cupo por minuto. `/api/stations/{id}` limita a 30 consultas de detalle por IP y minuto (tabla `rate_limits`); pasado el límite, responde con la estación del listado sin llamar a Blaze.
+- **Si Blaze falla:** se sirve el último listado bueno del proceso, marcado como viejo, y el planificador avisa. Sin listado previo, la planificación falla con un error claro.
+- **Prueba con la key real:** `npm run blaze:check` muestra cuántas estaciones llegan, qué campos trae cada scope, los estados, las etiquetas de conector, los campos no documentados y un detalle.
+
+### Pendiente
+- Correr `npm run blaze:check` con la key real y ajustar el esquema o los traductores si algo llega distinto (etiquetas de conector, campos extra, paginación).
+- **Navegador:** el mapa guarda el listado 6 h en cookies (`station-dataset-cookies`). Con Blaze, el estado del mapa puede tener hasta 6 h de retraso. La planificación usa el del servidor (15 min) y el detalle de las paradas (2 min).
+- **F9:** con `DATA_SOURCE=blaze` estable, borrar las fuentes del dataset consolidado, la fusión y el cron de refresco.

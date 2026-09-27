@@ -1,10 +1,10 @@
-import { getStationDataset } from "@/infrastructure/stations/service";
+import { createStationCatalog } from "@/application/container";
 
 export const dynamic = "force-dynamic";
 
 /** Listado público: todo menos `attributes` y `conflicts` (esos van en el detalle). */
 export async function GET(request: Request) {
-  const dataset = await getStationDataset();
+  const dataset = await createStationCatalog().getDataset();
   const ifNoneMatch = request.headers.get("if-none-match");
   if (ifNoneMatch === dataset.version) {
     return new Response(null, { status: 304, headers: { etag: dataset.version } });

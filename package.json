@@ -22,7 +22,8 @@
     "snapshot:record": "vitest run --config vitest.record.config.ts src/test-support/record-snapshot.record.ts",
     "elevation:compare": "vitest run --config vitest.record.config.ts src/test-support/compare-elevation.record.ts",
     "report": "vitest run --config vitest.record.config.ts src/test-support/report.record.ts",
-    "calibration:report": "node scripts/calibration-report.mjs"
+    "calibration:report": "node scripts/calibration-report.mjs",
+    "blaze:check": "node scripts/blaze-check.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.0",

@@ -9,6 +9,7 @@ import {
 import { formatKw, formatPrice, formatUpdatedAt } from "@/lib/format";
 import { stationPhotoUrl } from "@/infrastructure/storage/station-photos";
 import { Badge } from "@/components/ui/badge";
+import { LiveChargerStatus } from "./live-charger-status";
 
 export function ChargerFacts({ charger, compact = false }: { charger: Charger; compact?: boolean }) {
   const maxKw = charger.sockets.reduce((m, s) => Math.max(m, s.powerKw), 0);
@@ -53,6 +54,7 @@ export function ChargerFacts({ charger, compact = false }: { charger: Charger; c
           ? ` · ${formatPrice(charger.pricePerKwh.amount, charger.pricePerKwh.currency)}/kWh`
           : ""}
       </div>
+      {!compact && charger.source === "blaze" ? <LiveChargerStatus stationId={charger.id} /> : null}
       <div className="text-xs text-muted">
         Fuente {CHARGER_SOURCE_LABEL[charger.source]} · Actualización {formatUpdatedAt(charger.updatedAt)}
       </div>

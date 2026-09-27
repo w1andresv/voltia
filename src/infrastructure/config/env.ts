@@ -9,8 +9,8 @@ const EnvSchema = z.object({
   PLUGSHARE_TOKEN: z.string().default(""),
   ADMIN_EMAILS: z.string().default(""),
   /**
-   * Correos (separados por coma) que ven el selector de motor v1/v2 en el
-   * planificador. Por defecto, solo el dueño del producto.
+   * Quién ve el selector de motor v1/v2 en el planificador: "*" (por defecto,
+   * todos, invitados incluidos) o correos separados por coma.
    */
   ENGINE_PREVIEW_EMAILS: z.string().default("*"),
   /** Motor de planificación: legacy (actual), shadow (ambos, responde el actual) o v2 (plan §6). */
@@ -28,6 +28,19 @@ const EnvSchema = z.object({
     .enum(["open-meteo", "open-meteo-adaptive", "mapbox-terrain"])
     .default("mapbox-terrain")
     .catch("mapbox-terrain"),
+  /**
+   * Fuente del listado de electrolineras (ADR-0008): blaze (API de Blaze) o
+   * legacy (dataset consolidado de OSM, SIVEEIC, comunidad y catálogo). Sin
+   * definir: blaze si hay BLAZE_API_KEY, si no legacy.
+   */
+  DATA_SOURCE: z.enum(["legacy", "blaze"]).optional().catch(undefined),
+  BLAZE_API_URL: z
+    .string()
+    .url()
+    .default("https://blaze.muvatec.com/electrolineras-api/public/v1")
+    .catch("https://blaze.muvatec.com/electrolineras-api/public/v1"),
+  /** Secreta: solo en el servidor (.env.local / Vercel), nunca en el navegador. */
+  BLAZE_API_KEY: z.string().default(""),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;
@@ -40,7 +53,9 @@ export function getEnv(): AppEnv {
   cached = EnvSchema.parse({
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      "",
     SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY?.trim() ?? "",
     DATABASE_URL: process.env.DATABASE_URL?.trim() ?? "",
     PLUGSHARE_TOKEN: process.env.PLUGSHARE_TOKEN ?? "",
@@ -50,6 +65,9 @@ export function getEnv(): AppEnv {
     ELEVATION_SOURCE: process.env.ELEVATION_SOURCE?.trim() || undefined,
     ENERGY_ENGINE: process.env.ENERGY_ENGINE?.trim() || undefined,
     DETOUR_SOURCE: process.env.DETOUR_SOURCE?.trim() || undefined,
+    DATA_SOURCE: process.env.DATA_SOURCE?.trim() || undefined,
+    BLAZE_API_URL: process.env.BLAZE_API_URL?.trim() || undefined,
+    BLAZE_API_KEY: process.env.BLAZE_API_KEY?.trim() ?? "",
   });
   return cached;
 }

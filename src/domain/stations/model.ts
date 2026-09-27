@@ -1,6 +1,6 @@
 import type { ConnectorType, StationAvailability } from "../types";
 
-export type SourceId = "osm" | "siveeic" | "community" | "catalog" | "plugshare" | "ocm";
+export type SourceId = "osm" | "siveeic" | "community" | "catalog" | "plugshare" | "ocm" | "blaze";
 
 export type CurrentType = "AC" | "DC";
 

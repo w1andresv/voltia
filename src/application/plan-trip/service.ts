@@ -42,6 +42,8 @@ import { selectRoutes } from "./route-selection";
 import { buildEnergyShadowReport, formatEnergyShadowReport } from "./energy-shadow-report";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
 import { verifyPlan, verifyPlanDetailed } from "./verify-plan";
+import { checkStopDetails, offlineStopText } from "./stop-details";
+import type { StationDetails } from "@/domain/ports/station-details";
 
 /**
  * `legacy`: planificador actual. `v2`: planificador por programación dinámica (F7).
@@ -61,6 +63,10 @@ export interface PlanningDeps {
   elevationFallback?: ElevationProvider;
   weather: WeatherProvider | null;
   stations: StationCatalog;
+  /** Detalle por estación (Blaze): se pide solo para las paradas del plan recomendado. */
+  stationDetails?: StationDetails;
+  /** Nombre de la fuente de estaciones en el snapshot; por defecto "dataset". */
+  stationSource?: string;
   params: ModelParameters;
   engineMode: PlannerEngineMode;
   /** Modelo de energía; por defecto el actual. */
@@ -174,7 +180,7 @@ export class EVRoutePlanningService {
     }
     // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
     // alternativa puede planear sus paradas. Cada ruta se evalúa por separado.
-    const chargers = stationsNearRoutes(
+    let chargers = stationsNearRoutes(
       dataset.stations,
       rawRoutes.map((r) => r.samples),
       params.corridor.maxFromRouteKm,
@@ -186,7 +192,7 @@ export class EVRoutePlanningService {
     const detours = this.deps.detourMatrix
       ? await this.measure(this.deps.detourMatrix, routes, chargers, data.vehicle as Vehicle)
       : undefined;
-    const inputs: PlanInputs = {
+    let inputs: PlanInputs = {
       routes,
       chargers,
       weather: snapshot,
@@ -216,6 +222,26 @@ export class EVRoutePlanningService {
       logEnergyShadow(trip, ranked, () =>
         buildPlans(inputs, vehicle, conditions, responding, "v2"),
       );
+    }
+    // Detalle de las paradas (Blaze): si alguna está fuera de servicio, se replanifica una vez sin ella.
+    if (this.deps.stationDetails && ranked[0]?.stops.length) {
+      const check = await checkStopDetails(this.deps.stationDetails, ranked[0], chargers);
+      console.log(
+        `[stations:detail] ${check.requested} parada(s) consultadas, ${check.changed} con cambios, ` +
+          `${check.offline.length} fuera de servicio${check.failed ? `, ${check.failed} sin respuesta` : ""}`,
+      );
+      if (check.changed) {
+        chargers = check.chargers;
+        inputs = { ...inputs, chargers };
+        ({ plans: ranked, selectedId } = computePlans(
+          inputs,
+          vehicle,
+          conditions,
+          responding,
+          energy,
+        ));
+        if (check.offline.length) warnings.push(offlineStopText(check.offline.map((c) => c.name)));
+      }
     }
     // Pasada 2 solo con el v2: una a tres rutas más por plan, y solo para el recomendado.
     if (mode === "v2" && ranked[0]?.stops.length) {
@@ -258,7 +284,7 @@ export class EVRoutePlanningService {
               [...new Set(elevationReports.map((r) => r.source ?? "ninguna"))].join(",") ||
               elevationSourceLabel(this.deps.elevation, this.deps.elevationSampling ?? "fixed"),
             weather: weather?.id ?? null,
-            stations: "dataset",
+            stations: this.deps.stationSource ?? "dataset",
           },
           routes,
           chargers,

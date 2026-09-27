@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/infrastructure/auth/server-actor";
 import { AuthError } from "@/infrastructure/auth/server-actor";
-import { getStationDataset } from "@/infrastructure/stations/service";
+import { createStationCatalog } from "@/application/container";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export async function GET() {
     throw err;
   }
 
-  const dataset = await getStationDataset();
+  const dataset = await createStationCatalog().getDataset();
 
   const ineligibleReasons: Record<string, number> = {};
   let withConflicts = 0;

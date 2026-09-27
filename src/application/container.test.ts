@@ -191,3 +191,42 @@ describe("ELEVATION_SOURCE de extremo a extremo (proveedores sintéticos)", () =
     expect(line).toMatch(/falló el principal/);
   });
 });
+
+describe("fuente de electrolineras (DATA_SOURCE, ADR-0008)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("sin definir: blaze si hay key, si no el dataset consolidado", async () => {
+    const { stationSourceOf } = await import("./container");
+    expect(stationSourceOf({ BLAZE_API_KEY: "" })).toBe("legacy");
+    expect(stationSourceOf({ BLAZE_API_KEY: "blz_x" })).toBe("blaze");
+    expect(stationSourceOf({ DATA_SOURCE: "legacy", BLAZE_API_KEY: "blz_x" })).toBe("legacy");
+  });
+
+  it("DATA_SOURCE=blaze sin key: dataset consolidado y aviso", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { stationSourceOf } = await import("./container");
+    expect(stationSourceOf({ DATA_SOURCE: "blaze", BLAZE_API_KEY: "" })).toBe("legacy");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("sin BLAZE_API_KEY"));
+    warn.mockRestore();
+  });
+
+  it("con key, el catálogo y el detalle son los de Blaze", async () => {
+    vi.stubEnv("BLAZE_API_KEY", "blz_x");
+    const { createStationCatalog, createStationDetails } = await import("./container");
+    const { BlazeStationCatalog, BlazeStationDetails } =
+      await import("@/infrastructure/blaze/catalog");
+    expect(createStationCatalog()).toBeInstanceOf(BlazeStationCatalog);
+    expect(createStationDetails()).toBeInstanceOf(BlazeStationDetails);
+  });
+
+  it("sin key, el dataset consolidado y sin detalle", async () => {
+    vi.stubEnv("BLAZE_API_KEY", "");
+    const { createStationCatalog, createStationDetails } = await import("./container");
+    const { DatasetStationCatalog } = await import("@/infrastructure/stations/catalog.adapter");
+    expect(createStationCatalog()).toBeInstanceOf(DatasetStationCatalog);
+    expect(createStationDetails()).toBeUndefined();
+  });
+});

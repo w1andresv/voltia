@@ -17,7 +17,7 @@ export type RegenLevel = RegenLevelShape;
 export type BodyType = BodyTypeShape;
 export type PlanningMode = "fastest" | "efficient" | "fewer_stops" | "safer" | "custom";
 export type EnergyMode = "manual" | "estimated";
-export type ChargerSource = "osm" | "catalog" | "community" | "plugshare" | "siveeic";
+export type ChargerSource = "osm" | "catalog" | "community" | "plugshare" | "siveeic" | "blaze";
 export type StationStatus = "pending" | "approved" | "rejected";
 export type StationAvailability = "unknown" | "available" | "occupied" | "offline";
 export type RoutingEngine = "mapbox-traffic" | "mapbox" | "osrm";
@@ -383,6 +383,7 @@ export const CHARGER_SOURCE_LABEL: Record<ChargerSource, string> = {
   community: "Comunidad",
   plugshare: "PlugShare",
   siveeic: "SIVEEIC (MinEnergía)",
+  blaze: "Blaze",
 };
 
 export const STATION_STATUS_LABEL: Record<StationStatus, string> = {

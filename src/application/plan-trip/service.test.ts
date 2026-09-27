@@ -264,3 +264,57 @@ describe("EVRoutePlanningService", () => {
     log.mockRestore();
   });
 });
+
+describe("detalle de las paradas (Blaze, ADR-0008)", () => {
+  const lowSoc: PlanRequest = { ...request, conditions: { ...request.conditions, initialSoc: 35 } };
+
+  it("sin puerto de detalle no se consulta nada y el plan no cambia", async () => {
+    const { response } = await new EVRoutePlanningService(deps()).plan(lowSoc);
+    expect(response.plans[0]!.stops.length).toBeGreaterThan(0);
+    expect(response.geo.providers.stations).toBe("dataset");
+  });
+
+  it("pide el detalle solo de las paradas; una fuera de servicio hace replanificar sin ella", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const before = (await new EVRoutePlanningService(deps()).plan(lowSoc)).response;
+    const firstStop = before.plans[0]!.stops[0]!.charger;
+    const stopIds = new Set(before.plans[0]!.stops.map((s) => s.charger.id));
+    const station = syntheticStations().stations.find((s) => s.id === firstStop.id)!;
+    const get = vi.fn(async (id: string) =>
+      id === firstStop.id
+        ? {
+            ...station,
+            availability: { value: "offline" as const },
+            planning: { eligible: false, reasons: ["Reportada fuera de servicio"] },
+          }
+        : null,
+    );
+    const { response } = await new EVRoutePlanningService(
+      deps({ stationDetails: { get }, stationSource: "blaze" }),
+    ).plan(lowSoc);
+    expect(get.mock.calls.map(([id]) => id).every((id) => stopIds.has(id))).toBe(true);
+    expect(response.plans[0]!.stops.some((s) => s.charger.id === firstStop.id)).toBe(false);
+    expect(response.geo.chargers.find((c) => c.id === firstStop.id)?.availability).toBe("offline");
+    expect(response.geo.warnings.some((w) => w.includes(firstStop.name))).toBe(true);
+    expect(response.geo.providers.stations).toBe("blaze");
+  });
+
+  it("si el detalle falla o no responde, se sigue con el listado", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const before = (await new EVRoutePlanningService(deps()).plan(lowSoc)).response;
+    const { response } = await new EVRoutePlanningService(
+      deps({
+        stationDetails: {
+          get: async () => {
+            throw new Error("HTTP 429");
+          },
+        },
+      }),
+    ).plan(lowSoc);
+    expect(response.plans[0]!.stops.map((s) => s.charger.id)).toEqual(
+      before.plans[0]!.stops.map((s) => s.charger.id),
+    );
+    expect(response.geo.warnings).toEqual(before.geo.warnings);
+  });
+});

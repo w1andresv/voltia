@@ -49,7 +49,7 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | F6 | Quitar los multiplicadores | ⏳ | Todo (depende de F5 medido) |
 | F7 | Planificador por programación dinámica (`PLANNER_ENGINE`) | 🟡 | Medir en sombra y activar `v2` |
 | F8 | Composición, gráficas, pasada 2, snapshot | 🟡 | Activar `v2` (D2). La verificación al compartir está hecha |
-| FB | Blaze como fuente única | ⏳ | Todo (bloqueado por la documentación) |
+| FB | Blaze como fuente única | 🟡 | Listado, detalle de paradas y ficha hechos; falta `BLAZE_API_KEY` y `npm run blaze:check` con la key real |
 | F9 | Limpieza y paso a `main` | ⏳ | Todo |
 
 **Qué ve hoy un usuario:** con las variables por defecto (`PLANNER_ENGINE=legacy`, `ENERGY_ENGINE=legacy`, `ELEVATION_SOURCE=mapbox-terrain`) la app planifica con el motor v1, pero con la elevación densa de Mapbox. Desde 2026-09-27 cualquiera puede elegir v2 en el selector del planificador (`ENGINE_PREVIEW_EMAILS=*`). Lo que cambió para todos:
@@ -205,8 +205,11 @@ En PowerShell: `$env:ORIGIN="7.1193,-73.1227"; $env:DESTINATION="4.711,-74.0721"
 
 Guardar las tablas en `docs/arquitectura-ev/mediciones/elevacion-AAAA-MM-DD.md`. Si `mapbox-terrain` falla con 404 o 401 por el nombre de la capa, cambiar `ModelParameters.elevation.terrain.tileset` a `mapbox.mapbox-terrain-dem-v1` y repetir. Esto decide D1.
 
-### O5 · Documentación de Blaze
-Exportar la especificación de la API (OpenAPI/JSON, PDF o capturas) a `docs/blaze/`, **sin** tokens ni datos de clientes. Alternativa: habilitar `blaze.muvatec.com` en la red del entorno, aunque si la pantalla pide sesión de administrador igual hará falta el archivo.
+### O5 · Blaze: key y prueba — documentación ✅ (`docs/blaze/api-publica-v1.md`)
+1. **Key:** poner `BLAZE_API_KEY=blz_…` en `.env.local`, nunca en el chat ni en el repo. Pedirla con los scopes `stations:read`, `location:read`, `connectors:read`, `chargers:read` y `operators:read`.
+2. **Prueba:** `npm run blaze:check`. Sirve para revisar que lleguen coordenadas y conectores, qué etiquetas de conector usa Blaze y el detalle de una estación.
+3. **Local:** con la key puesta, la app ya usa Blaze. Para volver al dataset: `DATA_SOURCE=legacy`.
+4. **Producción:** en Vercel, `BLAZE_API_KEY` en Production (y `DATA_SOURCE=blaze` si se quiere explícito).
 
 ### O6 · Plan de Mapbox
 Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terreno). Anotar los números en el ADR-0011. Dato medido (O4): ~12 teselas por cada 100 km de ruta **nueva**; las repetidas no cuestan por la caché sin vencimiento.
@@ -453,7 +456,7 @@ Ver §5.5.
 
 ---
 
-### 5.7 FB · Fuente de datos Blaze (Muvatec)
+### 5.7 FB · Fuente de datos Blaze (Muvatec) — ✅ implementado detrás de `DATA_SOURCE` (2026-09-27, ADR-0008); falta probar con la key real (`npm run blaze:check`)
 
 El diseño está en el ADR-0008. **Alcance (D9):** Blaze entrega solo electrolineras, con dos endpoints:
 - **listado** de todas las estaciones: reemplaza el dataset consolidado de OSM, SIVEEIC, comunidad y catálogo;
