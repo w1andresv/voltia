@@ -212,7 +212,7 @@ Guardar las tablas en `docs/arquitectura-ev/mediciones/elevacion-AAAA-MM-DD.md`.
 4. **Producción:** en Vercel, `BLAZE_API_KEY` en Production.
 
 ### O6 · Plan de Mapbox
-Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terreno). Anotar los números en el ADR-0011. Dato medido (O4): ~12 teselas por cada 100 km de ruta **nueva**; las repetidas no cuestan por la caché sin vencimiento.
+Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terreno). Anotar los números en el ADR-0011. Dato medido: con zoom 11 @2x (desde 2026-09-27) son ~5–6 teselas por cada 100 km de ruta **nueva** (antes, a zoom 12, ~12); las repetidas no cuestan por la caché sin vencimiento. Detalle en `mediciones/terreno-dem-2026-09-27.md`.
 
 ### O9 · Probar v1 y v2 desde la app
 Desde 2026-09-27 el selector está abierto a todos, invitados incluidos (`ENGINE_PREVIEW_EMAILS=*`). En el planificador aparece "Motor de cálculo (vista previa)" con **v1 | v2**. v2 usa el planificador nuevo y la energía física; si ya hay una ruta, cambiar el motor la recalcula. La elección se guarda en el navegador. Para volver a limitarlo: `ENGINE_PREVIEW_EMAILS` con una lista de correos en Vercel. **Si en Vercel quedó `ENGINE_PREVIEW_EMAILS=w1andresv@gmail.com`, hay que borrarla o poner `*`**, porque el valor del entorno manda sobre el valor por defecto.

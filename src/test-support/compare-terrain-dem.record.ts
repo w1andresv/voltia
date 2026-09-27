@@ -168,7 +168,8 @@ it("compara Terrain-RGB v1 con Terrain-DEM v1", async () => {
   // 2. Las dos opciones sobre la misma ruta, más las variantes a zoom 11 con teselas de 512 px:
   //    la misma resolución que hoy con menos teselas (menos consultas facturables).
   const variants: { label: string; tileset: string; zoom: number; endpoint: Endpoint | null }[] = [
-    { label: "Terrain-RGB v1 · z12 (actual)", tileset: RGB, zoom: 12, endpoint: V4 },
+    // La primera es la referencia de la tabla 3: la malla más fina de 256 px.
+    { label: "Terrain-RGB v1 · z12", tileset: RGB, zoom: 12, endpoint: V4 },
     { label: "Terrain-RGB v1 · z11 @2x", tileset: RGB, zoom: 11, endpoint: V4_2X },
     { label: "Terrain-DEM v1 · z12", tileset: DEM, zoom: 12, endpoint: demEndpoint },
     // Por la API v4 Terrain-DEM llega en 256 px (medido 2026-09-27): a zoom 11 se pide @2x,
@@ -177,6 +178,13 @@ it("compara Terrain-RGB v1 con Terrain-DEM v1", async () => {
       ? { label: "Terrain-DEM v1 · z11 @2x", tileset: DEM, zoom: 11, endpoint: V4_2X }
       : { label: "Terrain-DEM v1 · z11", tileset: DEM, zoom: 11, endpoint: demEndpoint },
   ];
+  // Marca la que usa la app hoy (ModelParameters.elevation.terrain).
+  const prod = MODEL_PARAMETERS.elevation.terrain;
+  for (const v of variants) {
+    const retina = v.endpoint === V4_2X;
+    if (v.tileset === prod.tileset && v.zoom === prod.zoom && retina === prod.retina)
+      v.label += " (producción)";
+  }
   const rows: Record<string, string | number>[] = [];
   const profiles = new Map<string, number[]>();
   for (const v of variants) {
@@ -264,7 +272,9 @@ it("compara Terrain-RGB v1 con Terrain-DEM v1", async () => {
   );
   console.table(rows);
   if (diffs.length) {
-    console.log("\n[terreno] 3. Diferencia de alturas contra Terrain-RGB v1 · z12 (mismos puntos)");
+    console.log(
+      `\n[terreno] 3. Diferencia de alturas contra ${variants[0]!.label} (mismos puntos)`,
+    );
     console.table(diffs);
   }
 }, 300_000);

@@ -40,8 +40,12 @@ export interface ModelParameters {
     };
     /** Perfil denso (malla o adaptativa): suavizado por distancia y umbral de histéresis del desnivel. */
     dense: { smoothingM: number; hysteresisM: number };
-    /** Teselas de terreno de Mapbox: zoom (12 ≈ 38 m por píxel en el ecuador) y tileset. */
-    terrain: { zoom: number; tileset: string };
+    /**
+     * Teselas de terreno de Mapbox: zoom, tileset y si se piden @2x (512 px). Zoom 11
+     * con @2x da la misma resolución que zoom 12 de 256 px (≈ 38 m por píxel en el
+     * ecuador) con cerca de la mitad de teselas, que son las consultas que se cobran.
+     */
+    terrain: { zoom: number; tileset: string; retina: boolean };
     /**
      * Pendiente máxima creíble entre puntos del perfil denso, %. Más que esto es
      * un error del modelo de terreno (p. ej. un puente sobre un valle) y se recorta.
@@ -164,7 +168,9 @@ export const MODEL_PARAMETERS: ModelParameters = {
     mesh: { spacingM: 100 },
     adaptive: { coarseSpacingM: 1000, fineSpacingM: 200, refineDeltaM: 15, maxProbes: 1500 },
     dense: { smoothingM: 300, hysteresisM: 5 },
-    terrain: { zoom: 12, tileset: "mapbox.terrain-rgb" },
+    // Medido 2026-09-27 (Bucaramanga → Bogotá): 23 teselas en vez de 49, alturas a 1,5 m en
+    // promedio de zoom 12 y −0,1 kWh (docs/arquitectura-ev/mediciones/terreno-dem-2026-09-27.md).
+    terrain: { zoom: 11, tileset: "mapbox.terrain-rgb", retina: true },
     maxGradePct: 15,
   },
   soc: {

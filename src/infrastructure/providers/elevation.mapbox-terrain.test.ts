@@ -139,3 +139,31 @@ describe("mapboxTileFetcher", () => {
     ]);
   });
 });
+
+describe("caché en memoria por píxeles", () => {
+  const blank = (size: number): DecodedPng => ({
+    width: size,
+    height: size,
+    channels: 3,
+    data: new Uint8Array(size * size * 3),
+  });
+  /** Un punto en la tesela x (zoom 12, misma fila). */
+  const inTile = (x: number) => ({ lat: 7.1, lon: ((x + 0.5) / 4096) * 360 - 180 });
+
+  async function load(size: number, tiles: number) {
+    const fetchTile = vi.fn(async () => new Uint8Array([1]));
+    const opts = { zoom: 12, tileset: "t", fetchTile, decode: () => blank(size) };
+    for (let x = 0; x < tiles; x++) await terrainElevations([inTile(1000 + x)], opts);
+    fetchTile.mockClear();
+    await terrainElevations([inTile(1000)], opts);
+    return fetchTile.mock.calls.length;
+  }
+
+  it("con teselas de 256 px guarda 96: la primera de 25 sigue en memoria", async () => {
+    expect(await load(256, 25)).toBe(0);
+  });
+
+  it("con teselas de 512 px guarda 24: la primera de 25 se vuelve a pedir", async () => {
+    expect(await load(512, 25)).toBe(1);
+  });
+});

@@ -75,4 +75,10 @@ El dueño del producto pidió comparar `mapbox.mapbox-terrain-dem-v1` con el til
   - a zoom 12, las alturas son idénticas a las de Terrain-RGB (Δh = 0), con las mismas 9 teselas: cambiar de tileset no cambia costo ni resultado;
   - zoom 11 con @2x pide 4 teselas en vez de 9, con la misma resolución, alturas a ≤ 1,3 m y la misma energía. Esa es la palanca de costo.
   - Falta confirmarlo en montaña (Piedecuesta → Vélez) antes de cambiar `ModelParameters.elevation.terrain`.
+- **Montaña (Bucaramanga → Bogotá):**
+  - Terrain-DEM v1 da alturas idénticas a Terrain-RGB a zoom 12;
+  - zoom 11 @2x pide 23 teselas en vez de 49, con alturas a 1,5 m en promedio y −0,1 kWh.
+- **Decisión (2026-09-27):** producción usa **Terrain-RGB v1 a zoom 11 con @2x** (`ModelParameters.elevation.terrain = { zoom: 11, tileset: "mapbox.terrain-rgb", retina: true }`), con cerca de la mitad de consultas facturables.
+  - La caché en memoria se limita por píxeles (el equivalente a 96 teselas de 256 px), porque una tesela de 512 px ocupa cuatro veces más.
+  - `modelVersion` no se sube: es un detalle del muestreo de alturas con efecto menor al 0,2 % en la energía, igual que el cambio de fuente de D1.
 

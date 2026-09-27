@@ -15,7 +15,11 @@ import { decodePng, type DecodedPng } from "./png";
 
 /** El terreno no cambia: las teselas se guardan sin vencimiento. */
 const TILE_TTL_MS = CACHE_FOREVER;
-const MEMORY_TILES = 96;
+/**
+ * Presupuesto de la caché en memoria, en píxeles: el equivalente a 96 teselas
+ * de 256 px (~19 MB en RGB). Con teselas @2x de 512 px caben 24.
+ */
+const MEMORY_PIXELS = 96 * 256 * 256;
 const CONCURRENCY = 6;
 
 export function terrainRgbHeight(r: number, g: number, b: number): number {
@@ -51,12 +55,30 @@ export function sampleTile(tile: DecodedPng, px: number, py: number): number {
   return top * (1 - ty) + bottom * ty;
 }
 
-const memory = new Map<string, Promise<DecodedPng>>();
+const memory = new Map<string, { tile: Promise<DecodedPng>; pixels: number }>();
+
+/** Saca las más viejas hasta caber en el presupuesto; siempre deja la última. */
+function evict(): void {
+  let total = 0;
+  for (const e of memory.values()) total += e.pixels;
+  while (memory.size > 1 && total > MEMORY_PIXELS) {
+    const oldest = memory.keys().next().value!;
+    total -= memory.get(oldest)!.pixels;
+    memory.delete(oldest);
+  }
+}
 
 function remember(key: string, tile: Promise<DecodedPng>): Promise<DecodedPng> {
-  memory.set(key, tile);
-  tile.catch(() => memory.delete(key));
-  while (memory.size > MEMORY_TILES) memory.delete(memory.keys().next().value!);
+  const entry = { tile, pixels: 256 * 256 };
+  memory.set(key, entry);
+  tile.then(
+    (t) => {
+      entry.pixels = t.width * t.height;
+      evict();
+    },
+    () => memory.delete(key),
+  );
+  evict();
   return tile;
 }
 
@@ -117,7 +139,7 @@ export async function terrainElevations(
         const memKey = `${opts.cacheId ?? opts.tileset}:${opts.zoom}/${k}`;
         const [x, y] = k.split("/").map(Number) as [number, number];
         const tile =
-          memory.get(memKey) ??
+          memory.get(memKey)?.tile ??
           remember(
             memKey,
             opts.fetchTile(opts.tileset, opts.zoom, x, y).then((bytes) => decode(bytes)),

@@ -44,3 +44,36 @@ Corrida por el dueño del producto en su computador con `npm run elevation:dem` 
 5. **Pendiente:**
    - repetir en montaña (Piedecuesta → Vélez), donde las diferencias pesan más: `unset ORIGIN DESTINATION && npm run elevation:dem`;
    - confirmar en las estadísticas de Mapbox que una tesela @2x cuenta como una sola consulta.
+
+## Segunda corrida: montaña, Bucaramanga → Bogotá (421,6 km, 221 muestras)
+
+Incluye el cañón del Chicamocha y la mayor parte del tramo Piedecuesta → Vélez. MG S5 EV, SOC de salida 80 %, sin estaciones (el SOC negativo es esperado). La fila de Terrain-DEM a zoom 11 todavía salió sin @2x: la corrida se hizo antes de la corrección del script.
+
+| Opción | Teselas | px | m/píxel | ms | Subida | Bajada | Mín | Máx | kWh | SOC llegada |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Terrain-RGB v1 · z12 | 49 | 256 | 38 | 833 | 9117 | 7529 | 538 | 3141 | 66,3 | −60,7 % |
+| Terrain-RGB v1 · z11 @2x | **23** | 512 | 38 | 2012 | 9121 | 7536 | 538 | 3141 | 66,2 | −60,6 % |
+| Terrain-DEM v1 · z12 | 49 | 256 | 38 | 3508 | 9117 | 7529 | 538 | 3141 | 66,3 | −60,7 % |
+| Terrain-DEM v1 · z11 (sin @2x) | 23 | 256 | 76 | 975 | 8982 | 7396 | 540 | 3139 | 66,3 | −60,8 % |
+
+| Diferencia contra Terrain-RGB v1 · z12 | Media \|Δh\| | p95 \|Δh\| | Máx \|Δh\| |
+|---|---:|---:|---:|
+| Terrain-RGB v1 · z11 @2x | 1,5 m | 4,4 m | 8,6 m |
+| Terrain-DEM v1 · z12 | 0 | 0 | 0 |
+| Terrain-DEM v1 · z11 (sin @2x) | 1,6 m | 4,7 m | 10,1 m |
+
+**Lectura:**
+- **Terrain-DEM v1 = Terrain-RGB v1** también en montaña: alturas idénticas en los 221 puntos, mismas 49 teselas y misma API. Cambiar de tileset no cambia ni el costo ni el resultado.
+  - La diferencia de tiempo (3,5 s contra 0,8 s) es de una sola corrida en frío; no pesa, porque las teselas quedan en caché sin vencimiento.
+- **Zoom 11 @2x:**
+  - 23 teselas en vez de 49 (−53 %), con la misma resolución.
+  - Las alturas cambian 1,5 m en promedio (máx. 8,6 m en laderas); la subida total cambia 4 m de 9117.
+  - La energía baja 0,1 kWh de 66,3 (0,15 %).
+- **A mitad de resolución** (zoom 11 sin @2x), la subida baja 135 m y las diferencias crecen poco. La energía casi no cambia, así que el resultado es poco sensible a este detalle.
+
+## Decisión (2026-09-27)
+Producción pasa a **Terrain-RGB v1, zoom 11 @2x** (`ModelParameters.elevation.terrain`).
+- **Costo:** unas 5–6 teselas por cada 100 km de ruta nueva (antes ~12).
+- **Tileset:** no se cambia a Terrain-DEM: da lo mismo. Si Mapbox retira Terrain-RGB, el cambio es solo el nombre del tileset, porque la API, el formato (PNG de 256/512 px, sin borde) y la fórmula son iguales.
+- **Caché:** las teselas guardadas a zoom 12 no sirven para zoom 11, así que cada zona se vuelve a pedir una vez. Desde ahí cuesta la mitad.
+- **Pendiente:** confirmar en las estadísticas de Mapbox que una tesela @2x cuenta como una sola consulta.

@@ -109,11 +109,10 @@ function elevationAt(lat: number, lon: number): number {
 
 /** Teselas terrain-RGB sintéticas (256 px), con la misma elevación que el Open-Meteo sintético. */
 const tileCache = new Map<string, Uint8Array>();
-function terrainTile(z: number, x: number, y: number): Uint8Array {
-  const key = `${z}/${x}/${y}`;
+function terrainTile(z: number, x: number, y: number, size = 256): Uint8Array {
+  const key = `${z}/${x}/${y}@${size}`;
   const hit = tileCache.get(key);
   if (hit) return hit;
-  const size = 256;
   const n = 2 ** z;
   const px = new Uint8Array(size * size * 3);
   for (let row = 0; row < size; row++) {
@@ -190,10 +189,10 @@ export function syntheticFetch(): typeof fetch {
     }
     const tile =
       url.hostname === "api.mapbox.com" &&
-      url.pathname.match(/^\/v4\/[^/]+\/(\d+)\/(\d+)\/(\d+)\.pngraw$/);
+      url.pathname.match(/^\/v4\/[^/]+\/(\d+)\/(\d+)\/(\d+)(@2x)?\.pngraw$/);
     if (tile) {
-      const [, z, x, y] = tile.map(Number) as [number, number, number, number];
-      return new Response(Buffer.from(terrainTile(z, x, y)), {
+      const [z, x, y] = tile.slice(1, 4).map(Number) as [number, number, number];
+      return new Response(Buffer.from(terrainTile(z, x, y, tile[4] ? 512 : 256)), {
         status: 200,
         headers: { "content-type": "image/png" },
       });
