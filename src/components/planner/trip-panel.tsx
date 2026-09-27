@@ -22,6 +22,7 @@ import { SocChart } from "./soc-chart";
 import { PlanStats } from "./stats";
 import { SaveTripButton } from "@/components/trips/save-trip-button";
 import { TripParams } from "./trip-params";
+import { CacheTools } from "./cache-tools";
 import { EngineSwitch } from "./engine-switch";
 import { VehicleBar } from "./vehicle-bar";
 import {
@@ -245,6 +246,7 @@ export function TripSetup() {
           if (usePlanner.getState().geo && canPlan) planMut.mutate();
         }}
       />
+      <CacheTools onReplan={() => planMut.mutate()} />
       <div className="space-y-2 pt-1">
         {!canPlan && !planMut.isPending ? (
           <p className="text-xs text-warn">

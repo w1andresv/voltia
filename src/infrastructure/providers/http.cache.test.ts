@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const calls: { key: string[]; opts: { revalidate?: number | false } }[] = [];
+const calls: { key: string[]; opts: { revalidate?: number | false; tags?: string[] } }[] = [];
 vi.mock("next/cache", () => ({
   unstable_cache: (
     fn: () => Promise<unknown>,
     key: string[],
-    opts: { revalidate?: number | false },
+    opts: { revalidate?: number | false; tags?: string[] },
   ) => {
     calls.push({ key, opts });
     return fn;
@@ -40,5 +40,32 @@ describe("caché de datos que no cambian (elevación)", () => {
     const { fetchElevations } = await import("./elevation.openmeteo");
     await fetchElevations([{ lat: 7, lon: -73 }]);
     expect(calls.at(-1)!.opts.revalidate).toBe(false);
+  });
+});
+
+describe('caché que se puede limpiar (botón "Limpiar caché")', () => {
+  it("solo las respuestas con vencimiento llevan la etiqueta; la elevación no", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ok: 1 }), { status: 200 }));
+    const { CACHE_FOREVER, PROVIDER_CACHE_TAG, fetchBytes, fetchJson } = await import("./http");
+    await fetchJson("https://example.test/ruta", { cacheTtlMs: 90_000, cacheKey: "ruta" });
+    await fetchJson("https://example.test/alt", { cacheTtlMs: CACHE_FOREVER, cacheKey: "alt" });
+    await fetchBytes("https://example.test/t.png", { cacheTtlMs: CACHE_FOREVER, cacheKey: "tile" });
+    expect(calls.map((c) => c.opts.tags)).toEqual([[PROVIDER_CACHE_TAG], undefined, undefined]);
+  });
+
+  it("clearProviderMemory vacía la memoria: la siguiente consulta vuelve a la fuente", async () => {
+    let hits = 0;
+    vi.stubGlobal("fetch", async () => {
+      hits++;
+      return new Response(JSON.stringify({ ok: hits }), { status: 200 });
+    });
+    const { clearProviderMemory, fetchJson } = await import("./http");
+    const opts = { cacheTtlMs: 60_000, cacheKey: "memoria-limpiable" };
+    await fetchJson("https://example.test/m", opts);
+    await fetchJson("https://example.test/m", opts);
+    expect(hits).toBe(1);
+    expect(clearProviderMemory()).toBeGreaterThanOrEqual(1);
+    await fetchJson("https://example.test/m", opts);
+    expect(hits).toBe(2);
   });
 });

@@ -122,6 +122,25 @@ function revalidateOf(ttlMs: number): number | false {
   return Number.isFinite(ttlMs) ? Math.max(1, Math.round(ttlMs / 1000)) : false;
 }
 
+/**
+ * Etiqueta de la Data Cache para las respuestas con vencimiento (rutas, clima,
+ * geocodificación, Blaze, matriz): el botón "Limpiar caché" las invalida. Las
+ * que no vencen (elevación) no la llevan: no cambian y volver a pedirlas cuesta.
+ */
+export const PROVIDER_CACHE_TAG = "provider-data";
+
+function cacheOptions(ttlMs: number): { revalidate: number | false; tags?: string[] } {
+  const revalidate = revalidateOf(ttlMs);
+  return revalidate === false ? { revalidate } : { revalidate, tags: [PROVIDER_CACHE_TAG] };
+}
+
+/** Vacía la caché en memoria de este proceso (la Data Cache se invalida con PROVIDER_CACHE_TAG). */
+export function clearProviderMemory(): number {
+  const n = memoryCache.size;
+  memoryCache.clear();
+  return n;
+}
+
 export async function fetchJson<T>(
   url: string,
   init: RequestInit & { timeoutMs?: number; cacheTtlMs?: number; cacheKey?: string } = {},
@@ -133,9 +152,11 @@ export async function fetchJson<T>(
   const fromMemory = memoryHit<T>(key, cacheTtlMs);
   if (fromMemory !== undefined) return fromMemory;
 
-  const cached = unstable_cache(() => rawJson<T>(url, rest, timeoutMs), [key], {
-    revalidate: revalidateOf(cacheTtlMs),
-  });
+  const cached = unstable_cache(
+    () => rawJson<T>(url, rest, timeoutMs),
+    [key],
+    cacheOptions(cacheTtlMs),
+  );
   const value = await cached();
   memoryCache.set(key, { at: Date.now(), value });
   return value;
@@ -174,9 +195,7 @@ export async function fetchBytes(
   const cached = unstable_cache(
     async () => Buffer.from(await raw()).toString("base64"),
     [cacheKey ?? safeUrl(url)],
-    {
-      revalidate: revalidateOf(cacheTtlMs),
-    },
+    cacheOptions(cacheTtlMs),
   );
   return new Uint8Array(Buffer.from(await cached(), "base64"));
 }

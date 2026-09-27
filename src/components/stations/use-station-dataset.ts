@@ -22,6 +22,11 @@ export type StationEngine = "v1" | "v2" | null;
 
 const memoryCache = new Map<string, { etag: string; data: StationDatasetLite }>();
 
+/** Olvida los listados guardados en memoria (botón "Limpiar caché"). */
+export function resetStationDatasetMemory(): void {
+  memoryCache.clear();
+}
+
 /** El listado de Blaze trae estados que cambian: no va a las cookies de 6 h. */
 function usesCookies(engine: StationEngine): boolean {
   return engine !== "v2";

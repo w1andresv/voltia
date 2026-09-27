@@ -98,6 +98,8 @@ interface PlannerState {
     conditions: TripConditions;
   }) => void;
   setResult: (geo: GeoBundle, plans: RoutePlan[], selectedId: string) => void;
+  /** Quita el plan calculado (sin tocar origen, destino ni preferencias). */
+  clearResult: () => void;
   selectPlan: (id: string) => void;
   setHoverKm: (km: number | null) => void;
   setShowAllChargers: (v: boolean) => void;
@@ -287,6 +289,7 @@ export const usePlanner = create<PlannerState>()(
         }),
       setResult: (geo, plans, selectedId) =>
         set({ geo, plans, selectedPlanId: selectedId, hoverKm: null }),
+      clearResult: () => set({ geo: null, plans: [], selectedPlanId: null, hoverKm: null }),
       selectPlan: (id) => set({ selectedPlanId: id, hoverKm: null }),
       setHoverKm: (km) => set({ hoverKm: km }),
       setShowAllChargers: (v) => set({ showAllChargers: v }),

@@ -217,6 +217,19 @@ Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terren
 ### O9 · Probar v1 y v2 desde la app
 Desde 2026-09-27 el selector está abierto a todos, invitados incluidos (`ENGINE_PREVIEW_EMAILS=*`). En el planificador aparece "Motor de cálculo (vista previa)" con **v1 | v2**. v2 usa el planificador nuevo y la energía física; si ya hay una ruta, cambiar el motor la recalcula. La elección se guarda en el navegador. Para volver a limitarlo: `ENGINE_PREVIEW_EMAILS` con una lista de correos en Vercel. **Si en Vercel quedó `ENGINE_PREVIEW_EMAILS=w1andresv@gmail.com`, hay que borrarla o poner `*`**, porque el valor del entorno manda sobre el valor por defecto.
 
+### O10 · Comparar entornos (localhost contra Vercel): "Diagnóstico y caché"
+En el planificador, debajo del selector v1/v2, "Diagnóstico y caché" muestra:
+- la versión del código (commit, rama, entorno);
+- la configuración del servidor (motores por defecto, elevación, y si hay clave de Blaze y de Mapbox);
+- el motor elegido en ese navegador y con qué se calculó el plan en pantalla (planificador, energía, estaciones, elevación);
+- las condiciones del viaje.
+
+"Copiar" lo deja listo para pegar. Si dos entornos dan planes distintos, se comparan esas líneas.
+
+Las preferencias son por navegador y por dominio, así que localhost y Vercel no las comparten. "Limpiar caché":
+- limpia el listado de electrolineras y el plan del navegador, y vuelve a planificar;
+- para administradores (`ADMIN_EMAILS`), también la caché del servidor: rutas, clima, Blaze y matriz, con la etiqueta `provider-data`. La elevación se conserva.
+
 ### O8 · Aplicar la migración 0014 (calibración)
 `npm run db:migrate` en tu computador (con `.env.local`). Crea la tabla `voltia_trip_observations` y su seguridad por fila, y **escribe en el esquema de producción**. Hasta que se aplique, el botón "¿Con cuánto llegaste?" muestra un error al guardar; el resto de la app no cambia. Para ver los resultados: `npm run calibration:report`.
 

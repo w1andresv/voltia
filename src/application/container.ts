@@ -93,6 +93,11 @@ function stationsFor(source: StationSourceId): {
   return blazeStations;
 }
 
+/** Olvida el listado de Blaze guardado en este proceso (botón "Limpiar caché"). */
+export function resetStationCaches(): void {
+  blazeStations = null;
+}
+
 /** El motor que responde: el elegido por el usuario o PLANNER_ENGINE. */
 function engineOf(choice?: "v1" | "v2" | null): PlannerEngineMode {
   if (choice === "v2") return "v2";
