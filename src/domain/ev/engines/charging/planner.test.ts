@@ -120,6 +120,64 @@ describe("planCharging", () => {
   });
 });
 
+describe("planCharging — extra en carga rápida (fastChargeBuffer)", () => {
+  const buffer = { fastChargeBuffer: { extraPct: 10, maxSocPct: 90 } };
+
+  it("en una estación rápida carga 10 puntos más de lo necesario y llega con 10 de más", () => {
+    // Llega a la estación con 18 %; lo necesario para el destino con 10 % es salir con 24 %.
+    const r = planCharging(input(profile(66), [node(52, 150, { fast: true })], buffer));
+    expect(r.stops[0]).toMatchObject({ arriveSoc: 18, departSoc: 34 });
+    expect(r.arrivalSoc).toBeCloseTo(20, 9);
+  });
+
+  it("en una estación lenta carga solo lo necesario", () => {
+    const r = planCharging(input(profile(66), [node(52, 7, { fast: false })], buffer));
+    expect(r.stops[0]!.departSoc).toBe(24);
+  });
+
+  it("entre dos estaciones: sale de la rápida con lo necesario para llegar a la siguiente con 10 de más", () => {
+    // Sin extra: 70 % → llega a la primera (km 55) con 15 %, sale con lo justo hasta la segunda.
+    const samples = profile(140);
+    const nodes = [node(55, 150, { fast: true }), node(115, 150, { fast: true })];
+    const r = planCharging(input(samples, nodes, buffer));
+    expect(r.feasible).toBe(true);
+    expect(r.stops).toHaveLength(2);
+    expect(r.stops[1]!.arriveSoc).toBeGreaterThanOrEqual(20 - 1e-9);
+    expect(r.arrivalSoc).toBeGreaterThanOrEqual(20 - 1e-9);
+  });
+
+  it("el extra no pasa del tope de carga del vehículo ni del 90 %", () => {
+    // Llega con 10 %; lo necesario es 75 %.
+    const samples = profile(125);
+    const nodes = [node(60, 150, { fast: true })];
+    expect(
+      planCharging(input(samples, nodes, { ...buffer, maxChargePct: 80 })).stops[0]!.departSoc,
+    ).toBe(80);
+    expect(
+      planCharging(input(samples, nodes, { ...buffer, maxChargePct: 100 })).stops[0]!.departSoc,
+    ).toBe(85);
+    // Lo necesario es 88 %: el extra se corta en 90 %.
+    const near = planCharging(input(profile(138), nodes, { ...buffer, maxChargePct: 100 }));
+    expect(near.stops[0]!.departSoc).toBe(90);
+  });
+
+  it("si lo necesario ya pasa del 90 %, carga solo eso y el plan sigue siendo viable", () => {
+    // Llega con 10 %; lo necesario es 95 %.
+    const r = planCharging(
+      input(profile(145), [node(60, 150, { fast: true })], { ...buffer, maxChargePct: 100 }),
+    );
+    expect(r.feasible).toBe(true);
+    expect(r.stops[0]!.departSoc).toBe(95);
+    expect(r.arrivalSoc).toBeCloseTo(10, 9);
+  });
+
+  it("no cambia la salida del origen ni un viaje que llega sin cargar", () => {
+    const r = planCharging(input(profile(50), [node(20, 150, { fast: true })], buffer));
+    expect(r.stops).toEqual([]);
+    expect(r.arrivalSoc).toBe(20);
+  });
+});
+
 describe("compareLabels", () => {
   const a = { stops: 1, minutes: 30, detourKm: 2, detourKwh: 0.5, minSoc: 12 };
   const b = { stops: 2, minutes: 20, detourKm: 1, detourKwh: 0.2, minSoc: 15 };

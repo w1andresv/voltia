@@ -981,19 +981,36 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     expect(p.arrivalSoc).toBeGreaterThanOrEqual(10 - 1e-6);
   });
 
-  it("carga lo mínimo para llegar con la reserva (no llena de más en 'más rápida')", () => {
-    const p = buildPlan({
+  const oneStop = (chargers: Charger[]) =>
+    buildPlan({
       raw: straightRoute(300),
       vehicle: vehicle(),
       conditions: conditions({ initialSoc: 80, arrivalSoc: 10, safetyMode: "low" }),
-      chargers: [chargerAt(150)],
+      chargers,
       weather: null,
       origin: ORIGIN,
       destination: dest(300),
       engine: "v2",
     });
+
+  it("en carga lenta (AC) carga lo mínimo para llegar con la reserva", () => {
+    const p = oneStop([
+      chargerAt(150, { sockets: [{ connector: "type2", powerKw: 22, count: 2 }] }),
+    ]);
+    expect(p.stops).toHaveLength(1);
     expect(p.arrivalSoc).toBeGreaterThanOrEqual(10 - 1e-6);
     expect(p.arrivalSoc).toBeLessThan(11.5);
+    expect(p.stops[0]!.fastChargeExtraPct).toBeUndefined();
+  });
+
+  it("en carga rápida (DC) carga 10 puntos más de lo necesario (decisión 2026-09-27)", () => {
+    const p = oneStop([chargerAt(150)]);
+    const stop = p.stops[0]!;
+    expect(stop.departSoc - stop.minDepartSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+    expect(stop.departSoc - stop.minDepartSoc).toBeLessThan(11.5);
+    expect(stop.fastChargeExtraPct).toBeCloseTo(stop.departSoc - stop.minDepartSoc, 9);
+    expect(p.arrivalSoc).toBeGreaterThanOrEqual(20 - 1e-6);
+    expect(p.arrivalSoc).toBeLessThan(21.5);
   });
 
   it("C8: con mínimo del vehículo 15 %, no llega a ninguna estación con menos", () => {

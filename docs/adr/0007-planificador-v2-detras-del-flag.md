@@ -27,3 +27,16 @@ F7 reemplaza la selección de paradas por puntaje (D6) por programación dinámi
 
 ## Selector v1/v2 (2026-09-26)
 Además de la variable del servidor, los correos en `ENGINE_PREVIEW_EMAILS` (por defecto el del dueño del producto) ven en el planificador un selector **v1 | v2**. v2 activa juntos el planificador y la energía v2 para sus planificaciones. El servidor verifica el correo; para los demás usuarios la elección se ignora y manda `PLANNER_ENGINE` / `ENERGY_ENGINE`.
+
+## Extra en carga rápida (2026-09-27, decisión del dueño del producto)
+- **Regla:** en una estación de carga rápida (DC), el planificador v2 carga **10 puntos más de lo que pide el tramo siguiente**.
+  - Así se aprovecha la velocidad y se evitan paradas largas en carga lenta.
+  - El extra no pasa del 90 %, porque del 90 al 100 % la carga se vuelve lenta, ni de la carga máxima de viaje del vehículo (`maxSocTravel`, 80 % por defecto, editable hasta 100 %).
+  - Si lo necesario ya pasa del 90 %, se carga solo lo necesario.
+- **Implementación:** restricción de la programación dinámica (`planCharging`, `PlannerInput.fastChargeBuffer`, `PlannerNode.fast`). El tramo que sale de una estación rápida debe terminar con 10 puntos de más sobre el piso y la reserva, salvo que se salga con el tope (90 % o la carga máxima).
+  - Un plan viable sin la regla sigue siéndolo: salir con el tope siempre cumple.
+  - El óptimo se busca con la regla incluida, así que la carga extra se arrastra a las paradas siguientes.
+  - Valores en `ModelParameters.planner.fastChargeBuffer`.
+- **Interfaz:** cada parada muestra el extra (`ChargeStop.fastChargeExtraPct`).
+- **Efecto en la caracterización:** la parada DC de 60 kW sale con 67 % en vez de 57 % (+5 min) y el viaje llega con 25 % en vez de 15 %.
+- **El planificador v1 no cambia:** es la referencia de la comparación en sombra y ya carga de más en DC con sus propias reglas (8–12 puntos sobre la llegada).

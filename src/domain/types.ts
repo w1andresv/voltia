@@ -155,6 +155,11 @@ export interface ChargeStop {
   departSoc: number;
   /** Mínimo para llegar al siguiente punto o al destino, con el margen de seguridad. */
   minDepartSoc: number;
+  /**
+   * Planificador v2: puntos que se cargan sobre el mínimo por ser carga rápida
+   * (`ModelParameters.planner.fastChargeBuffer`). Ausente si no aplica.
+   */
+  fastChargeExtraPct?: number;
   chargeMinutes: number;
   energyAddedKwh: number;
   bestSocket: ChargerSocket;

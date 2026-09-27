@@ -91,6 +91,12 @@ export interface ModelParameters {
     occupiedWaitMin: SourcedValue<number>;
     /** Pasada 2: rutas reales que se piden como máximo para verificar un plan (especificación §4). */
     maxVerifyIterations: number;
+    /**
+     * Planificador v2: en una estación de carga rápida (DC) se carga `extraPct`
+     * puntos más de lo que pide el tramo siguiente, sin pasar de `maxSocPct`
+     * (del 90 al 100 % la carga se vuelve lenta) ni del tope de carga del vehículo.
+     */
+    fastChargeBuffer: SourcedValue<{ extraPct: number; maxSocPct: number }>;
   };
   speed: {
     /** Malla del perfil de velocidad y de los tramos de energía v2, m. */
@@ -201,6 +207,10 @@ export const MODEL_PARAMETERS: ModelParameters = {
     socGridPct: 1,
     occupiedWaitMin: sourced(15, "estimated", { notes: "Sin datos de ocupación; calibrar." }),
     maxVerifyIterations: 3,
+    fastChargeBuffer: sourced({ extraPct: 10, maxSocPct: 90 }, "configurable", {
+      notes:
+        "Decisión del dueño del producto (2026-09-27): aprovechar la velocidad de la carga rápida para evitar paradas largas en carga lenta.",
+    }),
   },
   speed: {
     meshSpacingM: 100,

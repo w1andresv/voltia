@@ -535,7 +535,11 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
               los {formatKm(st.kmToNext)} siguientes
               {st.nextLabel ? ` hasta ${st.nextLabel}` : " hasta el destino"} y todavía conservar el
               margen de {formatPct(plan.safetyPct)}. Sales al {formatPct(st.departSoc)}: es lo que
-              el plan pide cargar, el mínimo más un poco de reserva. De {formatPct(st.arriveSoc)} a{" "}
+              el plan pide cargar,{" "}
+              {st.fastChargeExtraPct
+                ? `el mínimo más ${formatPct(st.fastChargeExtraPct)} extra porque es carga rápida: aprovechas la velocidad y evitas paradas largas después`
+                : "el mínimo más un poco de reserva"}
+              . De {formatPct(st.arriveSoc)} a{" "}
               {formatPct(st.departSoc)} son {formatKwh(st.energyAddedKwh)} y{" "}
               {formatMinutes(st.chargeMinutes)}. Esos kWh equivalen a unos{" "}
               {formatKm(st.rangeGainKm)} de autonomía

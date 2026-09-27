@@ -139,6 +139,11 @@ function ChargeOptions({ stop }: { stop: ChargeStop }) {
         Llegas al {formatPct(stop.arriveSoc)} · mínimo {formatPct(stop.minDepartSoc)} · sales al{" "}
         {formatPct(stop.departSoc)}
       </div>
+      {stop.fastChargeExtraPct ? (
+        <div className="text-accent">
+          Carga rápida: {formatPct(stop.fastChargeExtraPct)} extra para aprovechar la velocidad
+        </div>
+      ) : null}
       <div>
         {formatKwh(stop.energyAddedKwh)} · {formatKw(stop.chargeKw)} ·{" "}
         {formatMinutes(stop.chargeMinutes)} · alcance {formatKm(stop.rangeGainKm)}

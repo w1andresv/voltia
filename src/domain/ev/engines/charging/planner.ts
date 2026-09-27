@@ -28,6 +28,8 @@ export interface PlannerNode {
   waitMin: number;
   /** Minutos para cargar de `fromSoc` a `toSoc` en esta estación, con los minutos fijos. */
   chargeMinutes: (fromSoc: number, toSoc: number) => number;
+  /** Carga rápida (DC): al salir de aquí aplica `PlannerInput.fastChargeBuffer`. */
+  fast?: boolean;
 }
 
 export interface PlannerInput {
@@ -45,6 +47,13 @@ export interface PlannerInput {
   walk: SocWalker;
   gridPct: number;
   tolerancePct: number;
+  /**
+   * Al salir de una estación rápida, el tramo siguiente debe terminar con
+   * `extraPct` puntos de más (sobre el piso y la reserva): se carga eso más de lo
+   * necesario. No aplica si ya se sale con `maxSocPct` o más (ni con el tope de
+   * carga): ahí se carga solo lo necesario, y ningún plan viable deja de serlo.
+   */
+  fastChargeBuffer?: { extraPct: number; maxSocPct: number };
 }
 
 export interface PlannedStop {
@@ -125,24 +134,36 @@ export function planCharging(input: PlannerInput): PlannerResult {
   let destinationShort = false;
   let best: (Label & { arrival: number; lastNode: number; lastD: number }) | null = null;
 
+  const buffer = input.fastChargeBuffer;
+  const bufferCap = buffer ? Math.min(buffer.maxSocPct, input.maxChargePct) : 0;
+  /** Puntos de más con que debe terminar el tramo que sale de `fromNode` con `startSoc`. */
+  const marginFrom = (fromNode: number, startSoc: number): number => {
+    if (!buffer || fromNode < 0 || !nodes[fromNode]!.fast) return 0;
+    return startSoc < bufferCap - input.tolerancePct ? buffer.extraPct : 0;
+  };
+
   const expand = (fromNode: number, fromD: number, fromIdx: number, startSoc: number, base: Label) => {
+    const margin = marginFrom(fromNode, startSoc);
     walk(fromIdx, startSoc, (idx, soc, lowest) => {
       if (lowest < floor) return false;
       if (idx > furthestIdx) furthestIdx = idx;
+      // Con el margen de carga rápida se sigue recorriendo (para `furthestIdx`), pero solo se acepta lo que lo cumple.
+      const withMargin = lowest >= floor + margin;
       if (idx === destIdx) {
-        if (soc >= reserve) {
+        if (soc >= reserve + margin && withMargin) {
           const final = { ...base, minSoc: Math.min(base.minSoc, lowest), arrival: soc, lastNode: fromNode, lastD: fromD };
           if (!best || compareLabels(final, best, objective) < 0) best = final;
-        } else {
+        } else if (soc < reserve) {
           destinationShort = true;
         }
         return false;
       }
+      if (!withMargin) return true;
       for (const j of byIdx.get(idx) ?? []) {
         const node = nodes[j]!;
         const arrive = soc - node.detourPct;
         const low = Math.min(lowest, arrive);
-        if (low < floor) continue;
+        if (low < floor + margin) continue;
         reachable.add(j);
         const firstK = Math.floor(arrive / grid + EPS) + 1;
         for (let k = Math.max(0, firstK); k <= levels; k++) {

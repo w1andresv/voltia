@@ -163,4 +163,12 @@ describe("Bucaramanga → Bogotá, MG S5 EV al 100 %, motor v2 con estaciones de
     expect(p.arrivalSoc).toBeGreaterThanOrEqual(p.safetyPct - 0.5);
     expect(p.minSoc).toBeGreaterThan(0);
   });
+
+  it("carga rápida: en la última parada carga 10 puntos más de lo necesario y llega con ~10 de margen extra", () => {
+    const p = plan(STATIONS);
+    const last = p.stops[p.stops.length - 1]!;
+    expect(last.departSoc - last.minDepartSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+    expect(last.fastChargeExtraPct).toBeGreaterThanOrEqual(10 - 1e-6);
+    expect(p.arrivalSoc).toBeGreaterThanOrEqual(p.safetyPct + 10 - 0.5);
+  });
 });

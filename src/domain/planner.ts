@@ -910,6 +910,7 @@ function planStopsV2(args: StopsArgs): StopsChoice {
       detourMin: c.detourMinutes ?? detourMinutesOf(detourKm),
       waitMin: c.availability === "occupied" ? MODEL_PARAMETERS.planner.occupiedWaitMin.value : 0,
       chargeMinutes: chargeMinutesTable(plugs[i]!, vehicle, cap),
+      fast: plugs[i]!.dc,
     };
   });
   const input: PlannerInput = {
@@ -923,6 +924,7 @@ function planStopsV2(args: StopsArgs): StopsChoice {
     walk: (from, start, visit) => walkSoc(samples, from, start, cap, visit),
     gridPct: MODEL_PARAMETERS.planner.socGridPct,
     tolerancePct: ARRIVE_TOLERANCE,
+    fastChargeBuffer: MODEL_PARAMETERS.planner.fastChargeBuffer.value,
   };
 
   const now = planCharging(input);
@@ -945,6 +947,8 @@ function planStopsV2(args: StopsArgs): StopsChoice {
       tolerancePct: ARRIVE_TOLERANCE,
     });
     const minDepartSoc = Math.min(cfg.maxChargeTargetSocPercent, Math.max(need, p.arriveSoc));
+    // Lo que se carga de más por ser carga rápida (el resto hasta el mínimo es lo necesario).
+    const fastChargeExtraPct = plug.dc ? Math.max(0, p.departSoc - minDepartSoc) : 0;
     const options: ChargeChoice[] = routePlugs(charger, vehicle).map((o) => {
       const minutes = chargeTimeMinutes(
         cap,
@@ -1008,6 +1012,7 @@ function planStopsV2(args: StopsArgs): StopsChoice {
         (next ? (usable[next.node]!.nearestKm ?? 0) : (samples[destIdx]?.km ?? 0)) -
         (charger.nearestKm ?? 0),
       nextLabel: next ? usable[next.node]!.name : "",
+      ...(fastChargeExtraPct >= 1 ? { fastChargeExtraPct } : {}),
     };
   });
 
