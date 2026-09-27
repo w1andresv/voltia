@@ -4,8 +4,11 @@ import { createStationCatalog } from "@/application/container";
 
 export const dynamic = "force-dynamic";
 
-/** Diagnóstico de la última consolidación: por fuente, elegibilidad y conflictos. Solo admin. */
-export async function GET() {
+/**
+ * Diagnóstico de la última consolidación: por fuente, elegibilidad y conflictos. Solo admin.
+ * ?engine=v2 muestra el listado de Blaze.
+ */
+export async function GET(request: Request) {
   try {
     await requireAdmin();
   } catch (err) {
@@ -13,7 +16,8 @@ export async function GET() {
     throw err;
   }
 
-  const dataset = await createStationCatalog().getDataset();
+  const engine = new URL(request.url).searchParams.get("engine") === "v2" ? "v2" : "v1";
+  const dataset = await createStationCatalog(engine).getDataset();
 
   const ineligibleReasons: Record<string, number> = {};
   let withConflicts = 0;

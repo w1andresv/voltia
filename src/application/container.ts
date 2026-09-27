@@ -54,61 +54,74 @@ export function elevationDeps(source: string, token: string): ElevationDeps {
 
 export type StationSourceId = "legacy" | "blaze";
 
-/** DATA_SOURCE, o blaze si hay key y no se eligió nada (ADR-0008). */
-export function stationSourceOf(env: {
-  DATA_SOURCE?: StationSourceId;
-  BLAZE_API_KEY: string;
-}): StationSourceId {
-  const wanted = env.DATA_SOURCE ?? (env.BLAZE_API_KEY ? "blaze" : "legacy");
-  if (wanted === "blaze" && !env.BLAZE_API_KEY) {
-    console.warn("[stations] DATA_SOURCE=blaze sin BLAZE_API_KEY: se usa el dataset consolidado");
+/**
+ * Blaze solo para el motor v2 (ADR-0008): v1 y el modo sombra siguen con el
+ * dataset consolidado. v2 sin BLAZE_API_KEY también, con un aviso.
+ */
+export function stationSourceOf(
+  engine: PlannerEngineMode,
+  env: { BLAZE_API_KEY: string },
+): StationSourceId {
+  if (engine !== "v2") return "legacy";
+  if (!env.BLAZE_API_KEY) {
+    console.warn("[stations] motor v2 sin BLAZE_API_KEY: se usa el dataset consolidado");
     return "legacy";
   }
-  return wanted;
+  return "blaze";
 }
 
 /**
- * Una sola instancia por proceso: el catálogo de Blaze guarda el último
+ * Una instancia por fuente y proceso: el catálogo de Blaze guarda el último
  * listado bueno para servirlo si la API falla.
  */
-let stationsCache: {
-  source: StationSourceId;
+let legacyStations: StationCatalog | null = null;
+let blazeStations: { catalog: StationCatalog; details: StationDetails } | null = null;
+
+function stationsFor(source: StationSourceId): {
   catalog: StationCatalog;
   details?: StationDetails;
-} | null = null;
-
-function stations() {
-  const env = getEnv();
-  const source = stationSourceOf(env);
-  if (stationsCache?.source === source) return stationsCache;
-  if (source === "blaze") {
+} {
+  if (source === "legacy") return { catalog: (legacyStations ??= new DatasetStationCatalog()) };
+  if (!blazeStations) {
+    const env = getEnv();
     const client = new BlazeClient({ baseUrl: env.BLAZE_API_URL, apiKey: env.BLAZE_API_KEY });
-    stationsCache = {
-      source,
+    blazeStations = {
       catalog: new BlazeStationCatalog(client),
       details: new BlazeStationDetails(client),
     };
-  } else {
-    stationsCache = { source, catalog: new DatasetStationCatalog() };
   }
-  return stationsCache;
+  return blazeStations;
 }
 
-/** Listado de electrolineras según DATA_SOURCE (planificador, mapa y /api/stations). */
-export function createStationCatalog(): StationCatalog {
-  return stations().catalog;
+/** El motor que responde: el elegido por el usuario o PLANNER_ENGINE. */
+function engineOf(choice?: "v1" | "v2" | null): PlannerEngineMode {
+  if (choice === "v2") return "v2";
+  if (choice === "v1") return "legacy";
+  return getEnv().PLANNER_ENGINE as PlannerEngineMode;
 }
 
-/** Detalle por estación (solo Blaze); undefined con el dataset consolidado. */
-export function createStationDetails(): StationDetails | undefined {
-  return stations().details;
+/** Listado de electrolineras del motor elegido (mapa, /api/stations). */
+export function createStationCatalog(choice?: "v1" | "v2" | null): StationCatalog {
+  return stationsFor(stationSourceOf(engineOf(choice), getEnv())).catalog;
 }
 
-function stationDeps(): Pick<PlanningDeps, "stations" | "stationDetails" | "stationSource"> {
-  const s = stations();
+/**
+ * Detalle de una estación: solo las de Blaze lo tienen (id "blz_…"), y solo
+ * si hay key. undefined para las del dataset consolidado.
+ */
+export function createStationDetails(stationId: string): StationDetails | undefined {
+  if (!stationId.startsWith("blz_") || !getEnv().BLAZE_API_KEY) return undefined;
+  return stationsFor("blaze").details;
+}
+
+function stationDeps(
+  engine: PlannerEngineMode,
+): Pick<PlanningDeps, "stations" | "stationDetails" | "stationSource"> {
+  const source = stationSourceOf(engine, getEnv());
+  const s = stationsFor(source);
   return {
     stations: s.catalog,
-    stationSource: s.source === "blaze" ? "blaze" : "dataset",
+    stationSource: source === "blaze" ? "blaze" : "dataset",
     ...(s.details ? { stationDetails: s.details } : {}),
   };
 }
@@ -122,8 +135,11 @@ export function createPlanningService(
     routing: token ? new MapboxRoutingProvider(token) : new OsrmRoutingProvider(),
     ...elevationDeps(getEnv().ELEVATION_SOURCE, token),
     weather: new OpenMeteoWeatherProvider(),
-    // Si el llamador trae su propio catálogo (tests, grabación), no se mezcla con el detalle de Blaze.
-    ...(overrides.stations ? { stations: overrides.stations } : stationDeps()),
+    // Estaciones según el motor que responde (Blaze solo con v2). Si el llamador trae
+    // su propio catálogo (tests, grabación), no se mezcla con el detalle de Blaze.
+    ...(overrides.stations
+      ? { stations: overrides.stations }
+      : stationDeps(overrides.engineMode ?? (getEnv().PLANNER_ENGINE as PlannerEngineMode))),
     params: MODEL_PARAMETERS,
     engineMode: getEnv().PLANNER_ENGINE as PlannerEngineMode,
     energyMode: getEnv().ENERGY_ENGINE as EnergyEngineMode,

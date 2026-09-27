@@ -192,41 +192,65 @@ describe("ELEVATION_SOURCE de extremo a extremo (proveedores sintéticos)", () =
   });
 });
 
-describe("fuente de electrolineras (DATA_SOURCE, ADR-0008)", () => {
+describe("fuente de electrolineras (Blaze solo con v2, ADR-0008)", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();
   });
 
-  it("sin definir: blaze si hay key, si no el dataset consolidado", async () => {
+  it("v1 y sombra: dataset consolidado; v2 con key: Blaze", async () => {
     const { stationSourceOf } = await import("./container");
-    expect(stationSourceOf({ BLAZE_API_KEY: "" })).toBe("legacy");
-    expect(stationSourceOf({ BLAZE_API_KEY: "blz_x" })).toBe("blaze");
-    expect(stationSourceOf({ DATA_SOURCE: "legacy", BLAZE_API_KEY: "blz_x" })).toBe("legacy");
+    expect(stationSourceOf("legacy", { BLAZE_API_KEY: "blz_x" })).toBe("legacy");
+    expect(stationSourceOf("shadow", { BLAZE_API_KEY: "blz_x" })).toBe("legacy");
+    expect(stationSourceOf("v2", { BLAZE_API_KEY: "blz_x" })).toBe("blaze");
   });
 
-  it("DATA_SOURCE=blaze sin key: dataset consolidado y aviso", async () => {
+  it("v2 sin key: dataset consolidado y aviso", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { stationSourceOf } = await import("./container");
-    expect(stationSourceOf({ DATA_SOURCE: "blaze", BLAZE_API_KEY: "" })).toBe("legacy");
+    expect(stationSourceOf("v2", { BLAZE_API_KEY: "" })).toBe("legacy");
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("sin BLAZE_API_KEY"));
     warn.mockRestore();
   });
 
-  it("con key, el catálogo y el detalle son los de Blaze", async () => {
+  it("el listado sigue al motor elegido; sin elección, al del servidor", async () => {
     vi.stubEnv("BLAZE_API_KEY", "blz_x");
-    const { createStationCatalog, createStationDetails } = await import("./container");
-    const { BlazeStationCatalog, BlazeStationDetails } =
-      await import("@/infrastructure/blaze/catalog");
-    expect(createStationCatalog()).toBeInstanceOf(BlazeStationCatalog);
-    expect(createStationDetails()).toBeInstanceOf(BlazeStationDetails);
+    const { createStationCatalog } = await import("./container");
+    const { BlazeStationCatalog } = await import("@/infrastructure/blaze/catalog");
+    const { DatasetStationCatalog } = await import("@/infrastructure/stations/catalog.adapter");
+    expect(createStationCatalog("v2")).toBeInstanceOf(BlazeStationCatalog);
+    expect(createStationCatalog("v1")).toBeInstanceOf(DatasetStationCatalog);
+    expect(createStationCatalog()).toBeInstanceOf(DatasetStationCatalog);
+    vi.stubEnv("PLANNER_ENGINE", "v2");
+    vi.resetModules();
+    const again = await import("./container");
+    const blaze = await import("@/infrastructure/blaze/catalog");
+    expect(again.createStationCatalog()).toBeInstanceOf(blaze.BlazeStationCatalog);
   });
 
-  it("sin key, el dataset consolidado y sin detalle", async () => {
+  it("detalle solo para ids de Blaze y con key", async () => {
+    vi.stubEnv("BLAZE_API_KEY", "blz_x");
+    const { createStationDetails } = await import("./container");
+    const { BlazeStationDetails } = await import("@/infrastructure/blaze/catalog");
+    expect(createStationDetails("blz_12")).toBeInstanceOf(BlazeStationDetails);
+    expect(createStationDetails("st_abc")).toBeUndefined();
     vi.stubEnv("BLAZE_API_KEY", "");
-    const { createStationCatalog, createStationDetails } = await import("./container");
-    const { DatasetStationCatalog } = await import("@/infrastructure/stations/catalog.adapter");
-    expect(createStationCatalog()).toBeInstanceOf(DatasetStationCatalog);
-    expect(createStationDetails()).toBeUndefined();
+    vi.resetModules();
+    const again = await import("./container");
+    expect(again.createStationDetails("blz_12")).toBeUndefined();
+  });
+
+  it("el servicio de planificación usa Blaze solo si el motor que responde es v2", async () => {
+    vi.stubEnv("BLAZE_API_KEY", "blz_x");
+    const { createPlanningService } = await import("./container");
+    const { BlazeStationCatalog } = await import("@/infrastructure/blaze/catalog");
+    const deps = (s: object) =>
+      (s as unknown as { deps: { stations: unknown; stationSource?: string } }).deps;
+    const v2 = deps(createPlanningService({ engineMode: "v2" }));
+    const v1 = deps(createPlanningService({ engineMode: "legacy" }));
+    expect(v2.stations).toBeInstanceOf(BlazeStationCatalog);
+    expect(v2.stationSource).toBe("blaze");
+    expect(v1.stations).not.toBeInstanceOf(BlazeStationCatalog);
+    expect(v1.stationSource).toBe("dataset");
   });
 });

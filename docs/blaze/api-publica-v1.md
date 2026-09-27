@@ -68,8 +68,10 @@ Con los scopes stations, location, connectors, chargers y operators:
 
 Estados posibles: `en_servicio`, `mantenimiento`, `fuera_servicio`, `desconocido`.
 
+## Confirmado con Blaze (2026-09-27)
+- **Paginación:** no hay; `/stations` devuelve todas las estaciones activas en una sola respuesta.
+
 ## Lo que la documentación no dice (confirmar con Blaze)
-- **Paginación:** no se menciona; `/stations` parece devolver todo de una vez.
 - **Límite por minuto:** no se da el número. `npm run blaze:check` lo muestra si la API manda `x-ratelimit-limit`.
 - **Dirección:** el scope `location:read` la menciona, pero el ejemplo no trae el campo. La app lee `address` si llega.
 - **Actualización:** no dice cada cuánto se actualizan el estado del listado ni el del detalle.

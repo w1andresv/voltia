@@ -24,7 +24,7 @@ async function withinDetailLimit(): Promise<boolean> {
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const details = createStationDetails();
+  const details = createStationDetails(id);
   if (details && (await withinDetailLimit())) {
     try {
       const station = await details.get(id);
@@ -36,7 +36,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       );
     }
   }
-  const dataset = await createStationCatalog().getDataset();
+  // El listado donde está: las de Blaze ("blz_…") en el del motor v2.
+  const dataset = await createStationCatalog(id.startsWith("blz_") ? "v2" : "v1").getDataset();
   const station = dataset.stations.find((s) => s.id === id);
   if (!station) return Response.json({ error: "No encontrada" }, { status: 404 });
   return Response.json(station);

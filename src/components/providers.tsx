@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserDataProvider } from "@/components/user/user-context";
 import { AuthDialogProvider } from "@/components/auth/auth-dialog";
 import { stationDatasetQueryOptions } from "@/components/stations/use-station-dataset";
+import { usePlanner } from "@/lib/store";
 
 function ThemedToaster() {
   const scheme = useColorScheme();
@@ -24,7 +25,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       }),
   );
   useEffect(() => {
-    void client.prefetchQuery(stationDatasetQueryOptions);
+    void client.prefetchQuery(stationDatasetQueryOptions(usePlanner.getState().engineChoice));
   }, [client]);
   return (
     <QueryClientProvider client={client}>

@@ -49,7 +49,7 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | F6 | Quitar los multiplicadores | ⏳ | Todo (depende de F5 medido) |
 | F7 | Planificador por programación dinámica (`PLANNER_ENGINE`) | 🟡 | Medir en sombra y activar `v2` |
 | F8 | Composición, gráficas, pasada 2, snapshot | 🟡 | Activar `v2` (D2). La verificación al compartir está hecha |
-| FB | Blaze como fuente única | 🟡 | Listado, detalle de paradas y ficha hechos; falta `BLAZE_API_KEY` y `npm run blaze:check` con la key real |
+| FB | Blaze como fuente de electrolineras del motor v2 | 🟡 | Listado, detalle de paradas y ficha hechos; falta `BLAZE_API_KEY` y `npm run blaze:check` con la key real |
 | F9 | Limpieza y paso a `main` | ⏳ | Todo |
 
 **Qué ve hoy un usuario:** con las variables por defecto (`PLANNER_ENGINE=legacy`, `ENERGY_ENGINE=legacy`, `ELEVATION_SOURCE=mapbox-terrain`) la app planifica con el motor v1, pero con la elevación densa de Mapbox. Desde 2026-09-27 cualquiera puede elegir v2 en el selector del planificador (`ENGINE_PREVIEW_EMAILS=*`). Lo que cambió para todos:
@@ -94,7 +94,7 @@ En local van en `.env.local` (no se sube al repo). En Vercel, en *Settings → E
 | `ELEVATION_SOURCE` | `open-meteo` · `open-meteo-adaptive` · `mapbox-terrain` | `open-meteo` | Fuente de elevación (ADR-0011) |
 | `DETOUR_SOURCE` | `estimated` · `matrix` | `estimated` | Desvíos a las estaciones (ADR-0013) |
 | `ENGINE_PREVIEW_EMAILS` | `*` o correos separados por coma | `*` (todos, desde 2026-09-27) | Quién ve el selector de motor v1/v2 en el planificador; la elección de cada usuario manda sobre `PLANNER_ENGINE` y `ENERGY_ENGINE` solo para su planificación |
-| `BLAZE_API_URL`, `BLAZE_API_KEY`, `DATA_SOURCE` | — | — | Futuras (FB, §5.7) |
+| `BLAZE_API_KEY` (secreta), `BLAZE_API_URL` | key `blz_…`; URL base | —; `https://blaze.muvatec.com/electrolineras-api/public/v1` | Electrolineras de Blaze, solo para el motor v2 (FB, §5.7, ADR-0008) |
 
 Un valor inválido en `PLANNER_ENGINE`, `ENERGY_ENGINE` o `ELEVATION_SOURCE` cae al valor por defecto; no rompe la app.
 
@@ -208,8 +208,8 @@ Guardar las tablas en `docs/arquitectura-ev/mediciones/elevacion-AAAA-MM-DD.md`.
 ### O5 · Blaze: key y prueba — documentación ✅ (`docs/blaze/api-publica-v1.md`)
 1. **Key:** poner `BLAZE_API_KEY=blz_…` en `.env.local`, nunca en el chat ni en el repo. Pedirla con los scopes `stations:read`, `location:read`, `connectors:read`, `chargers:read` y `operators:read`.
 2. **Prueba:** `npm run blaze:check`. Sirve para revisar que lleguen coordenadas y conectores, qué etiquetas de conector usa Blaze y el detalle de una estación.
-3. **Local:** con la key puesta, la app ya usa Blaze. Para volver al dataset: `DATA_SOURCE=legacy`.
-4. **Producción:** en Vercel, `BLAZE_API_KEY` en Production (y `DATA_SOURCE=blaze` si se quiere explícito).
+3. **Local:** con la key puesta, el motor **v2** usa Blaze (selector v1/v2 o `PLANNER_ENGINE=v2`); v1 sigue con el dataset consolidado.
+4. **Producción:** en Vercel, `BLAZE_API_KEY` en Production.
 
 ### O6 · Plan de Mapbox
 Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terreno). Anotar los números en el ADR-0011. Dato medido (O4): ~12 teselas por cada 100 km de ruta **nueva**; las repetidas no cuestan por la caché sin vencimiento.
@@ -456,7 +456,10 @@ Ver §5.5.
 
 ---
 
-### 5.7 FB · Fuente de datos Blaze (Muvatec) — ✅ implementado detrás de `DATA_SOURCE` (2026-09-27, ADR-0008); falta probar con la key real (`npm run blaze:check`)
+### 5.7 FB · Fuente de datos Blaze (Muvatec) — ✅ implementado, solo para el motor v2 (2026-09-27, ADR-0008); falta probar con la key real (`npm run blaze:check`)
+
+> **Implementado distinto a los pasos de abajo:** no hay `DATA_SOURCE`. La fuente la decide el motor: v2 usa Blaze y v1 el dataset consolidado. Sin paginación en Blaze (confirmado). El detalle está en el ADR-0008, sección "Implementación".
+
 
 El diseño está en el ADR-0008. **Alcance (D9):** Blaze entrega solo electrolineras, con dos endpoints:
 - **listado** de todas las estaciones: reemplaza el dataset consolidado de OSM, SIVEEIC, comunidad y catálogo;

@@ -29,11 +29,9 @@ const EnvSchema = z.object({
     .default("mapbox-terrain")
     .catch("mapbox-terrain"),
   /**
-   * Fuente del listado de electrolineras (ADR-0008): blaze (API de Blaze) o
-   * legacy (dataset consolidado de OSM, SIVEEIC, comunidad y catálogo). Sin
-   * definir: blaze si hay BLAZE_API_KEY, si no legacy.
+   * Electrolineras de Blaze (ADR-0008): solo las usa el motor v2; v1 sigue
+   * con el dataset consolidado. Sin key, v2 también usa el dataset.
    */
-  DATA_SOURCE: z.enum(["legacy", "blaze"]).optional().catch(undefined),
   BLAZE_API_URL: z
     .string()
     .url()
@@ -65,7 +63,6 @@ export function getEnv(): AppEnv {
     ELEVATION_SOURCE: process.env.ELEVATION_SOURCE?.trim() || undefined,
     ENERGY_ENGINE: process.env.ENERGY_ENGINE?.trim() || undefined,
     DETOUR_SOURCE: process.env.DETOUR_SOURCE?.trim() || undefined,
-    DATA_SOURCE: process.env.DATA_SOURCE?.trim() || undefined,
     BLAZE_API_URL: process.env.BLAZE_API_URL?.trim() || undefined,
     BLAZE_API_KEY: process.env.BLAZE_API_KEY?.trim() ?? "",
   });

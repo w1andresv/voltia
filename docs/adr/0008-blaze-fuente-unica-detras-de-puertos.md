@@ -1,6 +1,6 @@
 # 0008. Blaze (Muvatec) como fuente única, detrás de los puertos
 
-- Estado: aceptada (2026-09-27): listado y detalle implementados detrás de `DATA_SOURCE`
+- Estado: aceptada (2026-09-27): listado y detalle implementados; Blaze solo con el motor v2
 - Fecha: 2026-09-26
 - Fase: FB (transversal; ver plan 04 §4)
 
@@ -17,7 +17,7 @@ Hoy los datos entran por cinco puertos (`domain/ports`): `StationCatalog`, `Rout
   - un adaptador por puerto que Blaze cubra (`BlazeStationCatalog`, y si aplica `BlazeAvailability`, `BlazeVehicleCatalog`, `BlazeRoutingProvider`, …).
 - El dominio y los motores no se enteran de que existe Blaze: no se agregan tipos ni campos "de Blaze" al dominio. Si Blaze trae un dato que el dominio no modela (p. ej. disponibilidad por conector en vivo), primero se agrega el concepto al dominio con nombre propio y después el mapper lo llena.
 - Lo que Blaze no cubra se queda con el proveedor actual detrás del mismo puerto. "Fuente única" aplica a los datos que Blaze tenga; no se inventan datos para llenar un puerto.
-- Selección en `application/container.ts` con `DATA_SOURCE = legacy | blaze` (por defecto `legacy`), igual que `PLANNER_ENGINE`. Con `blaze` y sin credencial, se usa `legacy` y se avisa en el log.
+- Selección en `application/container.ts` según el motor (ver "Implementación": Blaze solo con v2). Sin credencial, se usa `legacy` y se avisa en el log.
 - Puertos nuevos solo si Blaze trae algo que hoy no tiene puerto:
   - `VehicleCatalog` (`list()`, `get(id)`): hoy el catálogo se lee directo de Postgres;
   - `StationAvailability` (`statusOf(ids)`): estado en vivo por estación o conector, separado del catálogo porque cambia cada minuto y el catálogo cada día.
@@ -27,7 +27,7 @@ Blaze se usa **solo para electrolineras**: un endpoint de listado, que reemplaza
 
 ## Consecuencias
 - Cambiar de fuente o volver atrás es una variable de entorno, sin tocar el dominio.
-- Tests: contrato del mapper con respuestas grabadas de Blaze (fixtures sin credenciales, con el mismo `assertNoSecrets` de la cassette), más una caracterización con `DATA_SOURCE=blaze` sobre esos fixtures.
+- Tests: contrato del mapper con respuestas grabadas de Blaze (fixtures sin credenciales, con el mismo `assertNoSecrets` de la cassette), más una caracterización del motor v2 con Blaze sobre esos fixtures (pendiente de grabarlos con la key real).
 - Si Blaze reemplaza las cinco fuentes de estaciones, la fusión (`merge.ts`, `registry.ts`) y sus fuentes se borran en F9. Mientras tanto quedan detrás de `legacy`.
 - **Pendiente:** leer la documentación y llenar la tabla de correspondencia del plan 04 §4 (FB). Hasta entonces el estado es "propuesta".
 
@@ -60,10 +60,12 @@ La documentación está en `docs/blaze/api-publica-v1.md`.
   - `catalog.ts`: `BlazeStationCatalog` y `BlazeStationDetails`.
 - **Puerto nuevo:** `src/domain/ports/station-details.ts` (`get(id)`).
 - **Selección** (`container.ts`):
-  - `DATA_SOURCE=blaze|legacy`;
-  - sin definir, `blaze` si hay `BLAZE_API_KEY`;
-  - `blaze` sin key cae a `legacy` con un aviso.
-  - El planificador, `/api/stations` (el mapa), `/api/stations/{id}` y el reporte usan la misma fuente.
+  - **Blaze solo con el motor v2** (decisión del dueño del producto, 2026-09-27). El motor es el del selector v1/v2 del usuario o, si no eligió, `PLANNER_ENGINE`;
+  - v1 y el modo sombra siguen con el dataset consolidado;
+  - v2 sin `BLAZE_API_KEY` también, con un aviso en el log;
+  - `DATA_SOURCE` se descartó: la fuente la decide el motor.
+  - **Mapa:** `/api/stations?engine=v1|v2` devuelve el listado del motor elegido. El navegador lo pide según el selector, así que el mapa y el plan muestran las mismas estaciones. El de Blaze no va a las cookies de 6 h: se refresca cada 15 min.
+  - **Detalle:** `/api/stations/{id}` pide el detalle a Blaze solo para ids `blz_…`.
 - **Planificación** (`plan-trip/stop-details.ts`):
   - después de elegir el plan recomendado, se pide el detalle **solo de sus paradas** (en paralelo, 5 s como máximo);
   - si una parada no tiene ningún cargador en servicio, se marca `offline` y se replanifica una vez (los dos planificadores descartan las `offline`), con un aviso al usuario;
@@ -76,4 +78,4 @@ La documentación está en `docs/blaze/api-publica-v1.md`.
 ### Pendiente
 - Correr `npm run blaze:check` con la key real y ajustar el esquema o los traductores si algo llega distinto (etiquetas de conector, campos extra, paginación).
 - **Navegador:** el mapa guarda el listado 6 h en cookies (`station-dataset-cookies`). Con Blaze, el estado del mapa puede tener hasta 6 h de retraso. La planificación usa el del servidor (15 min) y el detalle de las paradas (2 min).
-- **F9:** con `DATA_SOURCE=blaze` estable, borrar las fuentes del dataset consolidado, la fusión y el cron de refresco.
+- **F9:** cuando v2 sea el motor por defecto y Blaze esté estable, borrar las fuentes del dataset consolidado, la fusión y el cron de refresco.
