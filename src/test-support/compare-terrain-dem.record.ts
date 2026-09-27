@@ -167,11 +167,15 @@ it("compara Terrain-RGB v1 con Terrain-DEM v1", async () => {
 
   // 2. Las dos opciones sobre la misma ruta, más las variantes a zoom 11 con teselas de 512 px:
   //    la misma resolución que hoy con menos teselas (menos consultas facturables).
-  const variants = [
+  const variants: { label: string; tileset: string; zoom: number; endpoint: Endpoint | null }[] = [
     { label: "Terrain-RGB v1 · z12 (actual)", tileset: RGB, zoom: 12, endpoint: V4 },
     { label: "Terrain-RGB v1 · z11 @2x", tileset: RGB, zoom: 11, endpoint: V4_2X },
     { label: "Terrain-DEM v1 · z12", tileset: DEM, zoom: 12, endpoint: demEndpoint },
-    { label: "Terrain-DEM v1 · z11", tileset: DEM, zoom: 11, endpoint: demEndpoint },
+    // Por la API v4 Terrain-DEM llega en 256 px (medido 2026-09-27): a zoom 11 se pide @2x,
+    // como Terrain-RGB, para comparar con la misma resolución.
+    demEndpoint === V4
+      ? { label: "Terrain-DEM v1 · z11 @2x", tileset: DEM, zoom: 11, endpoint: V4_2X }
+      : { label: "Terrain-DEM v1 · z11", tileset: DEM, zoom: 11, endpoint: demEndpoint },
   ];
   const rows: Record<string, string | number>[] = [];
   const profiles = new Map<string, number[]>();

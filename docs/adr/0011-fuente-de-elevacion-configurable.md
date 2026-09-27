@@ -70,3 +70,9 @@ El dueño del producto pidió comparar `mapbox.mapbox-terrain-dem-v1` con el til
   - teselas (consultas facturables), resolución, desnivel, energía y diferencia de alturas;
   - también Terrain-RGB y Terrain-DEM a zoom 11 con teselas de 512 px: la misma resolución que hoy (~38 m/píxel) con unas la mitad de teselas.
   Se validó sin red con un Mapbox simulado. Falta la corrida real: el entorno de desarrollo no llega a api.mapbox.com.
+- **Primera corrida real (Villavicencio → Puerto López, `mediciones/terreno-dem-2026-09-27.md`):**
+  - la Raster Tiles API v4 **sí** sirve Terrain-DEM v1 con el token del proyecto (PNG de 256 px), así que se factura igual que hoy. `raster/v1` responde 401;
+  - a zoom 12, las alturas son idénticas a las de Terrain-RGB (Δh = 0), con las mismas 9 teselas: cambiar de tileset no cambia costo ni resultado;
+  - zoom 11 con @2x pide 4 teselas en vez de 9, con la misma resolución, alturas a ≤ 1,3 m y la misma energía. Esa es la palanca de costo.
+  - Falta confirmarlo en montaña (Piedecuesta → Vélez) antes de cambiar `ModelParameters.elevation.terrain`.
+
