@@ -43,6 +43,7 @@ import { buildEnergyShadowReport, formatEnergyShadowReport } from "./energy-shad
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
 import { verifyPlan, verifyPlanDetailed } from "./verify-plan";
 import { checkStopDetails, offlineStopText } from "./stop-details";
+import { formatStationFunnel, stationFunnel } from "./station-funnel";
 import type { StationDetails } from "@/domain/ports/station-details";
 
 /**
@@ -180,21 +181,21 @@ export class EVRoutePlanningService {
     }
     // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
     // alternativa puede planear sus paradas. Cada ruta se evalúa por separado.
-    let chargers = stationsNearRoutes(
+    const corridor = stationsNearRoutes(
       dataset.stations,
       rawRoutes.map((r) => r.samples),
       params.corridor.maxFromRouteKm,
-    )
-      .filter((s) => s.planning.eligible)
-      .map(toPlanningCharger);
-    if (this.deps.stationSource === "blaze") {
-      console.log(
-        `[blaze] ${chargers.length} de ${dataset.stations.length} estaciones del listado están en el corredor de la ruta y sirven para planificar:` +
-          (chargers.length
-            ? ` ${chargers.map((c) => `${c.id} ${c.name}`).join(" · ")}`
-            : " ninguna"),
-      );
-    }
+    );
+    let chargers = corridor.filter((s) => s.planning.eligible).map(toPlanningCharger);
+    const planVehicle = data.vehicle as Vehicle;
+    console.log(
+      formatStationFunnel(
+        stationFunnel(dataset.stations.length, corridor, planVehicle),
+        this.deps.stationSource ?? "dataset",
+        `${planVehicle.brand} ${planVehicle.model}`,
+        params.corridor.maxFromRouteKm,
+      ),
+    );
 
     const mode = this.deps.engineMode;
     const detours = this.deps.detourMatrix

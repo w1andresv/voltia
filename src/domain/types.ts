@@ -473,10 +473,29 @@ export function isVerifiedForPlanning(c: Charger): boolean {
   if (!c.name?.trim()) return false;
   if (c.access === "private") return false;
   if (c.status === "rejected" || c.status === "pending") return false;
-  if (c.source === "community") return c.status === "approved";
-  if (c.source === "osm" || c.source === "plugshare" || c.source === "siveeic") return true;
-  if (c.source === "catalog") return c.verified === true;
-  return false;
+  // Un switch exhaustivo: una fuente nueva no compila hasta decidir si sirve para
+  // planificar. Así se coló el error de Blaze (2026-09-27): caía en "false" y el
+  // planificador descartaba todas sus estaciones sin avisar.
+  const source: ChargerSource = c.source;
+  switch (source) {
+    case "community":
+      return c.status === "approved";
+    case "osm":
+    case "plugshare":
+    case "siveeic":
+      return true;
+    // Fuente oficial del operador (ADR-0008): su elegibilidad ya se evaluó al traducirla.
+    case "blaze":
+      return true;
+    case "catalog":
+      return c.verified === true;
+    default: {
+      // En ejecución (p. ej. un snapshot viejo con otra fuente), una fuente desconocida no planifica.
+      const _unknown: never = source;
+      void _unknown;
+      return false;
+    }
+  }
 }
 
 /** Occupants besides the driver, plus luggage. Driver mass is always included. */
