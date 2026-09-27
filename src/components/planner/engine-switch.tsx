@@ -21,7 +21,8 @@ export function EngineSwitch({ onChange }: { onChange?: (choice: "v1" | "v2") =>
   const { data } = useQuery({
     queryKey: ["engine-choice", userKey],
     queryFn: () => engineChoiceFn(),
-    enabled: context?.kind === "authenticated",
+    // Invitados también: el servidor decide (ENGINE_PREVIEW_EMAILS="*" lo abre a todos).
+    enabled: context != null,
     staleTime: Infinity,
   });
   const choice = usePlanner((s) => s.engineChoice) ?? "v1";
