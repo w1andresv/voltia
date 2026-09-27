@@ -52,7 +52,7 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | FB | Blaze como fuente única | ⏳ | Todo (bloqueado por la documentación) |
 | F9 | Limpieza y paso a `main` | ⏳ | Todo |
 
-**Qué ve hoy un usuario:** con las variables por defecto (`PLANNER_ENGINE=legacy`, `ENERGY_ENGINE=legacy`, `ELEVATION_SOURCE=open-meteo`) la app calcula igual que antes del motor v2. Lo que cambió para todos:
+**Qué ve hoy un usuario:** con las variables por defecto (`PLANNER_ENGINE=legacy`, `ENERGY_ENGINE=legacy`, `ELEVATION_SOURCE=mapbox-terrain`) la app planifica con el motor v1, pero con la elevación densa de Mapbox. Desde 2026-09-27 cualquiera puede elegir v2 en el selector del planificador (`ENGINE_PREVIEW_EMAILS=*`). Lo que cambió para todos:
 - las correcciones de F0 a F4 (reserva en todo el tramo, SOC separado de la energía, compatibilidad y adaptadores);
 - las gráficas por tramo;
 - los viajes guardados con su snapshot.
