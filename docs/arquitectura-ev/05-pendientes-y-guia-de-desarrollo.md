@@ -192,7 +192,7 @@ Menú del entorno en la barra de título de la sesión → *Edit* → variables.
 El costo es tiempo de CPU: cada planificación calcula dos veces. No hay llamadas extra a proveedores.
 
 ### O4 · Comparar las fuentes de elevación — ✅ primera corrida 2026-09-26
-Resultado en `mediciones/elevacion-2026-09-26.md`: el tileset responde, la caché deja la segunda corrida en 0 consultas y una ruta nueva de 421 km pide 49 teselas. Falta repetirla para medir `open-meteo-adaptive` (falló por límite de ráfaga, ya corregido) y sumar una ruta de llano.
+Resultado en `mediciones/elevacion-2026-09-26.md`: el tileset responde, la caché deja la segunda corrida en 0 consultas y una ruta nueva de 421 km pide 49 teselas. Ruta de llano (Villavicencio → Puerto López, 2026-09-27): Mapbox no infla el desnivel (7 m en 84 km) y `open-meteo-adaptive` ya corre sin respaldo. Queda opcional repetir la ruta de montaña para la fila adaptativa y contrastar su subida con una referencia externa.
 
 En tu computador, con `.env.local`:
 ```bash

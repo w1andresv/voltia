@@ -32,7 +32,26 @@ ORIGIN=7.1193,-73.1227 DESTINATION=4.711,-74.0721 npm run elevation:compare
    - OpenTopoData también respondió 429 (una consulta por segundo en el servicio gratuito), así que la estrategia cayó a la fija de 96 puntos.
    - **Corregido:** 2 lotes a la vez, reintento con pausa ante 429 en Open-Meteo, OpenTopoData de a una consulta por segundo y URL recortada en los errores. Hay que repetir la corrida para tener esa fila.
 
+## Ruta de llano: Villavicencio → Puerto López (con la corrección de ráfaga)
+
+Corrida el 2026-09-27 con `ORIGIN=4.142,-73.626 DESTINATION=4.085,-72.956`, 84,2 km, MG S5 EV, SOC de salida 80 %.
+
+| Fuente pedida | Usada | Puntos | Consultas | ms | Subida (m) | Bajada (m) | Mín (m) | Máx (m) | kWh | SOC llegada |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| open-meteo | open-meteo | 96 | 1 | 846 | 2 | 197 | 184 | 435 | 9,5 | 59,8 % |
+| open-meteo-adaptive | open-meteo/adaptive | 98 | 2 | 390 | 6 | 261 | 182 | 440 | 9,5 | 59,8 % |
+| mapbox-terrain | mapbox-terrain/mesh | 844 | 9 | 951 | 7 | 264 | 180 | 442 | 9,5 | 59,8 % |
+| mapbox-terrain (2.ª vez) | mapbox-terrain/mesh | 844 | 0 | 4 | 7 | 264 | 180 | 442 | 9,5 | 59,8 % |
+
+**Lectura:**
+- **En llano Mapbox no inventa subidas:** 7 m en 84 km, frente a 2 m con Open-Meteo, y la misma energía. El ruido del terreno de alrededor no aparece donde no hay laderas.
+  - Esto no descarta el efecto de ladera en montaña, que solo aparece en pendiente.
+  - Aun así, el doble de subida en Bucaramanga → Bogotá se explica sobre todo por detalle que los 96 puntos no ven.
+- **`open-meteo-adaptive` ya funciona** con la corrección de ráfaga: 2 consultas, sin respaldo.
+  - En llano casi no refina (98 puntos), porque ningún tramo cambia más de 15 m entre puntos.
+  - Su bajada (261 m) ya coincide con la de Mapbox (264 m); la fija de 96 puntos daba 197 m.
+- **Costo:** 9 teselas para 84 km, unas 11 cada 100 km, en línea con la ruta de montaña.
+
 ## Pendiente
-- Repetir `npm run elevation:compare` con la corrección para medir `open-meteo-adaptive`.
-- Correr una ruta de llano (p. ej. Villavicencio → Puerto López, en los Llanos) para ver que Mapbox no infla el desnivel donde no hay montaña.
+- Repetir Bucaramanga → Bogotá con la corrección, para tener la fila de `open-meteo-adaptive` en montaña.
 - Contrastar la subida de Bucaramanga → Bogotá con una referencia externa (GPS de un viaje real o un planificador de ciclismo).
