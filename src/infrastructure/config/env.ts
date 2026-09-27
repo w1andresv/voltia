@@ -12,7 +12,7 @@ const EnvSchema = z.object({
    * Correos (separados por coma) que ven el selector de motor v1/v2 en el
    * planificador. Por defecto, solo el dueño del producto.
    */
-  ENGINE_PREVIEW_EMAILS: z.string().default("w1andresv@gmail.com"),
+  ENGINE_PREVIEW_EMAILS: z.string().default("*"),
   /** Motor de planificación: legacy (actual), shadow (ambos, responde el actual) o v2 (plan §6). */
   PLANNER_ENGINE: z.enum(["legacy", "shadow", "v2"]).default("legacy").catch("legacy"),
   /**

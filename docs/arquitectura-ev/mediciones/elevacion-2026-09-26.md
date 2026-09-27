@@ -52,6 +52,15 @@ Corrida el 2026-09-27 con `ORIGIN=4.142,-73.626 DESTINATION=4.085,-72.956`, 84,2
   - Su bajada (261 m) ya coincide con la de Mapbox (264 m); la fija de 96 puntos daba 197 m.
 - **Costo:** 9 teselas para 84 km, unas 11 cada 100 km, en línea con la ruta de montaña.
 
+**Contraste con una referencia (2026-09-27):** la referencia pedida da ~315 m de descenso de Villavicencio a Puerto López. Las altitudes oficiales de las cabeceras (Villavicencio ~467 m, Puerto López ~178 m) dan ~290 m.
+- **Mapbox:** el descenso neto es 264 − 7 = **257 m**, y el rango del perfil es 442 → 180 m.
+- **Llegada:** el mínimo (180 m) coincide con Puerto López.
+- **Salida:** la diferencia está en la salida, 442 m frente a 467 m.
+  - La cifra oficial es la de la plaza central, al pie de la cordillera. La ruta arranca en la vía, ya en la sabana.
+  - Villavicencio va de ~400 m a más de 500 m según el barrio, y de ahí salen cifras entre 290 y 315 m.
+- **Open-Meteo con 96 puntos:** da 197 − 2 = 195 m netos, el más lejano de la referencia.
+- **Efecto en energía:** 30–60 m de diferencia en un auto de ~2 t son ~0,3 kWh de energía potencial, y en bajada solo se recupera una parte. Es menos del 2 % de los 9,5 kWh. No justifica cambiar parámetros.
+
 ## Pendiente
 - Repetir Bucaramanga → Bogotá con la corrección, para tener la fila de `open-meteo-adaptive` en montaña.
 - Contrastar la subida de Bucaramanga → Bogotá con una referencia externa (GPS de un viaje real o un planificador de ciclismo).

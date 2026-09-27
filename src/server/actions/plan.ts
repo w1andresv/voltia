@@ -27,7 +27,7 @@ export async function reversePlaceFn(input: {
 /** v1: planificador y energía actuales. v2: planificador por programación dinámica y energía física (F5, F7). */
 export type EngineChoice = "v1" | "v2";
 
-/** ¿El usuario actual puede elegir el motor? (vista previa, ENGINE_PREVIEW_EMAILS). */
+/** ¿El usuario actual puede elegir el motor? (vista previa; todos salvo que ENGINE_PREVIEW_EMAILS lo limite). */
 export async function engineChoiceFn(): Promise<{ allowed: boolean }> {
   const { getActor } = await import("@/infrastructure/auth/server-actor");
   const { canChooseEngine } = await import("@/infrastructure/auth/engine-preview");

@@ -7,8 +7,9 @@ import { useUserContext } from "@/components/user/user-context";
 import { usePlanner } from "@/lib/store";
 
 /**
- * Selector de motor v1/v2 (vista previa). Solo aparece para los correos en
- * ENGINE_PREVIEW_EMAILS; el servidor vuelve a comprobarlo al planificar.
+ * Selector de motor v1/v2 (vista previa). Aparece para todos, salvo que
+ * ENGINE_PREVIEW_EMAILS lo limite a una lista de correos; el servidor vuelve a
+ * comprobarlo al planificar.
  *  - v1: planificador y energía actuales.
  *  - v2: planificador por programación dinámica y energía física con perfil
  *    de velocidad (F5, F7).

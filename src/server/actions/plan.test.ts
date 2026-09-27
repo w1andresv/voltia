@@ -51,6 +51,8 @@ const OTHER: Actor = { role: "member", id: "u2", email: "otra@example.com" };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  vi.resetModules();
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
@@ -72,7 +74,8 @@ describe("selector de motor v1/v2", () => {
     });
   });
 
-  it("otro usuario que manda la elección a mano: se ignora", async () => {
+  it("con la lista limitada, otro usuario que manda la elección a mano: se ignora", async () => {
+    vi.stubEnv("ENGINE_PREVIEW_EMAILS", "w1andresv@gmail.com");
     getActor.mockResolvedValue(OTHER);
     const { planTripFn } = await import("./plan");
     await planTripFn({ data: request, engine: "v2" });
@@ -86,7 +89,17 @@ describe("selector de motor v1/v2", () => {
     expect(createPlanningService).toHaveBeenCalledWith({});
   });
 
-  it("engineChoiceFn dice si el usuario puede elegir", async () => {
+  it("por defecto todos pueden elegir, invitados incluidos", async () => {
+    const { engineChoiceFn, planTripFn } = await import("./plan");
+    getActor.mockResolvedValueOnce({ role: "guest", id: null, email: null });
+    expect(await engineChoiceFn()).toEqual({ allowed: true });
+    getActor.mockResolvedValueOnce(OTHER);
+    await planTripFn({ data: request, engine: "v2" });
+    expect(createPlanningService).toHaveBeenCalledWith({ engineMode: "v2", energyMode: "v2" });
+  });
+
+  it("con la lista limitada, engineChoiceFn dice si el usuario puede elegir", async () => {
+    vi.stubEnv("ENGINE_PREVIEW_EMAILS", "w1andresv@gmail.com");
     const { engineChoiceFn } = await import("./plan");
     getActor.mockResolvedValueOnce(OWNER);
     expect(await engineChoiceFn()).toEqual({ allowed: true });

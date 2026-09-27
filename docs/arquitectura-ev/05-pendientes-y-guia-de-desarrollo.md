@@ -93,7 +93,7 @@ En local van en `.env.local` (no se sube al repo). En Vercel, en *Settings → E
 | `ENERGY_ENGINE` | `legacy` · `shadow` · `v2` | `legacy` | Modelo de energía (ADR-0012) |
 | `ELEVATION_SOURCE` | `open-meteo` · `open-meteo-adaptive` · `mapbox-terrain` | `open-meteo` | Fuente de elevación (ADR-0011) |
 | `DETOUR_SOURCE` | `estimated` · `matrix` | `estimated` | Desvíos a las estaciones (ADR-0013) |
-| `ENGINE_PREVIEW_EMAILS` | correos separados por coma | `w1andresv@gmail.com` | Quién ve el selector de motor v1/v2 en el planificador; su elección manda sobre `PLANNER_ENGINE` y `ENERGY_ENGINE` solo para él |
+| `ENGINE_PREVIEW_EMAILS` | `*` o correos separados por coma | `*` (todos, desde 2026-09-27) | Quién ve el selector de motor v1/v2 en el planificador; la elección de cada usuario manda sobre `PLANNER_ENGINE` y `ENERGY_ENGINE` solo para su planificación |
 | `BLAZE_API_URL`, `BLAZE_API_KEY`, `DATA_SOURCE` | — | — | Futuras (FB, §5.7) |
 
 Un valor inválido en `PLANNER_ENGINE`, `ENERGY_ENGINE` o `ELEVATION_SOURCE` cae al valor por defecto; no rompe la app.
@@ -212,7 +212,7 @@ Exportar la especificación de la API (OpenAPI/JSON, PDF o capturas) a `docs/bla
 Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terreno). Anotar los números en el ADR-0011. Dato medido (O4): ~12 teselas por cada 100 km de ruta **nueva**; las repetidas no cuestan por la caché sin vencimiento.
 
 ### O9 · Probar v1 y v2 desde la app
-Con la sesión iniciada como w1andresv@gmail.com, en el planificador aparece "Motor de cálculo (vista previa)" con **v1 | v2**. v2 usa el planificador nuevo y la energía física; si ya hay una ruta, cambiar el motor la recalcula. La elección se guarda en el navegador. Para darle acceso a alguien más: `ENGINE_PREVIEW_EMAILS` en Vercel.
+Desde 2026-09-27 el selector está abierto a todos, invitados incluidos (`ENGINE_PREVIEW_EMAILS=*`). En el planificador aparece "Motor de cálculo (vista previa)" con **v1 | v2**. v2 usa el planificador nuevo y la energía física; si ya hay una ruta, cambiar el motor la recalcula. La elección se guarda en el navegador. Para volver a limitarlo: `ENGINE_PREVIEW_EMAILS` con una lista de correos en Vercel. **Si en Vercel quedó `ENGINE_PREVIEW_EMAILS=w1andresv@gmail.com`, hay que borrarla o poner `*`**, porque el valor del entorno manda sobre el valor por defecto.
 
 ### O8 · Aplicar la migración 0014 (calibración)
 `npm run db:migrate` en tu computador (con `.env.local`). Crea la tabla `voltia_trip_observations` y su seguridad por fila, y **escribe en el esquema de producción**. Hasta que se aplique, el botón "¿Con cuánto llegaste?" muestra un error al guardar; el resto de la app no cambia. Para ver los resultados: `npm run calibration:report`.
