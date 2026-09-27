@@ -42,7 +42,7 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | F0 | Caracterización, CI, hook de sesión | ✅ | — (la cassette real se omitió por decisión, P1) |
 | F1 | Contratos, puertos, servicio | ✅ | — |
 | F2a | Datos crudos del proveedor; muestreo y elevación en el dominio | ✅ | — |
-| F2b | Elevación configurable (`ELEVATION_SOURCE`) | ✅ | `mapbox-terrain` por defecto, caché sin vencimiento, túneles, pendiente máxima y error tipado. Solo falta verificar el tileset y el costo con datos reales (O4, O6) |
+| F2b | Elevación configurable (`ELEVATION_SOURCE`) | ✅ | `mapbox-terrain` por defecto, caché sin vencimiento, túneles, pendiente máxima y error tipado. Tileset verificado con datos reales (O4, `mediciones/elevacion-2026-09-26.md`); falta el costo (O6) |
 | F3 | SOC separado de la energía | ✅ | — |
 | F4 | Corredor, compatibilidad, curva de carga | ✅ | Desvíos medidos detrás de `DETOUR_SOURCE=matrix` (ADR-0013); activarlo tras revisar el cupo (O6) |
 | F5 | Energía v2 y perfil de velocidad (`ENERGY_ENGINE`) | 🟡 | Medir en sombra, datos físicos por vehículo y calibración (0 km/h en tramos, desvío local, tope por vía y frío: ✅ sesión A) |
@@ -191,7 +191,9 @@ Menú del entorno en la barra de título de la sesión → *Edit* → variables.
 
 El costo es tiempo de CPU: cada planificación calcula dos veces. No hay llamadas extra a proveedores.
 
-### O4 · Comparar las fuentes de elevación
+### O4 · Comparar las fuentes de elevación — ✅ primera corrida 2026-09-26
+Resultado en `mediciones/elevacion-2026-09-26.md`: el tileset responde, la caché deja la segunda corrida en 0 consultas y una ruta nueva de 421 km pide 49 teselas. Falta repetirla para medir `open-meteo-adaptive` (falló por límite de ráfaga, ya corregido) y sumar una ruta de llano.
+
 En tu computador, con `.env.local`:
 ```bash
 git pull origin engine-v2
@@ -207,7 +209,7 @@ Guardar las tablas en `docs/arquitectura-ev/mediciones/elevacion-AAAA-MM-DD.md`.
 Exportar la especificación de la API (OpenAPI/JSON, PDF o capturas) a `docs/blaze/`, **sin** tokens ni datos de clientes. Alternativa: habilitar `blaze.muvatec.com` en la red del entorno, aunque si la pantalla pide sesión de administrador igual hará falta el archivo.
 
 ### O6 · Plan de Mapbox
-Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terreno). Anotar los números en el ADR-0011.
+Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terreno). Anotar los números en el ADR-0011. Dato medido (O4): ~12 teselas por cada 100 km de ruta **nueva**; las repetidas no cuestan por la caché sin vencimiento.
 
 ### O9 · Probar v1 y v2 desde la app
 Con la sesión iniciada como w1andresv@gmail.com, en el planificador aparece "Motor de cálculo (vista previa)" con **v1 | v2**. v2 usa el planificador nuevo y la energía física; si ya hay una ruta, cambiar el motor la recalcula. La elección se guarda en el navegador. Para darle acceso a alguien más: `ENGINE_PREVIEW_EMAILS` en Vercel.
@@ -284,7 +286,7 @@ Cada pendiente sigue el mismo formato: **Contexto → Pasos → Archivos → Tes
 - **Tests:** servicio con un proveedor de elevación que siempre falla, y un snapshot viejo sin `dataQuality`.
 - **Cierre:** el caso "sin elevación" es visible y distinguible de "ruta plana de verdad".
 
-#### 5.1.5 Verificar el tileset de Mapbox
+#### 5.1.5 Verificar el tileset de Mapbox — ✅ `mapbox.terrain-rgb` responde (O4, 2026-09-26)
 Ver O4. Si hay que cambiarlo: `ModelParameters.elevation.terrain.tileset`. La fórmula terrain-RGB es la misma.
 
 ---

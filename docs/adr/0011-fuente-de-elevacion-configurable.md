@@ -18,7 +18,7 @@ B6: hoy se piden 96 puntos por ruta a Open-Meteo, uno cada ~3 km en 300 km, y en
 - **Aplicación** (`plan-trip/elevation-profile.ts`): pide los puntos al puerto según la estrategia. Si el principal falla, usa Open-Meteo con la estrategia fija; si todo falla, la ruta queda plana y el plan avisa, como antes.
 - **Infraestructura:**
   - `MapboxTerrainElevationProvider`: teselas terrain-RGB (`mapbox.terrain-rgb`, zoom 12) con caché de 30 días en la Data Cache de Next y las últimas 96 teselas en memoria. El decodificador PNG es propio (`png.ts`), sin dependencias nativas.
-  - Open-Meteo ahora pide en lotes de 100 puntos (hasta 4 a la vez).
+  - Open-Meteo ahora pide en lotes de 100 puntos (hasta 2 a la vez; ver la medición de 2026-09-26).
 - **Medición:** una línea `[elevation]` por planificación (fuente, puntos, ms, desnivel) y `npm run elevation:compare`, que corre las tres fuentes sobre la misma ruta y compara consultas, tiempo, desnivel, energía y SOC de llegada.
 - El snapshot guarda la fuente usada (`open-meteo`, `open-meteo/adaptive`, `mapbox-terrain/mesh`).
 
@@ -37,3 +37,18 @@ La fuente por defecto pasa a ser **`mapbox-terrain`**. Queda por hacer el cambio
 - **Limpieza:** túneles desde `intersections[].classes` de Mapbox (la altura es la recta entre sus extremos) y pendiente máxima del 15 % entre puntos del perfil denso. Mapbox no marca puentes; la pendiente máxima recorta el hueco del valle.
 - **Sin elevación:** error tipado `ELEVATION_UNAVAILABLE`, con `dataQuality` en la respuesta y un aviso claro, sin bloquear el plan.
 
+
+## Medición con datos reales (2026-09-26, O4)
+Detalle en `docs/arquitectura-ev/mediciones/elevacion-2026-09-26.md` (Bucaramanga → Bogotá, 421,6 km).
+- **Tileset:** `mapbox.terrain-rgb` responde con el token del proyecto. No se cambia.
+- **Costo:** 49 teselas para la ruta nueva (~12 cada 100 km) en 1 s. La segunda vez fueron 0 teselas y 8 ms.
+- **Mapbox frente a Open-Meteo:**
+  - desnivel neto parecido (+1588 m frente a +1617 m);
+  - subida acumulada del doble (9117 m frente a 4303 m);
+  - energía +6,7 %.
+  - Falta contrastar la subida con una referencia externa. Si sobra, se ajusta la histéresis o el suavizado de `ModelParameters.elevation.dense`.
+- **Límites de ráfaga:** `open-meteo-adaptive` cayó al respaldo porque las 4 consultas en paralelo dispararon el 429 de Open-Meteo, y luego el de OpenTopoData (1 consulta/s). Corrección:
+  - 2 lotes a la vez;
+  - reintento con pausa (1 s y 2,5 s) ante 429;
+  - OpenTopoData encadenado con 1,1 s entre consultas;
+  - errores HTTP con la URL recortada a 140 caracteres.

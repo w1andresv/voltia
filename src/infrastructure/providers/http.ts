@@ -88,6 +88,13 @@ export function safeUrl(url: string): string {
   }
 }
 
+/** Máximo de caracteres de URL en un error: las de lotes llevan cientos de coordenadas. */
+const MAX_URL_IN_ERROR = 140;
+
+function shortUrl(url: string): string {
+  return url.length > MAX_URL_IN_ERROR ? `${url.slice(0, MAX_URL_IN_ERROR)}…` : url;
+}
+
 async function httpError(res: Response, url: string): Promise<Error> {
   let body = "";
   try {
@@ -95,7 +102,7 @@ async function httpError(res: Response, url: string): Promise<Error> {
   } catch {
     /* sin cuerpo */
   }
-  return new Error(`HTTP ${res.status} ${safeUrl(url)}${body ? ` — ${body}` : ""}`);
+  return new Error(`HTTP ${res.status} ${shortUrl(safeUrl(url))}${body ? ` — ${body}` : ""}`);
 }
 
 async function rawJson<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
