@@ -3,6 +3,7 @@ import { isDcSocket } from "@/domain/charging";
 import { adapterNote } from "@/lib/adapter-note";
 import type { ChargeStop, ItineraryNode, RoutePlan } from "@/domain/types";
 import { CHARGER_SOURCE_LABEL, CONNECTOR_LABEL } from "@/domain/types";
+import { slowTailNoteForStop } from "@/lib/charge-notes";
 import {
   formatKm,
   formatKwh,
@@ -139,6 +140,9 @@ function ChargeOptions({ stop }: { stop: ChargeStop }) {
         Llegas al {formatPct(stop.arriveSoc)} · mínimo {formatPct(stop.minDepartSoc)} · sales al{" "}
         {formatPct(stop.departSoc)}
       </div>
+      {slowTailNoteForStop(stop.departSoc) ? (
+        <div className="text-warn">{slowTailNoteForStop(stop.departSoc)}</div>
+      ) : null}
       {stop.fastChargeExtraPct ? (
         <div className="text-accent">
           Carga rápida: {formatPct(stop.fastChargeExtraPct)} extra para aprovechar la velocidad

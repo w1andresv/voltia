@@ -40,3 +40,4 @@ Además de la variable del servidor, los correos en `ENGINE_PREVIEW_EMAILS` (por
 - **Interfaz:** cada parada muestra el extra (`ChargeStop.fastChargeExtraPct`).
 - **Efecto en la caracterización:** la parada DC de 60 kW sale con 67 % en vez de 57 % (+5 min) y el viaje llega con 25 % en vez de 15 %.
 - **El planificador v1 no cambia:** es la referencia de la comparación en sombra y ya carga de más en DC con sus propias reglas (8–12 puntos sobre la llegada).
+- **Topes (confirmado el mismo día):** el extra respeta siempre la carga máxima de viaje del vehículo; no se sube por encima de ella. Si el usuario pone ese tope sobre el 85 % (p. ej. 100 %), el editor de vehículo y el panel de batería le avisan que, por lo general, el último 10–15 % hasta el 100 % tarda más. Una parada que carga sobre el 85 % lo dice también (`src/lib/charge-notes.ts`).

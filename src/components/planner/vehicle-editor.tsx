@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { slowTailNoteForCap } from "@/lib/charge-notes";
 
 const CONNECTORS: ConnectorType[] = ["ccs2", "ccs1", "type2", "chademo", "nacs", "gb_t"];
 
@@ -295,6 +296,9 @@ function VehicleForm({
         </Field>
         <Field label="SOC máx. en ruta (%)">
           <Input type="number" value={n(value.maxSocTravel, 0)} onChange={(e) => num("maxSocTravel", e.target.value)} />
+          {slowTailNoteForCap(value.maxSocTravel) ? (
+            <p className="mt-1 text-[11px] leading-relaxed text-warn">{slowTailNoteForCap(value.maxSocTravel)}</p>
+          ) : null}
         </Field>
       </div>
       <div>

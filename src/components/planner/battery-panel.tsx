@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { SLOW_TAIL_TEXT, slowTailNoteForCap } from "@/lib/charge-notes";
 
 const START_PRESETS = [50, 70, 80, 90, 100];
 const ARRIVE_PRESETS = [10, 15, 20, 30];
@@ -46,6 +47,9 @@ export function BatteryDialog() {
           <span>Reserva {formatPct(budget.floorPct)}</span>
           <span>Tope en ruta {formatPct(vehicle.maxSocTravel)}</span>
         </div>
+        {slowTailNoteForCap(vehicle.maxSocTravel) ? (
+          <p className="mt-1.5 text-xs leading-relaxed text-warn">{slowTailNoteForCap(vehicle.maxSocTravel)}</p>
+        ) : null}
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           <Metric label="Usable" value={formatKwh(budget.usableKwh)} hint={`${Math.round(budget.usablePct)} %`} />
@@ -122,8 +126,10 @@ export function BatteryDialog() {
           </div>
           <ChargeCurve vehicleKw={vehicle.dcMaxKw} />
           <p className="mt-2 text-[11px] leading-relaxed text-muted">
-            La potencia cae al subir el SOC. Por eso el planificador suele recargar hasta {vehicle.maxSocTravel}% y no
-            hasta 100%.
+            La potencia cae al subir el SOC.{" "}
+            {vehicle.maxSocTravel < 100
+              ? `Por eso el planificador suele recargar hasta ${vehicle.maxSocTravel}% y no hasta 100%.`
+              : SLOW_TAIL_TEXT}
           </p>
         </section>
 
