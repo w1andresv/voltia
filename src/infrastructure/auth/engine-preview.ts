@@ -2,12 +2,12 @@ import "server-only";
 import type { Actor } from "@/domain/auth/port";
 import { getEnv } from "@/infrastructure/config/env";
 
-/** Valor de ENGINE_PREVIEW_EMAILS que abre el selector a todos, invitados incluidos. */
+/** Valor de ENGINE_PREVIEW_EMAILS que abre /v1 y /v2 a todos, invitados incluidos. */
 export const EVERYONE = "*";
 
 /**
- * Selector de motor v1/v2 (vista previa). Con ENGINE_PREVIEW_EMAILS="*" (por
- * defecto) lo ve todo el mundo; con una lista de correos, solo esas cuentas.
+ * Motor v1/v2 por ruta (/v1 y /v2). Con ENGINE_PREVIEW_EMAILS="*" (por
+ * defecto) cualquiera elige motor con la URL; con una lista de correos, solo esas cuentas.
  * La decisión es del servidor: si alguien no autorizado manda la elección a
  * mano, se ignora.
  */

@@ -42,7 +42,7 @@ export function diagnosticLines(d: DiagnosticsInput): string[] {
     lines.push("Versión: consultando…");
   }
   lines.push(
-    `Selector de motor en este navegador: ${d.engineChoice ?? "sin elegir (el del servidor)"}`,
+    `Motor de esta página: ${d.engineChoice ?? "sin elegir (el del servidor)"}`,
   );
   if (d.geo) {
     const snap = d.geo as GeoBundle & Partial<Pick<PlanningSnapshot, "providers" | "createdAt">>;

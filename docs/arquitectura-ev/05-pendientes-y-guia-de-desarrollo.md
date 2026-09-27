@@ -52,7 +52,7 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | FB | Blaze como fuente de electrolineras del motor v2 | 🟡 | Listado, detalle de paradas, ficha y auditoría (2026-09-27) hechos. Falta `BLAZE_API_KEY` en Vercel y revisar `npm run blaze:check` (etiquetas de conector, campos) |
 | F9 | Limpieza y paso a `main` | ⏳ | Todo |
 
-**Qué ve hoy un usuario:** con las variables por defecto (`PLANNER_ENGINE=legacy`, `ENERGY_ENGINE=legacy`, `ELEVATION_SOURCE=mapbox-terrain`) la app planifica con el motor v1, pero con la elevación densa de Mapbox. Desde 2026-09-27 cualquiera puede elegir v2 en el selector del planificador (`ENGINE_PREVIEW_EMAILS=*`). Lo que cambió para todos:
+**Qué ve hoy un usuario:** con las variables por defecto (`PLANNER_ENGINE=legacy`, `ENERGY_ENGINE=legacy`, `ELEVATION_SOURCE=mapbox-terrain`) la app planifica con el motor v1, pero con la elevación densa de Mapbox. Desde 2026-09-27 cualquiera puede planificar con v2 en `/v2` (`ENGINE_PREVIEW_EMAILS=*`); `/v1` usa el motor actual y `/` es el landing. Lo que cambió para todos:
 - las correcciones de F0 a F4 (reserva en todo el tramo, SOC separado de la energía, compatibilidad y adaptadores);
 - las gráficas por tramo;
 - los viajes guardados con su snapshot.
@@ -93,7 +93,7 @@ En local van en `.env.local` (no se sube al repo). En Vercel, en *Settings → E
 | `ENERGY_ENGINE` | `legacy` · `shadow` · `v2` | `legacy` | Modelo de energía (ADR-0012) |
 | `ELEVATION_SOURCE` | `open-meteo` · `open-meteo-adaptive` · `mapbox-terrain` | `open-meteo` | Fuente de elevación (ADR-0011) |
 | `DETOUR_SOURCE` | `estimated` · `matrix` | `estimated` | Desvíos a las estaciones (ADR-0013) |
-| `ENGINE_PREVIEW_EMAILS` | `*` o correos separados por coma | `*` (todos, desde 2026-09-27) | Quién puede usar las rutas `/v1` y `/v2` (y el selector v1/v2 que navega entre ellas); para esos usuarios la ruta manda sobre `PLANNER_ENGINE` y `ENERGY_ENGINE` en su planificación. A quien no está en la lista, `/v1` y `/v2` lo mandan a la ruta del motor de `PLANNER_ENGINE` |
+| `ENGINE_PREVIEW_EMAILS` | `*` o correos separados por coma | `*` (todos, desde 2026-09-27) | Quién puede usar las rutas `/v1` y `/v2`; para esos usuarios la ruta manda sobre `PLANNER_ENGINE` y `ENERGY_ENGINE` en su planificación. A quien no está en la lista, `/v1` y `/v2` lo mandan a la ruta del motor de `PLANNER_ENGINE` |
 | `BLAZE_API_KEY` (secreta), `BLAZE_API_URL` | key `blz_…`; URL base | —; `https://blaze.muvatec.com/electrolineras-api/public/v1` | Electrolineras de Blaze, solo para el motor v2 (FB, §5.7, ADR-0008) |
 
 Un valor inválido en `PLANNER_ENGINE`, `ENERGY_ENGINE` o `ELEVATION_SOURCE` cae al valor por defecto; no rompe la app.
@@ -208,17 +208,17 @@ Guardar las tablas en `docs/arquitectura-ev/mediciones/elevacion-AAAA-MM-DD.md`.
 ### O5 · Blaze: key y prueba — documentación ✅ (`docs/blaze/api-publica-v1.md`)
 1. **Key:** poner `BLAZE_API_KEY=blz_…` en `.env.local`, nunca en el chat ni en el repo. Pedirla con los scopes `stations:read`, `location:read`, `connectors:read`, `chargers:read` y `operators:read`.
 2. **Prueba:** `npm run blaze:check`. Sirve para revisar que lleguen coordenadas y conectores, qué etiquetas de conector usa Blaze y el detalle de una estación.
-3. **Local:** con la key puesta, el motor **v2** usa Blaze (selector v1/v2 o `PLANNER_ENGINE=v2`); v1 sigue con el dataset consolidado.
+3. **Local:** con la key puesta, el motor **v2** usa Blaze (`/v2` o `PLANNER_ENGINE=v2`); v1 sigue con el dataset consolidado.
 4. **Producción:** en Vercel, `BLAZE_API_KEY` en Production.
 
 ### O6 · Plan de Mapbox
 Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terreno). Anotar los números en el ADR-0011. Dato medido: con zoom 11 @2x (desde 2026-09-27) son ~5–6 teselas por cada 100 km de ruta **nueva** (antes, a zoom 12, ~12); las repetidas no cuestan por la caché sin vencimiento. Detalle en `mediciones/terreno-dem-2026-09-27.md`.
 
 ### O9 · Probar v1 y v2 desde la app
-Desde 2026-09-27 el selector está abierto a todos, invitados incluidos (`ENGINE_PREVIEW_EMAILS=*`). En el planificador aparece "Motor de cálculo (vista previa)" con **v1 | v2**. v2 usa el planificador nuevo y la energía física; si ya hay una ruta, cambiar el motor la recalcula. La elección se guarda en el navegador. Para volver a limitarlo: `ENGINE_PREVIEW_EMAILS` con una lista de correos en Vercel. **Si en Vercel quedó `ENGINE_PREVIEW_EMAILS=w1andresv@gmail.com`, hay que borrarla o poner `*`**, porque el valor del entorno manda sobre el valor por defecto.
+Desde 2026-09-27 el motor lo define la URL y está abierto a todos, invitados incluidos (`ENGINE_PREVIEW_EMAILS=*`): `/v1` planifica con el motor actual y `/v2` con el planificador nuevo y la energía física. Ya no hay selector en el planificador; se pasa de uno a otro desde el landing (`/`) o las guías `/v1/como-funciona` y `/v2/como-funciona`. Si ya había una ruta calculada, abrir el otro motor la recalcula. El navegador recuerda el último motor para el menú "Planificar ruta". Para volver a limitarlo: `ENGINE_PREVIEW_EMAILS` con una lista de correos en Vercel. **Si en Vercel quedó `ENGINE_PREVIEW_EMAILS=w1andresv@gmail.com`, hay que borrarla o poner `*`**, porque el valor del entorno manda sobre el valor por defecto.
 
 ### O10 · Comparar entornos (localhost contra Vercel): "Diagnóstico y caché"
-En el planificador, debajo del selector v1/v2, "Diagnóstico y caché" muestra:
+En el planificador, debajo del motor de la página, "Diagnóstico y caché" muestra:
 - la versión del código (commit, rama, entorno);
 - la configuración del servidor (motores por defecto, elevación, y si hay clave de Blaze y de Mapbox);
 - el motor elegido en ese navegador y con qué se calculó el plan en pantalla (planificador, energía, estaciones, elevación);

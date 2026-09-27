@@ -60,11 +60,11 @@ La documentación está en `docs/blaze/api-publica-v1.md`.
   - `catalog.ts`: `BlazeStationCatalog` y `BlazeStationDetails`.
 - **Puerto nuevo:** `src/domain/ports/station-details.ts` (`get(id)`).
 - **Selección** (`container.ts`):
-  - **Blaze solo con el motor v2** (decisión del dueño del producto, 2026-09-27). El motor es el del selector v1/v2 del usuario o, si no eligió, `PLANNER_ENGINE`;
+  - **Blaze solo con el motor v2** (decisión del dueño del producto, 2026-09-27). El motor es el de la URL del planificador (`/v1` o `/v2`) o, si el usuario no puede elegir, `PLANNER_ENGINE`;
   - v1 y el modo sombra siguen con el dataset consolidado;
   - v2 sin `BLAZE_API_KEY` también, con un aviso en el log;
   - `DATA_SOURCE` se descartó: la fuente la decide el motor.
-  - **Mapa:** `/api/stations?engine=v1|v2` devuelve el listado del motor elegido. El navegador lo pide según el selector, así que el mapa y el plan muestran las mismas estaciones. El de Blaze no va a las cookies de 6 h: se refresca cada 15 min.
+  - **Mapa:** `/api/stations?engine=v1|v2` devuelve el listado del motor elegido. El navegador lo pide según el motor de la página, así que el mapa y el plan muestran las mismas estaciones. El de Blaze no va a las cookies de 6 h: se refresca cada 15 min.
   - **Detalle:** `/api/stations/{id}` pide el detalle a Blaze solo para ids `blz_…`.
 - **Planificación** (`plan-trip/stop-details.ts`):
   - después de elegir el plan recomendado, se pide el detalle **solo de sus paradas** (en paralelo, 5 s como máximo);

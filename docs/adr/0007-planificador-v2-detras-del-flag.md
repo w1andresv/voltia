@@ -28,6 +28,8 @@ F7 reemplaza la selección de paradas por puntaje (D6) por programación dinámi
 ## Selector v1/v2 (2026-09-26)
 Además de la variable del servidor, los correos en `ENGINE_PREVIEW_EMAILS` (por defecto el del dueño del producto) ven en el planificador un selector **v1 | v2**. v2 activa juntos el planificador y la energía v2 para sus planificaciones. El servidor verifica el correo; para los demás usuarios la elección se ignora y manda `PLANNER_ENGINE` / `ENERGY_ENGINE`.
 
+Desde 2026-09-27 no hay selector: el motor lo define la URL del planificador (`/v1` o `/v2`), ver ADR 0012.
+
 ## Extra en carga rápida (2026-09-27, decisión del dueño del producto)
 - **Regla:** en una estación de carga rápida (DC), el planificador v2 carga **10 puntos más de lo que pide el tramo siguiente**.
   - Así se aprovecha la velocidad y se evitan paradas largas en carga lenta.

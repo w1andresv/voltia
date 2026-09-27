@@ -217,7 +217,9 @@ export function Landing() {
             title="Misma ruta, dos formas de decidir"
           >
             Los dos reciben el mismo vehículo, las mismas condiciones del viaje y la misma ruta de
-            Mapbox. Dentro del planificador puedes pasar de uno a otro y se vuelve a calcular.
+            Mapbox. La dirección elige el motor: <code className="font-mono text-sm">/v1</code> o{" "}
+            <code className="font-mono text-sm">/v2</code>. Cada uno tiene una guía con su flujo
+            completo y una demo interactiva.
           </SectionHead>
           <div className="grid gap-5 md:grid-cols-2">
             {ENGINES.map((e) => (
@@ -262,9 +264,15 @@ export function Landing() {
                     </div>
                   ))}
                 </dl>
-                <EngineButton engine={e.id} className="relative justify-self-start">
-                  Abrir planificador {e.id}
-                </EngineButton>
+                <div className="relative flex flex-wrap items-center gap-x-5 gap-y-3">
+                  <EngineButton engine={e.id}>Abrir planificador {e.id}</EngineButton>
+                  <Link
+                    href={`/${e.id}/como-funciona`}
+                    className={cn("text-sm font-semibold hover:underline", tone[e.id].text)}
+                  >
+                    Cómo funciona {e.id} →
+                  </Link>
+                </div>
               </article>
             ))}
           </div>

@@ -6,7 +6,7 @@
 export interface AppInfo {
   build: { commit: string; branch: string | null; environment: string };
   server: {
-    /** PLANNER_ENGINE: el que responde si el usuario no elige en el selector. */
+    /** PLANNER_ENGINE: el que responde a quien no puede elegir motor y a /planificar. */
     plannerEngine: string;
     energyEngine: string;
     elevationSource: string;

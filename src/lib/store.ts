@@ -65,8 +65,8 @@ interface PlannerState {
   stationsOpen: boolean;
   myTripsOpen: boolean;
   /**
-   * Motor elegido en el selector v1/v2 (vista previa, solo usuarios con permiso).
-   * null: el que configure el servidor.
+   * Motor del planificador: lo fija la URL (/v1 o /v2) al abrirlo y se guarda
+   * para volver al último usado. null: todavía no se abrió ninguno.
    */
   engineChoice: "v1" | "v2" | null;
   setEngineChoice: (choice: "v1" | "v2" | null) => void;

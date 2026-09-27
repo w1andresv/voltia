@@ -66,7 +66,7 @@ describe("diagnosticLines", () => {
       "Versión: 4bfc22f (engine-v2) · entorno preview",
       "Servidor: planificador por defecto legacy · energía legacy · elevación mapbox-terrain (mapbox.terrain-rgb z11 @2x) · desvíos estimated",
       "Claves: Blaze no · Mapbox sí",
-      "Selector de motor en este navegador: v2",
+      "Motor de esta página: v2",
       "Plan en pantalla: planificador v2 · energía v2 · estaciones blaze · elevación mapbox-terrain/mesh · rutas mapbox (hace 5 min)",
       "Estaciones cerca de la ruta: 2 · listado blaze-abc",
       "Paradas: Carga Verde Socorro",
@@ -84,7 +84,7 @@ describe("diagnosticLines", () => {
       conditions,
     });
     expect(lines[0]).toBe("Versión: consultando…");
-    expect(lines).toContain("Selector de motor en este navegador: sin elegir (el del servidor)");
+    expect(lines).toContain("Motor de esta página: sin elegir (el del servidor)");
     expect(lines).toContain("Plan en pantalla: ninguno");
   });
 });

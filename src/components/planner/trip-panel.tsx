@@ -23,7 +23,7 @@ import { PlanStats } from "./stats";
 import { SaveTripButton } from "@/components/trips/save-trip-button";
 import { TripParams } from "./trip-params";
 import { CacheTools } from "./cache-tools";
-import { EngineSwitch } from "./engine-switch";
+import { EngineNote } from "./engine-note";
 import { VehicleBar } from "./vehicle-bar";
 import {
   CONNECTOR_LABEL,
@@ -124,7 +124,7 @@ export function TripSetup() {
   const canPlan =
     Boolean(origin && destination && stationDataset && !loadingStations) && !planMut.isPending;
 
-  // El motor lo decide la ruta (/v1 o /v2). Al pasar de una a otra con una ruta
+  // El motor lo decide la URL (/v1 o /v2). Al pasar de una a otra con una ruta
   // ya calculada se vuelve a planificar con el motor nuevo, cuando estén sus
   // electrolineras (cada motor tiene su fuente).
   const engineChoice = usePlanner((s) => s.engineChoice);
@@ -257,7 +257,7 @@ export function TripSetup() {
         </Button>
       </div>
       <TripParams />
-      <EngineSwitch />
+      <EngineNote />
       <CacheTools onReplan={() => planMut.mutate()} />
       <div className="space-y-2 pt-1">
         {!canPlan && !planMut.isPending ? (

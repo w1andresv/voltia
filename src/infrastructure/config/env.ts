@@ -9,8 +9,9 @@ const EnvSchema = z.object({
   PLUGSHARE_TOKEN: z.string().default(""),
   ADMIN_EMAILS: z.string().default(""),
   /**
-   * Quién ve el selector de motor v1/v2 en el planificador: "*" (por defecto,
-   * todos, invitados incluidos) o correos separados por coma.
+   * Quién puede usar las rutas /v1 y /v2 del planificador con su motor: "*"
+   * (por defecto, todos, invitados incluidos) o correos separados por coma. A
+   * los demás, /v1 y /v2 los mandan al motor de PLANNER_ENGINE.
    */
   ENGINE_PREVIEW_EMAILS: z.string().default("*"),
   /** Motor de planificación: legacy (actual), shadow (ambos, responde el actual) o v2 (plan §6). */

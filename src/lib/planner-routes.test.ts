@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { engineOfPath, plannerHref } from "./planner-routes";
+import { engineOfPath, guideEngineOfPath, plannerHref } from "./planner-routes";
 
 describe("planner-routes", () => {
   it("lleva cada motor a su ruta y sin elección al v1", () => {
@@ -16,5 +16,12 @@ describe("planner-routes", () => {
     expect(engineOfPath("/")).toBeNull();
     expect(engineOfPath("/v10")).toBeNull();
     expect(engineOfPath("/electrolineras")).toBeNull();
+    expect(engineOfPath("/v2/como-funciona")).toBeNull();
+  });
+
+  it("reconoce las guías de cada motor", () => {
+    expect(guideEngineOfPath("/v1/como-funciona")).toBe("v1");
+    expect(guideEngineOfPath("/v2/como-funciona/")).toBe("v2");
+    expect(guideEngineOfPath("/v2")).toBeNull();
   });
 });

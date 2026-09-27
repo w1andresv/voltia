@@ -14,7 +14,7 @@ import { MyTripsDialog } from "@/components/trips/my-trips-dialog";
 import { VehicleEditor } from "@/components/planner/vehicle-editor";
 import { ThemeToggle } from "@/components/shell/theme";
 import { Button } from "@/components/ui/button";
-import { engineOfPath, plannerHref, type PlannerEngine } from "@/lib/planner-routes";
+import { engineOfPath, guideEngineOfPath, plannerHref, type PlannerEngine } from "@/lib/planner-routes";
 import { canSeeStationsMenu } from "@/lib/stations-access";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,7 @@ function navLinks(engine: PlannerEngine | null): NavLink[] {
       label: "Inicio",
       hint: "Qué es Voltia y cómo decide cada motor",
       icon: <Home className="size-5" />,
-      active: (path) => path === "/",
+      active: (path) => path === "/" || guideEngineOfPath(path) != null,
     },
     {
       to: plannerHref(engine),
@@ -51,6 +51,8 @@ function titleOf(path: string): string {
   if (path.startsWith("/electrolineras")) return "Electrolineras";
   const engine = engineOfPath(path);
   if (engine) return `Planificar ruta · ${engine}`;
+  const guide = guideEngineOfPath(path);
+  if (guide) return `Cómo funciona · ${guide}`;
   if (path.startsWith("/v/")) return "Viaje compartido";
   return "Inicio";
 }
