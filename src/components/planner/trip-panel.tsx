@@ -1,7 +1,7 @@
 import { formatRoadMix } from "@/domain/road-hierarchy";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowDownUp, Flag, LoaderCircle, LocateFixed, MapPin, Plus } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { planTripFn, reversePlaceFn } from "@/server/actions/plan";
 import { ChargerFacts } from "./charger-facts";
@@ -124,6 +124,23 @@ export function TripSetup() {
   const canPlan =
     Boolean(origin && destination && stationDataset && !loadingStations) && !planMut.isPending;
 
+  // El motor lo decide la ruta (/v1 o /v2). Al pasar de una a otra con una ruta
+  // ya calculada se vuelve a planificar con el motor nuevo, cuando estén sus
+  // electrolineras (cada motor tiene su fuente).
+  const engineChoice = usePlanner((s) => s.engineChoice);
+  const plannedWith = useRef(engineChoice);
+  const { mutate: replan } = planMut;
+  useEffect(() => {
+    if (plannedWith.current === engineChoice) return;
+    if (!usePlanner.getState().geo) {
+      plannedWith.current = engineChoice;
+      return;
+    }
+    if (!canPlan) return;
+    plannedWith.current = engineChoice;
+    replan();
+  }, [engineChoice, canPlan, replan]);
+
   return (
     <section className="relative z-20 space-y-3 px-4 pb-3 pt-3">
       <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">
@@ -240,12 +257,7 @@ export function TripSetup() {
         </Button>
       </div>
       <TripParams />
-      <EngineSwitch
-        onChange={() => {
-          // Con una ruta ya calculada, se vuelve a planificar con el motor elegido.
-          if (usePlanner.getState().geo && canPlan) planMut.mutate();
-        }}
-      />
+      <EngineSwitch />
       <CacheTools onReplan={() => planMut.mutate()} />
       <div className="space-y-2 pt-1">
         {!canPlan && !planMut.isPending ? (

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { recordArrivalFn, shareTripFn, type SavedTrip } from "@/server/actions/trips";
 import { arrivalText } from "@/lib/arrival-text";
 import { formatKm, formatMinutes, formatPct } from "@/lib/format";
+import { plannerHref } from "@/lib/planner-routes";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,7 +87,7 @@ export function MyTripsDialog() {
                 onReplan={() => {
                   applySavedRequest(trip.request);
                   setOpen(false);
-                  router.push("/planificar");
+                  router.push(plannerHref(usePlanner.getState().engineChoice));
                 }}
                 canShare={canShare}
                 onShare={() => shareMut.mutate(trip.id)}

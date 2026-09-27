@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
+import { plannerHref } from "@/lib/planner-routes";
+import { defaultPlannerEngine } from "@/server/planner-route";
 
-// src/app/page.tsx ya renderiza <PlannerApp /> en "/" — esta ruta existía
-// duplicada (mismo contenido en dos URLs). En vez de borrarla —el drawer y
-// varias pantallas (Mis viajes, viaje compartido) navegan aquí como "volver
-// al planificador"— redirige a la home real para no partir esos enlaces.
-export default function PlanPage(): never {
-  redirect("/");
+// El planificador vive en /v1 y /v2 (una ruta por motor) y "/" es el landing.
+// /planificar queda para no partir enlaces viejos: lleva al motor configurado
+// en el servidor, leído en cada visita (no al compilar).
+export default async function PlanPage(): Promise<never> {
+  await connection();
+  redirect(plannerHref(await defaultPlannerEngine()));
 }

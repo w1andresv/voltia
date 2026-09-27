@@ -93,7 +93,7 @@ En local van en `.env.local` (no se sube al repo). En Vercel, en *Settings → E
 | `ENERGY_ENGINE` | `legacy` · `shadow` · `v2` | `legacy` | Modelo de energía (ADR-0012) |
 | `ELEVATION_SOURCE` | `open-meteo` · `open-meteo-adaptive` · `mapbox-terrain` | `open-meteo` | Fuente de elevación (ADR-0011) |
 | `DETOUR_SOURCE` | `estimated` · `matrix` | `estimated` | Desvíos a las estaciones (ADR-0013) |
-| `ENGINE_PREVIEW_EMAILS` | `*` o correos separados por coma | `*` (todos, desde 2026-09-27) | Quién ve el selector de motor v1/v2 en el planificador; la elección de cada usuario manda sobre `PLANNER_ENGINE` y `ENERGY_ENGINE` solo para su planificación |
+| `ENGINE_PREVIEW_EMAILS` | `*` o correos separados por coma | `*` (todos, desde 2026-09-27) | Quién puede usar las rutas `/v1` y `/v2` (y el selector v1/v2 que navega entre ellas); para esos usuarios la ruta manda sobre `PLANNER_ENGINE` y `ENERGY_ENGINE` en su planificación. A quien no está en la lista, `/v1` y `/v2` lo mandan a la ruta del motor de `PLANNER_ENGINE` |
 | `BLAZE_API_KEY` (secreta), `BLAZE_API_URL` | key `blz_…`; URL base | —; `https://blaze.muvatec.com/electrolineras-api/public/v1` | Electrolineras de Blaze, solo para el motor v2 (FB, §5.7, ADR-0008) |
 
 Un valor inválido en `PLANNER_ENGINE`, `ENERGY_ENGINE` o `ELEVATION_SOURCE` cae al valor por defecto; no rompe la app.

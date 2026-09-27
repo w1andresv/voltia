@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserDataProvider } from "@/components/user/user-context";
 import { AuthDialogProvider } from "@/components/auth/auth-dialog";
 import { stationDatasetQueryOptions } from "@/components/stations/use-station-dataset";
+import { engineOfPath } from "@/lib/planner-routes";
 import { usePlanner } from "@/lib/store";
 
 function ThemedToaster() {
@@ -25,7 +26,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
       }),
   );
   useEffect(() => {
-    void client.prefetchQuery(stationDatasetQueryOptions(usePlanner.getState().engineChoice));
+    // En /v1 y /v2 manda la ruta; en otras páginas, el último motor usado.
+    const engine = engineOfPath(window.location.pathname) ?? usePlanner.getState().engineChoice;
+    void client.prefetchQuery(stationDatasetQueryOptions(engine));
   }, [client]);
   return (
     <QueryClientProvider client={client}>

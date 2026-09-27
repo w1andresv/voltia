@@ -9,6 +9,7 @@ import {
   type RoutePlan,
 } from "@/domain/types";
 import { formatKm, formatMinutes } from "@/lib/format";
+import { plannerHref } from "@/lib/planner-routes";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { ConsumptionChart } from "@/components/planner/consumption-chart";
@@ -84,7 +85,7 @@ export function SharedTripView({
           className="h-11 shrink-0"
           onClick={() => {
             applySavedRequest(request);
-            router.push("/planificar");
+            router.push(plannerHref(usePlanner.getState().engineChoice));
           }}
         >
           <RouteIcon className="size-4" />

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { History, LogIn, MapPinned, Menu, Route as RouteIcon, Trash2, X, Zap } from "lucide-react";
+import { History, Home, LogIn, MapPinned, Menu, Route as RouteIcon, Trash2, X, Zap } from "lucide-react";
 import { useActor } from "@/infrastructure/auth/use-actor";
 import { useUserContext } from "@/components/user/user-context";
 import { AccountMenu, useSignOut } from "@/components/auth/account-menu";
@@ -14,24 +14,46 @@ import { MyTripsDialog } from "@/components/trips/my-trips-dialog";
 import { VehicleEditor } from "@/components/planner/vehicle-editor";
 import { ThemeToggle } from "@/components/shell/theme";
 import { Button } from "@/components/ui/button";
+import { engineOfPath, plannerHref, type PlannerEngine } from "@/lib/planner-routes";
 import { canSeeStationsMenu } from "@/lib/stations-access";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-const LINKS: { to: "/planificar" | "/electrolineras"; label: string; hint: string; icon: ReactNode }[] = [
-  {
-    to: "/planificar",
-    label: "Planificar ruta",
-    hint: "Viaje, mapa y energía en un solo scroll",
-    icon: <RouteIcon className="size-5" />,
-  },
-  {
-    to: "/electrolineras",
-    label: "Electrolineras",
-    hint: "Red pública, PlugShare y altas nuevas",
-    icon: <MapPinned className="size-5" />,
-  },
-];
+type NavLink = { to: string; label: string; hint: string; icon: ReactNode; active: (path: string) => boolean };
+
+function navLinks(engine: PlannerEngine | null): NavLink[] {
+  return [
+    {
+      to: "/",
+      label: "Inicio",
+      hint: "Qué es Voltia y cómo decide cada motor",
+      icon: <Home className="size-5" />,
+      active: (path) => path === "/",
+    },
+    {
+      to: plannerHref(engine),
+      label: "Planificar ruta",
+      hint: "Viaje, mapa y energía en un solo scroll",
+      icon: <RouteIcon className="size-5" />,
+      active: (path) => engineOfPath(path) != null || path.startsWith("/planificar"),
+    },
+    {
+      to: "/electrolineras",
+      label: "Electrolineras",
+      hint: "Red pública, PlugShare y altas nuevas",
+      icon: <MapPinned className="size-5" />,
+      active: (path) => path.startsWith("/electrolineras"),
+    },
+  ];
+}
+
+function titleOf(path: string): string {
+  if (path.startsWith("/electrolineras")) return "Electrolineras";
+  const engine = engineOfPath(path);
+  if (engine) return `Planificar ruta · ${engine}`;
+  if (path.startsWith("/v/")) return "Viaje compartido";
+  return "Inicio";
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -52,8 +74,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [open]);
 
   const actor = useActor();
-  const links = canSeeStationsMenu(actor.email) ? LINKS : LINKS.filter((item) => item.to !== "/electrolineras");
-  const title = pathname.startsWith("/electrolineras") ? "Electrolineras" : "Planificar ruta";
+  const engineChoice = usePlanner((s) => s.engineChoice);
+  const all = navLinks(engineChoice);
+  const links = canSeeStationsMenu(actor.email) ? all : all.filter((item) => item.to !== "/electrolineras");
+  const title = titleOf(pathname);
 
   return (
     <>
@@ -69,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <Menu className="size-5" />
         </Button>
-        <div className="flex min-w-0 items-center gap-2">
+        <Link href="/" className="flex min-w-0 items-center gap-2 rounded-md" aria-label="Voltia, ir al inicio">
           <span className="grid size-8 place-items-center rounded-md bg-accent text-accent-fg">
             <Zap className="size-4" />
           </span>
@@ -77,7 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="truncate text-sm font-semibold tracking-tight">{title}</div>
             <div className="truncate text-xs text-muted">Voltia</div>
           </div>
-        </div>
+        </Link>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <ThemeToggle />
           <AccountMenu />
@@ -102,13 +126,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav className="mt-6 grid gap-1 px-3" aria-label="Principal">
           {links.map((item) => {
-            const active =
-              item.to === "/planificar"
-                ? pathname === "/" || pathname.startsWith("/planificar")
-                : pathname.startsWith(item.to);
+            const active = item.active(pathname);
             return (
               <Link
-                key={item.to}
+                key={item.label}
                 href={item.to}
                 className={cn(
                   "flex min-h-14 items-center gap-3 rounded-xl px-3",

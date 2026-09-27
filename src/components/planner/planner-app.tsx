@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { Battery, Map as MapIcon } from "lucide-react";
 import { usePlanner } from "@/lib/store";
 import { formatKm, formatSoc } from "@/lib/format";
+import type { PlannerEngine } from "@/lib/planner-routes";
 import { MapPane } from "@/components/map/map-pane";
 import { StationHub } from "./station-hub";
 import { TripResults, TripSetup } from "./trip-panel";
@@ -20,7 +21,12 @@ function useWide() {
   return wide;
 }
 
-export function PlannerApp() {
+/** Planificador completo; `engine` sale de la ruta (/v1 o /v2) y manda sobre la elección guardada. */
+export function PlannerApp({ engine }: { engine: PlannerEngine }) {
+  const setEngineChoice = usePlanner((s) => s.setEngineChoice);
+  useLayoutEffect(() => {
+    if (usePlanner.getState().engineChoice !== engine) setEngineChoice(engine);
+  }, [engine, setEngineChoice]);
   const plan = usePlanner((s) => s.plans.find((p) => p.id === s.selectedPlanId) ?? s.plans[0] ?? null);
   const hoverKm = usePlanner((s) => s.hoverKm);
   const armed = usePlanner((s) => s.mapClickArmed);

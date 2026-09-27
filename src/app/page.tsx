@@ -1,5 +1,5 @@
-import { PlannerApp } from "@/components/planner/planner-app";
+import { Landing } from "@/components/landing/landing";
 
 export default function HomePage() {
-  return <PlannerApp />;
+  return <Landing />;
 }
