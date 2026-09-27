@@ -61,9 +61,19 @@ export async function checkStopDetails(
     const station = r.value;
     const current = chargers.find((c) => c.id === id);
     if (!station || !current) return;
-    const next: Charger = station.planning.eligible
-      ? toPlanningCharger(station)
-      : { ...current, availability: "offline", available: false };
+    let next: Charger;
+    if (station.planning.eligible) next = toPlanningCharger(station);
+    else if (station.availability.value === "offline")
+      next = { ...current, availability: "offline", available: false };
+    else {
+      // No elegible por otra cosa (p. ej. conectores del detalle escritos distinto que en el
+      // listado): no se descarta una estación en servicio; se sigue con el listado.
+      console.warn(
+        `[stations:detail] ${id} ${current.name}: el detalle no sirve para planificar ` +
+          `(${station.planning.reasons.join(", ") || "sin motivo"}); se sigue con el listado`,
+      );
+      return;
+    }
     if (JSON.stringify(stable(next)) !== JSON.stringify(stable(current))) updated.set(id, next);
   });
   const merged = chargers.map((c) => updated.get(c.id) ?? c);

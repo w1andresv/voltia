@@ -6,6 +6,7 @@ import {
   blazeStationId,
   connectorsFromChargers,
   connectorsFromList,
+  standardOf,
   toConsolidatedStation,
 } from "./mappers";
 
@@ -115,6 +116,19 @@ describe("conectores del listado", () => {
       powerKw: 20,
       powerOrigin: "assumed",
     });
+  });
+});
+
+describe("etiquetas de conector", () => {
+  it("reconoce las variantes de escritura de Tipo 2 y CCS2", () => {
+    for (const l of ["Tipo 2", "Tipo2", "tipo-2", "TIPO 2 (Mennekes)"])
+      expect(standardOf(l), l).toBe("type2");
+    for (const l of ["CCS2", "CCS 2", "CCS-2", "Combo 2", "CCS2 (Combo 2)"])
+      expect(standardOf(l), l).toBe("ccs2");
+    expect(standardOf("Tipo 1")).toBe("type1");
+    expect(standardOf("CHAdeMO")).toBe("chademo");
+    // Ambiguo (¿CCS1 o CCS2?): no se adivina.
+    expect(standardOf("CCS")).toBe("other");
   });
 });
 

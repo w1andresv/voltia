@@ -273,9 +273,13 @@ export class EVRoutePlanningService {
           energyEngine: energy,
         },
       );
+      const describe = (p: RoutePlan) =>
+        `${p.stops.map((s) => s.charger.name).join(" · ") || "sin paradas"}` +
+        (p.departureCharge ? ` (+${p.departureCharge.additionalPct} % antes de salir)` : "") +
+        (p.feasible ? "" : " (no viable)");
       console.log(
         `[plan-trip:verify] ${verified.verification?.status ?? "sin paradas"} en ${verified.verification?.iterations ?? 0} ruta(s):` +
-          ` ${ranked[0].stops.length} → ${verified.stops.length} paradas, ${ranked[0].distanceKm.toFixed(1)} → ${verified.distanceKm.toFixed(1)} km`,
+          ` ${describe(ranked[0])} → ${describe(verified)}, ${ranked[0].distanceKm.toFixed(1)} → ${verified.distanceKm.toFixed(1)} km`,
       );
       ranked = rankPlans([verified, ...ranked.slice(1)], conditions.planningMode);
       selectedId = ranked[0]?.id ?? "";

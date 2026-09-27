@@ -49,6 +49,29 @@ describe("checkStopDetails", () => {
     expect(check.chargers).toHaveLength(chargers.length);
   });
 
+  it("un detalle que no sirve para planificar pero no está fuera de servicio no descarta la estación", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const [a] = stations as [ConsolidatedStation];
+    // P. ej. el detalle trae los conectores escritos de otra forma ("Tipo2") y no se reconocen.
+    const unreadable: ConsolidatedStation = {
+      ...a,
+      availability: { value: "available" },
+      connectors: a.connectors.map((k) => ({
+        ...k,
+        standard: "other" as const,
+        rawLabel: "Tipo2",
+      })),
+      planning: { eligible: false, reasons: ["Sin conectores compatibles conocidos"] },
+    };
+    const check = await checkStopDetails(
+      { get: async (id) => (id === a.id ? unreadable : null) },
+      plan,
+      chargers,
+    );
+    expect(check).toMatchObject({ changed: 0, offline: [] });
+    expect(check.chargers).toEqual(chargers);
+  });
+
   it("una consulta que no responde a tiempo cuenta como fallida y no bloquea", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const check = await checkStopDetails({ get: () => new Promise(() => {}) }, plan, chargers, 20);

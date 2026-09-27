@@ -44,10 +44,13 @@ export function availabilityOf(status: BlazeStatus | null | undefined): StationA
   }
 }
 
-/** Blaze escribe los conectores en español ("Tipo 2") y a veces con espacio ("CCS 2"). */
-function standardOf(label: string): ExtendedConnectorType {
+/** Blaze escribe los conectores en español y con variantes: "Tipo 2", "Tipo2", "CCS 2", "CCS-2". */
+export function standardOf(label: string): ExtendedConnectorType {
   return standardizeConnector(
-    label.replace(/\btipo\b/gi, "Type").replace(/\bccs\s+([12])\b/gi, "CCS$1"),
+    label
+      .replace(/\btipo[\s-]*(\d)/gi, "Type $1")
+      .replace(/\btipo\b/gi, "Type")
+      .replace(/\bccs[\s-]*([12])\b/gi, "CCS$1"),
   );
 }
 
