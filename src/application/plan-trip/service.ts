@@ -187,6 +187,14 @@ export class EVRoutePlanningService {
     )
       .filter((s) => s.planning.eligible)
       .map(toPlanningCharger);
+    if (this.deps.stationSource === "blaze") {
+      console.log(
+        `[blaze] ${chargers.length} de ${dataset.stations.length} estaciones del listado están en el corredor de la ruta y sirven para planificar:` +
+          (chargers.length
+            ? ` ${chargers.map((c) => `${c.id} ${c.name}`).join(" · ")}`
+            : " ninguna"),
+      );
+    }
 
     const mode = this.deps.engineMode;
     const detours = this.deps.detourMatrix
@@ -225,6 +233,9 @@ export class EVRoutePlanningService {
     }
     // Detalle de las paradas (Blaze): si alguna está fuera de servicio, se replanifica una vez sin ella.
     if (this.deps.stationDetails && ranked[0]?.stops.length) {
+      console.log(
+        `[blaze] detalle de las paradas del plan recomendado: ${ranked[0].stops.map((s) => `${s.charger.id} ${s.charger.name}`).join(" · ")}`,
+      );
       const check = await checkStopDetails(this.deps.stationDetails, ranked[0], chargers);
       console.log(
         `[stations:detail] ${check.requested} parada(s) consultadas, ${check.changed} con cambios, ` +

@@ -4,6 +4,7 @@ import type { StationCatalog } from "@/domain/ports/station-catalog";
 import type { StationDetails } from "@/domain/ports/station-details";
 import type { ConsolidatedStation, StationDataset } from "@/domain/stations/model";
 import type { BlazeClient } from "./client";
+import { logBlazeDetail, logBlazeList } from "./log";
 import { blazeExternalId, toConsolidatedStation } from "./mappers";
 
 /**
@@ -24,6 +25,7 @@ export class BlazeStationCatalog implements StationCatalog {
     const fetchedAt = this.clock().toISOString();
     try {
       const raw = await this.client.listStations();
+      logBlazeList(raw, Date.now() - started);
       const stations: ConsolidatedStation[] = [];
       let noCoords = 0;
       for (const s of raw) {
@@ -84,7 +86,9 @@ export class BlazeStationDetails implements StationDetails {
   async get(id: string): Promise<ConsolidatedStation | null> {
     const externalId = blazeExternalId(id);
     if (!externalId) return null;
+    const started = Date.now();
     const raw = await this.client.station(externalId);
+    logBlazeDetail(externalId, raw, Date.now() - started);
     return raw ? toConsolidatedStation(raw, this.clock().toISOString()) : null;
   }
 }
