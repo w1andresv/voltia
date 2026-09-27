@@ -28,6 +28,14 @@ export function formatPct(pct: number): string {
   return `${nf0.format(Math.round(pct))} %`;
 }
 
+/**
+ * SOC para mostrar: un plan inviable puede dar SOC negativo por la vía, y un
+ * "−25 %" se lee como error de cálculo. Por debajo de 0 dice "Sin batería".
+ */
+export function formatSoc(pct: number): string {
+  return Number.isFinite(pct) && pct < 0 ? "Sin batería" : formatPct(pct);
+}
+
 export function formatMinutes(total: number): string {
   if (!Number.isFinite(total) || total < 0) return "—";
   const rounded = Math.round(total);

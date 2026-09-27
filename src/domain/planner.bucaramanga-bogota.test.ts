@@ -41,7 +41,12 @@ function at(km: number) {
 }
 
 function route(): RawRoute {
-  const samples = Array.from({ length: 422 }, (_, km) => ({ km, ...at(km), slopePct: 0, speedKmh: 60 }));
+  const samples = Array.from({ length: 422 }, (_, km) => ({
+    km,
+    ...at(km),
+    slopePct: 0,
+    speedKmh: 60,
+  }));
   let gain = 0;
   let loss = 0;
   for (let i = 1; i < samples.length; i++) {
@@ -70,8 +75,22 @@ function blaze(id: string, name: string, km: number, offsetLon = 0): Charger {
     lon: p.lon + offsetLon,
     operator: "Blaze Charge",
     sockets: [
-      { connector: "ccs2", powerKw: 60, count: 2, current: "DC", currentOrigin: "standard", powerOrigin: "reported" },
-      { connector: "type2", powerKw: 22, count: 1, current: "AC", currentOrigin: "standard", powerOrigin: "assumed" },
+      {
+        connector: "ccs2",
+        powerKw: 60,
+        count: 2,
+        current: "DC",
+        currentOrigin: "standard",
+        powerOrigin: "reported",
+      },
+      {
+        connector: "type2",
+        powerKw: 22,
+        count: 1,
+        current: "AC",
+        currentOrigin: "standard",
+        powerOrigin: "assumed",
+      },
     ],
     access: "public",
     source: "blaze",
@@ -121,6 +140,20 @@ describe("Bucaramanga → Bogotá, MG S5 EV al 100 %, motor v2 con estaciones de
     const p = plan([]);
     expect(p.feasible).toBe(false);
     expect(p.arrivalSoc).toBeLessThan(0);
+  });
+
+  it("sin estaciones, dice dónde se agota la batería en vez de solo un SOC negativo", () => {
+    const p = plan([]);
+    expect(p.depletion).toBeDefined();
+    // Después de subir a Arcabuco y antes de Bogotá.
+    expect(p.depletion!.km).toBeGreaterThan(200);
+    expect(p.depletion!.km).toBeLessThan(421);
+    const i = p.samples.findIndex((x) => x.km >= p.depletion!.km);
+    expect(p.samples[i]!.soc).toBeLessThanOrEqual(0.5);
+  });
+
+  it("un plan viable no tiene punto de agotamiento", () => {
+    expect(plan(STATIONS).depletion).toBeUndefined();
   });
 
   it("para en Santana y cerca de Tunja, y llega sobre la reserva sin bajar del piso", () => {

@@ -3,7 +3,8 @@ import { batteryBudget } from "@/domain/energy";
 import { departureChargeAdvice } from "@/domain/types";
 import { socFloors } from "@/domain/ev/core/trip-config";
 import { vehicleLabel } from "@/domain/vehicles";
-import { formatKm, formatKw, formatKwh, formatKwhPer100, formatMinutes, formatPct } from "@/lib/format";
+import { formatKm, formatKw, formatKwh, formatKwhPer100, formatMinutes, formatPct, formatSoc } from "@/lib/format";
+import { DepletionNotice } from "./depletion-notice";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -141,12 +142,12 @@ export function BatteryDialog() {
               />
               <Metric
                 label="Llegada"
-                value={formatPct(plan.arrivalSoc)}
+                value={formatSoc(plan.arrivalSoc)}
                 hint={plan.feasible ? "objetivo cubierto" : "bajo el margen"}
                 tone={plan.arrivalSoc < floor ? "danger" : "ok"}
               />
               <Metric label="Paradas" value={String(plan.stops.length)} />
-              <Metric label="SOC mínimo" value={formatPct(plan.minSoc)} />
+              <Metric label="SOC mínimo" value={formatSoc(plan.minSoc)} />
             </div>
             {plan.departureCharge ? (
               <p className="mt-2 text-xs leading-relaxed text-warn">
@@ -161,7 +162,10 @@ export function BatteryDialog() {
                 {formatMinutes(plan.chargeMinutes)} enchufado
               </p>
             ) : (
-              <p className="mt-2 text-xs text-danger">{plan.infeasibleReason ?? "No es viable con este SOC."}</p>
+              <p className="mt-2 text-xs text-danger">
+                {plan.depletion ? <DepletionNotice depletion={plan.depletion} /> : null}
+                {plan.infeasibleReason ?? "No es viable con este SOC."}
+              </p>
             )}
           </section>
         ) : (

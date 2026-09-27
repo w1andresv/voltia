@@ -40,6 +40,14 @@ export interface LatLon {
   lon: number;
 }
 
+/** Punto de la ruta donde se agota la batería; `label` es el lugar más cercano, si se pudo nombrar. */
+export interface BatteryDepletion {
+  km: number;
+  lat: number;
+  lon: number;
+  label?: string;
+}
+
 export interface RouteSample {
   km: number;
   lat: number;
@@ -290,6 +298,8 @@ export interface RoutePlan {
   departureCharge?: DepartureCharge;
   /** Ni saliendo al 100 % se alcanza la primera electrolinera verificada. */
   firstChargerUnreachable?: boolean;
+  /** Solo si el SOC llega a 0 por la vía (plan inviable): dónde se agota la batería. */
+  depletion?: BatteryDepletion;
   /** Motor de planificación que armó el plan (PLANNER_ENGINE). */
   planner?: "legacy" | "v2";
   /** Modelo de energía (ENERGY_ENGINE, F5). */

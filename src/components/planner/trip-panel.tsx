@@ -9,6 +9,7 @@ import { DEMO_TRIPS, usePlanner } from "@/lib/store";
 import { isDcSocket } from "@/domain/charging";
 import { adapterNote } from "@/lib/adapter-note";
 import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/format";
+import { DepletionNotice } from "./depletion-notice";
 import { Button } from "@/components/ui/button";
 import { useStationDataset } from "@/components/stations/use-station-dataset";
 import { ConsumptionChart } from "./consumption-chart";
@@ -392,6 +393,7 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
           </p>
         ) : !plan.feasible ? (
           <p className="text-sm leading-relaxed text-danger">
+            {plan.depletion ? <DepletionNotice depletion={plan.depletion} /> : null}
             {plan.infeasibleReason ??
               "No se encontró una electrolinera verificada dentro de la autonomía disponible. No es posible generar una estrategia de recarga segura para este tramo."}
           </p>
@@ -471,6 +473,7 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
   if (!plan.feasible && plan.stops.length === 0) {
     return (
       <p className="rounded-lg bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-danger">
+        {plan.depletion ? <DepletionNotice depletion={plan.depletion} /> : null}
         {plan.infeasibleReason ?? "No es posible completar el viaje con el margen actual."}
       </p>
     );

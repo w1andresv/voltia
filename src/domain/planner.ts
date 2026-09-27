@@ -26,6 +26,7 @@ import type { MeasuredDetour } from "./ev/contracts/detour";
 import type { EnergySample } from "./ev/contracts/energy";
 import type { SocEvent } from "./ev/contracts/soc";
 import { legSoc, requiredStartSoc, simulateSoc, walkSoc } from "./ev/engines/soc/simulate";
+import { batteryDepletion } from "./ev/engines/soc/depletion";
 import type {
   ChargeChoice,
   ChargeStop,
@@ -1205,6 +1206,7 @@ export function buildPlan(args: {
   const arrivalSoc = last.soc;
   // El punto más bajo puede ser la llegada a un cargador (la curva muestra la salida).
   const minSoc = sim.minSoc;
+  const depletion = batteryDepletion(samples);
   const remainingKwh = Math.max(0, (arrivalSoc / 100) * vehicle.batteryKwh);
   const canArriveWithoutCharge =
     stops.length === 0 &&
@@ -1284,6 +1286,7 @@ export function buildPlan(args: {
     infeasibleReason: reason,
     departureCharge,
     firstChargerUnreachable: chosen.firstChargerUnreachable,
+    ...(depletion ? { depletion } : {}),
     planner: args.engine === "v2" ? "v2" : "legacy",
     energyEngine: energyV2 ? "v2" : "legacy",
     ...(energyV2

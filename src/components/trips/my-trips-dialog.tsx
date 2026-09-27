@@ -132,8 +132,8 @@ function TripRow({
           </div>
           <div className="font-mono text-xs tabular-nums text-muted">
             {formatKm(trip.summary.distanceKm)} · {formatMinutes(trip.summary.totalMinutes)} ·{" "}
-            {trip.summary.stops} {trip.summary.stops === 1 ? "parada" : "paradas"} · llega{" "}
-            {formatPct(trip.summary.arrivalSoc)}
+            {trip.summary.stops} {trip.summary.stops === 1 ? "parada" : "paradas"} ·{" "}
+            {trip.summary.arrivalSoc < 0 ? "sin batería antes de llegar" : `llega ${formatPct(trip.summary.arrivalSoc)}`}
           </div>
         </div>
       </div>

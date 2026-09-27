@@ -10,6 +10,7 @@ import {
   formatMinutes,
   formatPct,
   formatUpdatedAt,
+  formatSoc,
 } from "@/lib/format";
 
 export function Itinerary({ plan }: { plan: RoutePlan }) {
@@ -41,7 +42,7 @@ export function Itinerary({ plan }: { plan: RoutePlan }) {
                   </div>
                 </div>
                 <div className="font-mono text-sm tabular-nums text-accent">
-                  {formatPct(node.soc)}
+                  {formatSoc(node.soc)}
                 </div>
               </div>
               {node.charge ? <StopFacts stop={node.charge} /> : null}

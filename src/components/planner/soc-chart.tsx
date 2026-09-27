@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { socSeries } from "@/domain/ev/engines/chart/series";
 import type { RoutePlan } from "@/domain/types";
-import { formatKm, formatPct } from "@/lib/format";
+import { formatKm, formatPct, formatSoc } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 
 export function SocChart({ plan }: { plan: RoutePlan }) {
@@ -21,7 +21,7 @@ export function SocChart({ plan }: { plan: RoutePlan }) {
     <div>
       <div className="mb-2 flex items-baseline justify-between">
         <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">Batería a lo largo de la ruta</h3>
-        <span className="font-mono text-xs tabular-nums text-muted">mín {formatPct(plan.minSoc)}</span>
+        <span className="font-mono text-xs tabular-nums text-muted">mín {formatSoc(plan.minSoc)}</span>
       </div>
       <div className="h-36">
         <ResponsiveContainer width="100%" height="100%">
@@ -64,6 +64,15 @@ export function SocChart({ plan }: { plan: RoutePlan }) {
             <ReferenceLine y={plan.initialSoc} stroke="#8b98a8" strokeDasharray="2 4" strokeOpacity={0.5} />
             {hoverKm != null ? (
               <ReferenceLine x={Number(hoverKm.toFixed(1))} stroke="rgb(238 242 246 / 0.35)" />
+            ) : null}
+            {plan.depletion ? (
+              // Donde se agota la batería (plan inviable): la curva no baja de 0 %.
+              <ReferenceLine
+                x={Number(plan.depletion.km.toFixed(1))}
+                stroke="#f07178"
+                strokeDasharray="4 3"
+                label={{ value: "sin batería", position: "insideTopRight", fill: "#f07178", fontSize: 10 }}
+              />
             ) : null}
             <Area type="linear" dataKey="soc" stroke="#3ddec8" strokeWidth={1.8} fill="url(#socFill)" />
             {plan.stops.map((st) => (

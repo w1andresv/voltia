@@ -3,7 +3,7 @@ import { formatRoadMix } from "@/domain/road-hierarchy";
 import { HIGHLIGHT_LABEL, routeHighlights } from "@/domain/route-highlights";
 import { CONNECTOR_LABEL, type RoutePlan } from "@/domain/types";
 import { isDcSocket } from "@/domain/charging";
-import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/format";
+import { formatKm, formatKw, formatKwh, formatMinutes, formatPct, formatSoc } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -78,7 +78,7 @@ export function RouteCompare({ plans }: { plans: RoutePlan[] }) {
                   className="shrink-0 font-mono text-xs tabular-nums text-muted"
                   title="Batería al llegar"
                 >
-                  {formatPct(p.arrivalSoc)}
+                  {formatSoc(p.arrivalSoc)}
                 </span>
               </div>
 

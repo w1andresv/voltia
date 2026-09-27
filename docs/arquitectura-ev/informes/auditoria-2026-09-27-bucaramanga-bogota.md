@@ -43,7 +43,7 @@ El motivo de "antes" contradecía el mapa: las estaciones estaban, pero el filtr
 ## Otros hallazgos (no causan el error; propuestas)
 | # | Hallazgo | Propuesta |
 |---|---|---|
-| A | Un plan inviable muestra "llega con −25 %". Técnicamente dice que no alcanza, pero se lee como un error del cálculo | Mostrar "Se queda sin batería en el km X (cerca de …)" y no mostrar SOC negativo. La curva se corta en 0 % |
+| A | Un plan inviable muestra "llega con −25 %". Técnicamente dice que no alcanza, pero se lee como un error del cálculo | ✅ **Hecho (2026-09-27).** `RoutePlan.depletion` (`batteryDepletion`, interpolado donde el SOC cruza 0 %). La UI muestra "Se queda sin batería en el km X, cerca de …" (Photon, por `reversePlaceFn`) junto al motivo; donde iba un SOC negativo dice "Sin batería"; la curva marca el punto con una línea roja y no baja de 0 % |
 | B | Con Mapbox la energía de esta ruta es 66,8 kWh (subida 9117 m). Con el perfil aproximado da 59,7 kWh. Si la subida está inflada, el plan puede pedir una parada más o cargar de más | Contrastar la subida con un GPS real (O4, opcional). Si sobra, subir la histéresis o el suavizado de `ModelParameters.elevation.dense` |
 | C | En modo "más rápido" el plan llega justo a la reserva (15,5 % contra 15 %): carga el mínimo en la última parada. Es lo esperado, pero se siente al límite | Opción de "margen extra al llegar", o usar "SOC de llegada" mayor que la reserva cuando el usuario lo pida |
 | D | No hay un caso grabado con la ruta real y el listado real de Blaze | Cuando haya key: grabar la ruta y el listado (sin la key) como fixture, y agregarlo a la caracterización del v2 |

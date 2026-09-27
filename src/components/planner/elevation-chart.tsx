@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { RoutePlan } from "@/domain/types";
-import { formatElevation, formatKm, formatPct } from "@/lib/format";
+import { formatElevation, formatKm, formatSoc } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 
 export function ElevationChart({ plan }: { plan: RoutePlan }) {
@@ -75,7 +75,7 @@ export function ElevationChart({ plan }: { plan: RoutePlan }) {
                     <div>
                       {formatKm(d.km, 1)} · {formatElevation(d.elev)}
                     </div>
-                    <div className="text-accent">{formatPct(d.soc)}</div>
+                    <div className="text-accent">{formatSoc(d.soc)}</div>
                   </div>
                 );
               }}

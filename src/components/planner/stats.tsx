@@ -9,7 +9,9 @@ import {
   formatKwhPer100,
   formatMinutes,
   formatPct,
+  formatSoc,
 } from "@/lib/format";
+import { DepletionNotice } from "./depletion-notice";
 
 const ENERGY_PARAM_LABEL: Record<string, string> = {
   dragAreaM2: "aerodinámica",
@@ -50,7 +52,7 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
         />
         <Stat
           label="Llegada"
-          value={formatPct(plan.arrivalSoc)}
+          value={formatSoc(plan.arrivalSoc)}
           tone={
             plan.arrivalSoc < plan.safetyPct
               ? "danger"
@@ -130,6 +132,7 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
         </div>
       ) : !plan.feasible ? (
         <div className="rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
+          {plan.depletion ? <DepletionNotice depletion={plan.depletion} /> : null}
           {plan.infeasibleReason ?? "No es posible completar el viaje con el margen actual."}
         </div>
       ) : null}
@@ -144,7 +147,7 @@ export function PlanPeek({ plan }: { plan: RoutePlan }) {
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-mono text-sm tabular-nums text-fg">
           {formatKm(plan.distanceKm)} · {formatMinutes(plan.totalMinutes)} ·{" "}
-          {formatPct(plan.arrivalSoc)}
+          {formatSoc(plan.arrivalSoc)}
         </p>
         <p className="font-mono text-xs tabular-nums text-muted">
           {formatKwhPer100(plan.avgKwhPer100km)}

@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Battery, Map as MapIcon } from "lucide-react";
 import { usePlanner } from "@/lib/store";
-import { formatKm, formatPct } from "@/lib/format";
+import { formatKm, formatSoc } from "@/lib/format";
 import { MapPane } from "@/components/map/map-pane";
 import { StationHub } from "./station-hub";
 import { TripResults, TripSetup } from "./trip-panel";
@@ -67,7 +67,7 @@ export function PlannerApp() {
           <div className="flex items-center gap-2 text-xs text-muted">
             <Battery className="size-3.5 text-accent" />
             <span className="font-mono tabular-nums text-fg">
-              {formatKm(hoverSample.km, 1)} · {formatPct(hoverSample.soc)}
+              {formatKm(hoverSample.km, 1)} · {formatSoc(hoverSample.soc)}
             </span>
           </div>
         </div>
