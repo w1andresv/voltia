@@ -42,14 +42,14 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 | F0 | Caracterización, CI, hook de sesión | ✅ | — (la cassette real se omitió por decisión, P1) |
 | F1 | Contratos, puertos, servicio | ✅ | — |
 | F2a | Datos crudos del proveedor; muestreo y elevación en el dominio | ✅ | — |
-| F2b | Elevación configurable (`ELEVATION_SOURCE`) | ✅ | `mapbox-terrain` por defecto, caché sin vencimiento, túneles, pendiente máxima y error tipado. Tileset verificado con datos reales (O4, `mediciones/elevacion-2026-09-26.md`); falta el costo (O6) |
+| F2b | Elevación configurable (`ELEVATION_SOURCE`) | ✅ | `mapbox-terrain` por defecto, caché sin vencimiento, túneles, pendiente máxima y error tipado. Tileset verificado y zoom 11 @2x en producción (la mitad de consultas; `mediciones/terreno-dem-2026-09-27.md`). Falta confirmar en el panel de Mapbox que @2x cuenta como una consulta (O6) |
 | F3 | SOC separado de la energía | ✅ | — |
 | F4 | Corredor, compatibilidad, curva de carga | ✅ | Desvíos medidos detrás de `DETOUR_SOURCE=matrix` (ADR-0013); activarlo tras revisar el cupo (O6) |
 | F5 | Energía v2 y perfil de velocidad (`ENERGY_ENGINE`) | 🟡 | Medir en sombra, publicar Cd·A por vehículo (`db:seed`) y calibración (0 km/h en tramos, desvío local, tope por vía y frío: ✅ sesión A) |
 | F6 | Quitar los multiplicadores | ⏳ | Todo (depende de F5 medido) |
-| F7 | Planificador por programación dinámica (`PLANNER_ENGINE`) | 🟡 | Medir en sombra y activar `v2` |
+| F7 | Planificador por programación dinámica (`PLANNER_ENGINE`) | 🟡 | Extra de 10 % en carga rápida hecho (ADR-0007). Falta medir en sombra y activar `v2` |
 | F8 | Composición, gráficas, pasada 2, snapshot | 🟡 | Activar `v2` (D2). La verificación al compartir está hecha |
-| FB | Blaze como fuente de electrolineras del motor v2 | 🟡 | Listado, detalle de paradas y ficha hechos; falta `BLAZE_API_KEY` y `npm run blaze:check` con la key real |
+| FB | Blaze como fuente de electrolineras del motor v2 | 🟡 | Listado, detalle de paradas, ficha y auditoría (2026-09-27) hechos. Falta `BLAZE_API_KEY` en Vercel y revisar `npm run blaze:check` (etiquetas de conector, campos) |
 | F9 | Limpieza y paso a `main` | ⏳ | Todo |
 
 **Qué ve hoy un usuario:** con las variables por defecto (`PLANNER_ENGINE=legacy`, `ENERGY_ENGINE=legacy`, `ELEVATION_SOURCE=mapbox-terrain`) la app planifica con el motor v1, pero con la elevación densa de Mapbox. Desde 2026-09-27 cualquiera puede elegir v2 en el selector del planificador (`ENGINE_PREVIEW_EMAILS=*`). Lo que cambió para todos:
