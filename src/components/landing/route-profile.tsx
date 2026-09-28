@@ -270,10 +270,10 @@ export function RouteProfile() {
       </div>
 
       <figcaption className="text-xs leading-relaxed text-muted">
-        Calculado con el planificador v2 y el modelo de energía v2 de EV-on-way: sale al 100 %, 1
-        pasajero, margen normal, estrategia más rápida. Vía real de Overture Maps y altura de
-        Copernicus GLO-30 cada 100 m; estaciones de Blaze en Santana y Tunja con ubicación
-        aproximada. En el planificador la altura sale de Mapbox, así que los números pueden variar.
+        Calculado con el motor v2 de EV-on-way sobre la carretera real, con la altura del terreno
+        cada 100 m: sale al 100 %, 1 pasajero, margen normal, estrategia más rápida. Estaciones de
+        carga rápida en Santana y Tunja. Es un ejemplo; tu viaje puede variar según el día, el clima
+        y las estaciones disponibles.
       </figcaption>
     </figure>
   );

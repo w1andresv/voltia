@@ -24,11 +24,11 @@ const ENGINES: {
     id: "v1",
     tag: "Actual · por defecto",
     title: "Planificador por puntaje",
-    when: "El motor con el que nació EV-on-way. Es el que responde en el servidor si no se elige otro.",
+    when: "El motor con el que nació EV-on-way y el que se usa por defecto.",
     facts: [
       [
         "Estaciones",
-        "Dataset propio en Postgres: OSM, SIVEEIC, comunidad y catálogo. Se refresca cada 6 h.",
+        "Mapa de electrolineras propio, con aportes de la comunidad. Se actualiza cada 6 h.",
       ],
       ["Energía", "Física base × ciclo 1,14 × estilo de manejo × clima."],
       ["Paradas", "Avanza estación por estación y elige la de mejor puntaje. Máximo 7."],
@@ -39,11 +39,11 @@ const ENGINES: {
     id: "v2",
     tag: "Nuevo",
     title: "Planificador por programación dinámica",
-    when: "El motor nuevo: física por tramo, electrolineras de Blaze y un plan óptimo de paradas.",
+    when: "El motor nuevo: física por tramo, electrolineras con estado en vivo y un plan óptimo de paradas.",
     facts: [
       [
         "Estaciones",
-        "API de Blaze: el listado para planear y el detalle en vivo solo de las paradas elegidas.",
+        "Red de electrolineras con estado en vivo; antes de confirmar el plan revisa las paradas elegidas.",
       ],
       [
         "Energía",
@@ -51,7 +51,7 @@ const ENGINES: {
       ],
       [
         "Paradas",
-        "Busca el mejor plan sobre estación × SOC de salida, en pasos de 1 %. En carga rápida carga 10 puntos extra, hasta 90 % o el tope del vehículo.",
+        "Compara todas las combinaciones de paradas y cuánto cargar en cada una. En carga rápida carga 10 puntos extra, hasta 90 % o el tope del vehículo.",
       ],
       ["Verificación", "Segunda pasada con la ruta real que pasa por las paradas."],
     ],
@@ -63,55 +63,59 @@ type Step = { name: string; both?: string; v1?: string; v2?: string };
 const STEPS: Step[] = [
   {
     name: "Origen y destino",
-    both: "Búsqueda de lugares con Photon (OpenStreetMap) o un toque en el mapa.",
+    both: "Escribes el lugar o lo tocas en el mapa.",
   },
   {
     name: "Electrolineras",
-    v1: "Dataset propio en Postgres.",
-    v2: "Blaze GET /stations, en caché 15 min.",
+    v1: "Mapa de electrolineras propio, actualizado cada 6 h.",
+    v2: "Red de electrolineras con estado en vivo, actualizada cada 15 min.",
   },
-  { name: "Ruta", both: "Mapbox Directions con alternativas y la geometría completa." },
+  { name: "Ruta", both: "Rutas alternativas por carretera, incluida una sin peajes." },
   {
     name: "Elevación",
-    both: "Mapbox Terrain-RGB zoom 11 @2x, un punto cada 100 m.",
+    both: "Altura del terreno cada 100 m: cada subida y bajada cuenta.",
   },
-  { name: "Clima", both: "Open-Meteo: temperatura y viento en el corredor." },
+  { name: "Clima", both: "Temperatura y viento en el camino." },
   {
     name: "Energía",
-    v1: "annotateEnergy con multiplicadores.",
-    v2: "energyProfileForRoute: física cada 100 m.",
+    v1: "Consumo base ajustado por estilo de manejo y clima.",
+    v2: "Física tramo a tramo: aire, rodadura, pendiente y aceleración.",
   },
   {
     name: "Paradas",
-    v1: "pickStops: la mejor estación, una a la vez.",
-    v2: "planCharging: todas las combinaciones de parada y carga.",
+    v1: "Elige la mejor estación, una a la vez.",
+    v2: "Compara todas las combinaciones de paradas y cargas.",
   },
   {
     name: "Resultado",
     v1: "Plan directo; si no alcanza, pide salir con más carga.",
-    v2: "Detalle Blaze de las paradas y pasada 2. Si no alcanza, muestra el km donde se agota la batería.",
+    v2: "Revisa las paradas y recalcula con la ruta real. Si no alcanza, muestra el km donde se agota la batería.",
   },
 ];
 
 const COMPARISON: [string, string, string][] = [
-  ["Electrolineras", "Dataset consolidado en Postgres", "Blaze /stations y /stations/{id}"],
+  ["Electrolineras", "Mapa propio, actualizado cada 6 h", "Red con estado en vivo, cada 15 min"],
   [
     "Energía",
     "Física × ciclo 1,14 × estilo × clima",
     "Aire, rodadura, pendiente y aceleración por tramo",
   ],
-  ["Paradas", "Puntaje, una a la vez, máximo 7", "Estado = (estación, SOC de salida)"],
+  [
+    "Paradas",
+    "La mejor estación, una a la vez, máximo 7",
+    "Todas las combinaciones de parada y carga",
+  ],
   [
     "Cuánto cargar",
-    "Lo necesario + 2 o 4 puntos; en DC al menos llegada + 8",
-    "Lo óptimo; en DC lo necesario + 10, hasta 90 % o el tope del vehículo",
+    "Lo necesario + 2 o 4 puntos; en carga rápida al menos 8 más de lo que llegas",
+    "Lo óptimo; en carga rápida 10 puntos extra, hasta 90 % o el tope del vehículo",
   ],
   [
     "Si no alcanza",
     "Carga previa para llegar a la primera estación",
-    "Búsqueda binaria de la carga previa y km donde se agota la batería",
+    "Con cuánto salir y en qué km se agota la batería",
   ],
-  ["Verificación", "—", "Detalle de Blaze de las paradas y segunda pasada con la ruta real"],
+  ["Verificación", "—", "Revisa las paradas elegidas y recalcula con la ruta real"],
 ];
 
 const tone: Record<Engine, { text: string; soft: string; button: string; border: string }> = {
@@ -224,8 +228,8 @@ export function Landing() {
             label="Los dos motores"
             title="Misma ruta, dos formas de decidir"
           >
-            Los dos reciben el mismo vehículo, las mismas condiciones del viaje y la misma ruta de
-            Mapbox. La dirección elige el motor: <code className="font-mono text-sm">/v1</code> o{" "}
+            Los dos reciben el mismo vehículo, las mismas condiciones del viaje y la misma ruta. La
+            dirección elige el motor: <code className="font-mono text-sm">/v1</code> o{" "}
             <code className="font-mono text-sm">/v2</code>.
           </SectionHead>
           <div className="grid gap-5 md:grid-cols-2">
