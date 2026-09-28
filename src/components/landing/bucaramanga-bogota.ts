@@ -11,6 +11,21 @@
 export const BUC_BOG = {
   distanceKm: 421.9,
   vehicle: "MG S5 EV Comfort",
+  /** Vehículo del catálogo con que se calculó (sus datos salen de `catalogById`). */
+  vehicleId: "mg-s5-ev-comfort",
+  /** Condiciones del cálculo, tal como se pasaron al planificador (`TripConditions`). */
+  conditions: {
+    passengers: 1,
+    luggageKg: 30,
+    initialSoc: 100,
+    arrivalSoc: 10,
+    ac: "normal",
+    temperatureC: 20,
+    drivingStyle: "normal",
+    safetyMode: "normal",
+    planningMode: "fastest",
+    regenLevel: "medium",
+  },
   initialSoc: 100,
   arrivalSoc: 26.0,
   energyKwh: 69.7,

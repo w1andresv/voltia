@@ -7,6 +7,7 @@ import {
   formatPct,
 } from "@/lib/format";
 import { BUC_BOG } from "./bucaramanga-bogota";
+import { TripFacts } from "./trip-facts";
 
 /**
  * Gráfico del landing: Bucaramanga → Bogotá con el MG S5 EV. Altura de la vía
@@ -269,11 +270,13 @@ export function RouteProfile() {
         />
       </div>
 
+      <TripFacts />
+
       <figcaption className="text-xs leading-relaxed text-muted">
         Calculado con el motor v2 de EV-on-way sobre la carretera real, con la altura del terreno
-        cada 100 m: sale al 100 %, 1 pasajero, margen normal, estrategia más rápida. Estaciones de
-        carga rápida en Santana y Tunja. Es un ejemplo; tu viaje puede variar según el día, el clima
-        y las estaciones disponibles.
+        cada 100 m, el vehículo y las condiciones de arriba. Estaciones de carga rápida en Santana y
+        Tunja. Es un ejemplo; tu viaje puede variar según el día, el clima y las estaciones
+        disponibles.
       </figcaption>
     </figure>
   );
