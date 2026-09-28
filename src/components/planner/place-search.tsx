@@ -8,14 +8,9 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { suppressMapClicks } from "./map-click";
 
-/** El toque que elige un resultado también genera un click fantasma en lo que quede debajo (p.ej. "Mi ubicación"); lo absorbemos. */
-function swallowGhostClick() {
-  const swallow = (e: MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-  document.addEventListener("click", swallow, { capture: true, once: true });
-  setTimeout(() => document.removeEventListener("click", swallow, true), 400);
+/** Celular: la lista se abre bajo el campo y el teclado tapa buena parte de la pantalla. */
+function isNarrow(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 }
 
 export function PlaceSearch({
@@ -73,27 +68,38 @@ export function PlaceSearch({
     return () => setPlaceSearchOpen(false);
   }, [showList, setPlaceSearchOpen]);
 
+  // Fuera de la lista: apoyar el dedo solo bloquea el mapa; la lista se cierra con un
+  // toque completo (click). Así deslizar la página para ver más resultados no la cierra.
   useEffect(() => {
     if (!showList) return;
+    const outside = (e: Event) => !box.current?.contains(e.target as Node);
     const onDown = (e: PointerEvent) => {
-      if (box.current?.contains(e.target as Node)) return;
-      suppressMapClicks(900);
-      setOpen(false);
+      if (outside(e)) suppressMapClicks(900);
+    };
+    const onClick = (e: MouseEvent) => {
+      if (outside(e)) setOpen(false);
     };
     document.addEventListener("pointerdown", onDown, true);
-    return () => document.removeEventListener("pointerdown", onDown, true);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("click", onClick, true);
+    };
   }, [showList]);
 
   function pick(p: Place) {
     suppressMapClicks(900);
-    swallowGhostClick();
     onChange(p);
     setQ(p.label);
     setOpen(false);
   }
 
   return (
-    <div ref={box} className={cn("relative", showList && "z-40")} onPointerDown={() => suppressMapClicks(900)}>
+    <div
+      ref={box}
+      className={cn("relative scroll-mt-16", showList && "z-40")}
+      onPointerDown={() => suppressMapClicks(900)}
+    >
       <div className="relative">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
           {icon ?? <MapPin className="size-4" />}
@@ -113,6 +119,10 @@ export function PlaceSearch({
           className="pl-9 pr-9"
           onFocus={() => {
             suppressMapClicks(900);
+            // En celular, sube el campo al tope para que la lista quepa sobre el teclado.
+            if (isNarrow()) {
+              setTimeout(() => box.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 250);
+            }
             if (q.trim().length >= 2 && !(value && q === value.label)) setOpen(true);
           }}
           onChange={(e) => {
@@ -195,8 +205,13 @@ export function PlaceSearch({
                       "flex min-h-11 w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left",
                       i === hi ? "bg-accent-dim/50" : "hover:bg-surface",
                     )}
+                    // Se elige con el toque completo (click), no al apoyar el dedo: así se
+                    // puede deslizar la lista sin elegir. Con mouse, evita que el campo
+                    // pierda el foco antes del click.
                     onPointerDown={(e) => {
-                      e.preventDefault();
+                      if (e.pointerType === "mouse") e.preventDefault();
+                    }}
+                    onClick={(e) => {
                       e.stopPropagation();
                       pick(p);
                     }}
