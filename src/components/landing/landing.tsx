@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark, BrandName } from "@/components/brand/brand";
+import { GuideLink } from "@/components/guide/guide-link";
 import { RouteProfile } from "./route-profile";
 
 /**
@@ -72,7 +73,7 @@ const STEPS: Step[] = [
   { name: "Ruta", both: "Mapbox Directions con alternativas y la geometría completa." },
   {
     name: "Elevación",
-    both: "Mapbox Terrain-RGB zoom 11 @2x. Respaldo: Open-Meteo y OpenTopoData.",
+    both: "Mapbox Terrain-RGB zoom 11 @2x, un punto cada 100 m.",
   },
   { name: "Clima", both: "Open-Meteo: temperatura y viento en el corredor." },
   {
@@ -225,8 +226,7 @@ export function Landing() {
           >
             Los dos reciben el mismo vehículo, las mismas condiciones del viaje y la misma ruta de
             Mapbox. La dirección elige el motor: <code className="font-mono text-sm">/v1</code> o{" "}
-            <code className="font-mono text-sm">/v2</code>. Cada uno tiene una guía con su flujo
-            completo y una demo interactiva.
+            <code className="font-mono text-sm">/v2</code>.
           </SectionHead>
           <div className="grid gap-5 md:grid-cols-2">
             {ENGINES.map((e) => (
@@ -273,12 +273,12 @@ export function Landing() {
                 </dl>
                 <div className="relative flex flex-wrap items-center gap-x-5 gap-y-3">
                   <EngineButton engine={e.id}>Abrir planificador {e.id}</EngineButton>
-                  <Link
+                  <GuideLink
                     href={`/${e.id}/como-funciona`}
                     className={cn("text-sm font-semibold hover:underline", tone[e.id].text)}
                   >
                     Cómo funciona {e.id} →
-                  </Link>
+                  </GuideLink>
                 </div>
               </article>
             ))}

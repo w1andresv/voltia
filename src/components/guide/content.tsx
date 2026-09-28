@@ -85,7 +85,6 @@ const DIRECTIONS_LINES = [
     url: "https://api.mapbox.com/directions/v5/mapbox/driving/{lon,lat;lon,lat}\n      ?alternatives=true&geometries=geojson&overview=full&steps=true\n      &annotations=distance,duration,maxspeed[&exclude=toll|point(lon lat)]",
     note: "caché 90 s",
   },
-  { method: "GET", url: "https://router.project-osrm.org/route/v1/driving/…", note: "respaldo" },
 ];
 
 const WEATHER_LINE = {
@@ -286,7 +285,6 @@ export const GUIDE_V2: GuideContent = {
                   Normaliza cada ruta a muestras por distancia con velocidad, límite legal (
                   <Code>maxspeed</Code>), clase de vía y túneles.
                 </>,
-                "Si Mapbox falla o no hay token, usa OSRM.",
               ],
             },
           ],
@@ -308,7 +306,7 @@ export const GUIDE_V2: GuideContent = {
     },
     {
       actor: "server",
-      who: "Servidor → Mapbox (Open-Meteo de respaldo)",
+      who: "Servidor → Mapbox",
       title: "Perfil de elevación cada 100 m",
       blocks: [
         {
@@ -323,7 +321,6 @@ export const GUIDE_V2: GuideContent = {
               items: [
                 "Teselas Terrain-RGB a zoom 11 en 512 px (≈ 38 m por píxel): altura = −10000 + (R·65536 + G·256 + B) × 0,1 m.",
                 "Suavizado de 300 m, histéresis de 5 m para subida y bajada, túneles como recta y pendiente máxima 15 %.",
-                "Si falla: Open-Meteo con 96 puntos, y OpenTopoData de a una consulta por segundo.",
               ],
             },
           ],
@@ -335,11 +332,6 @@ export const GUIDE_V2: GuideContent = {
               method: "GET",
               url: "https://api.mapbox.com/v4/mapbox.terrain-rgb/11/{x}/{y}@2x.pngraw",
               note: "caché sin vencimiento, ~5–6 teselas/100 km nuevos",
-            },
-            {
-              method: "GET",
-              url: "https://api.open-meteo.com/v1/elevation?latitude=…&longitude=…",
-              note: "respaldo, lotes de 100",
             },
           ],
         },
@@ -496,7 +488,7 @@ export const GUIDE_V2: GuideContent = {
         },
         {
           kind: "text",
-          text: "Si ningún cargador de una parada está en servicio, se marca fuera de servicio y se replanifica una vez (con aviso). Si el detalle trae potencias distintas, también se replanifica. Si no responde, sigue el listado.",
+          text: "Si ningún cargador de una parada está en servicio, se marca fuera de servicio y se replanifica una vez (con aviso). Si el detalle trae potencias distintas, también se replanifica.",
         },
       ],
     },
@@ -583,23 +575,7 @@ export const GUIDE_V2: GuideContent = {
       "Elevación",
       "sin vencimiento",
     ],
-    [
-      "Mapbox",
-      "Matrix v1",
-      <>
-        Solo con <Code>DETOUR_SOURCE=matrix</Code>
-      </>,
-      "7 días",
-    ],
     ["Open-Meteo", <Code key="f">/v1/forecast</Code>, "Clima", "20 min"],
-    [
-      "Open-Meteo / OpenTopoData",
-      <>
-        <Code>/v1/elevation</Code>, <Code>/v1/aster30m</Code>
-      </>,
-      "Respaldo de elevación",
-      "sin vencimiento",
-    ],
   ],
   sources: (
     <>
@@ -696,7 +672,7 @@ export const GUIDE_V1: GuideContent = {
             {
               method: "POST",
               url: "https://overpass-api.de/api/interpreter",
-              note: "OSM (respaldo: overpass.kumi.systems)",
+              note: "OSM",
             },
             {
               method: "GET",
@@ -760,11 +736,6 @@ export const GUIDE_V1: GuideContent = {
                 <>
                   <Code>planTripFn</Code>: valida con zod y aplica el límite de consultas.
                 </>,
-                <>
-                  Con <Code>PLANNER_ENGINE=shadow</Code>, quien no elige motor recibe v1 y el
-                  servidor además calcula v2 para registrar diferencias en el log, sin cambiar la
-                  respuesta.
-                </>,
               ],
             },
           ],
@@ -788,7 +759,7 @@ export const GUIDE_V1: GuideContent = {
               ),
               items: [
                 "Ruta con alternativas, otra sin peajes y correcciones si una alternativa ataja por vías menores.",
-                "Muestras por distancia con velocidad, límite legal, clase de vía y túneles. OSRM de respaldo.",
+                "Muestras por distancia con velocidad, límite legal, clase de vía y túneles.",
               ],
             },
           ],
@@ -798,7 +769,7 @@ export const GUIDE_V1: GuideContent = {
     },
     {
       actor: "server",
-      who: "Servidor → Mapbox (Open-Meteo de respaldo)",
+      who: "Servidor → Mapbox",
       title: "Perfil de elevación cada 100 m",
       blocks: [
         {
@@ -812,11 +783,6 @@ export const GUIDE_V1: GuideContent = {
               method: "GET",
               url: "https://api.mapbox.com/v4/mapbox.terrain-rgb/11/{x}/{y}@2x.pngraw",
               note: "caché sin vencimiento",
-            },
-            {
-              method: "GET",
-              url: "https://api.open-meteo.com/v1/elevation?latitude=…&longitude=…",
-              note: "respaldo",
             },
           ],
         },
@@ -841,7 +807,7 @@ export const GUIDE_V1: GuideContent = {
               title: "Algoritmo",
               items: [
                 "A ≤ 12 km de alguna ruta y elegible en el dataset.",
-                "Aceptada según la fuente: OSM, SIVEEIC y PlugShare sí; comunidad solo aprobada; catálogo solo verificada.",
+                "Aceptada según la fuente: OSM y SIVEEIC sí; comunidad solo aprobada; catálogo solo verificada.",
                 "Compatible con el vehículo (o con un adaptador verificado) y no fuera de servicio.",
               ],
             },
@@ -988,14 +954,7 @@ export const GUIDE_V1: GuideContent = {
       "Elevación",
       "sin vencimiento",
     ],
-    [
-      "Open-Meteo",
-      <>
-        <Code>/v1/forecast</Code>, <Code>/v1/elevation</Code>
-      </>,
-      "Clima; respaldo de elevación",
-      "20 min; sin vencimiento",
-    ],
+    ["Open-Meteo", <Code key="f">/v1/forecast</Code>, "Clima", "20 min"],
   ],
   comparison: [
     [
