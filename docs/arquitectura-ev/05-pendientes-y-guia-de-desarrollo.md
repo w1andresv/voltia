@@ -451,6 +451,8 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
 
 ### 5.6 F8 · Pasada 2 al guardar y compartir; activar v2
 
+> **Pasada 2 en la sesión (2026-09-29):** al planificar con `v2`, el servidor deja la ruta verificada en `geo.verifiedRoutes` (el mismo campo de los viajes compartidos). El navegador recalcula con `computePlansFromSnapshot` al cambiar condiciones, así que el plan sigue sobre la ruta real y conserva su verificación. Si con las condiciones nuevas las paradas verificadas ya no alcanzan y el plan de la pasada 1 sí, se muestra ese, sin marca de verificado. Un viaje guardado desde una sesión v2 ya trae la verificación, y compartirlo no vuelve a consultar rutas.
+
 #### 5.6.1 Verificar al compartir (D6) — ✅ hecho (sesión B)
 - **Contexto:** la pasada 2 solo corre al planificar con `v2`. Un viaje guardado conserva los datos de la pasada 1 (ADR-0010). Por D6, se verifica **al compartir**: el link público muestra el plan verificado; guardar no gasta consultas extra.
 - **Pasos:**

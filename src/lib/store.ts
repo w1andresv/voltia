@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { computePlans } from "@/domain/ev/compute-plan";
+import { computePlansFromSnapshot, type SnapshotInputs } from "@/domain/ev/compute-plan";
 import { uniqueByProximity } from "@/domain/geo";
 import {
   DEFAULT_CONDITIONS,
@@ -150,20 +150,9 @@ export function rankedPlansFor(
   const destination = s.destination;
   if (!geo?.routes.length || !origin || !destination) return [];
   const vehicle = s.vehicles.find((v) => v.id === s.selectedVehicleId) ?? VEHICLE_CATALOG[0]!;
-  return computePlans(
-    {
-      routes: geo.routes,
-      chargers: geo.chargers,
-      weather: geo.weather,
-      origin,
-      destination,
-      detours: geo.detours,
-    },
-    vehicle,
-    conditions,
-    geo.plannerEngine,
-    geo.energyEngine,
-  ).plans;
+  // El `geo` es el snapshot que respondió el servidor: si trae la pasada 2, se conserva.
+  return computePlansFromSnapshot(geo as SnapshotInputs, { origin, destination }, vehicle, conditions)
+    .plans;
 }
 
 function withRecomputedPlans(

@@ -236,6 +236,31 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
     expect(plan.distanceKm).toBeCloseTo(live.distanceKm, 9);
   });
 
+  it("en la sesión: el snapshot trae la pasada 2 y recalcular en el navegador la conserva", async () => {
+    const req = request();
+    const { createPlanningService } = await import("@/application/container");
+    const { response } = await createPlanningService({
+      stations: { getDataset: async () => syntheticStations() },
+      engineMode: "v2",
+      clock: () => new Date("2026-09-01T12:00:00Z"),
+    }).plan(req);
+    expect(response.plans[0]!.verification?.status).toBe("verified");
+    expect(Object.keys(response.geo.verifiedRoutes ?? {})).toEqual([response.plans[0]!.id]);
+
+    // Lo que hace el navegador al cambiar condiciones, con las mismas: el mismo resultado.
+    const { parsePlanningSnapshot } = await import("@/domain/ev/contracts/snapshot");
+    const { computePlansFromSnapshot } = await import("@/domain/ev/compute-plan");
+    const geo = parsePlanningSnapshot(JSON.parse(JSON.stringify(response.geo)))!;
+    const again = computePlansFromSnapshot(
+      geo,
+      req,
+      req.vehicle as Vehicle,
+      req.conditions as TripConditions,
+    );
+    expect(normalized(again.plans)).toBe(normalized(response.plans));
+    expect(again.selectedId).toBe(response.selectedId);
+  });
+
   it("DETOUR_SOURCE=matrix: las paradas usan el desvío medido y el snapshot lo reproduce", async () => {
     vi.resetModules();
     vi.stubEnv("DETOUR_SOURCE", "matrix");

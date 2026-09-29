@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { catalogVehicle } from "@/test-support/scenarios";
 import { buildPlan, rankPlans } from "../planner";
 import type { Charger, Place, RawRoute, TripConditions } from "../types";
-import { buildPlans, computePlans, type PlanInputs } from "./compute-plan";
+import {
+  buildPlans,
+  computePlans,
+  computePlansFromSnapshot,
+  type PlanInputs,
+} from "./compute-plan";
 
 function route(id: string, distanceKm: number, climbM = 0): RawRoute {
   const n = Math.round(distanceKm / 5) + 1;
@@ -96,5 +101,40 @@ describe("computePlans", () => {
       plans: [],
       selectedId: "",
     });
+  });
+});
+
+describe("computePlansFromSnapshot con la pasada 2", () => {
+  const snapshot = (verifiedIds: string[] | null) => ({
+    routes: inputs.routes,
+    chargers: inputs.chargers,
+    weather: null,
+    plannerEngine: "v2" as const,
+    energyEngine: "legacy" as const,
+    verifiedRoutes: {
+      "r-flat": {
+        route: route("r-flat", 302),
+        chargerIds: verifiedIds,
+        verification: { status: "verified" as const, iterations: 1, baseDistanceKm: 300 },
+      },
+    },
+  });
+  const places = { origin, destination };
+
+  it("arma el plan sobre la ruta verificada y conserva la verificación", () => {
+    const out = computePlansFromSnapshot(snapshot(["c150"]), places, vehicle, conditions);
+    const plan = out.plans.find((p) => p.id === "r-flat")!;
+    expect(plan.distanceKm).toBe(302);
+    expect(plan.verification?.status).toBe("verified");
+  });
+
+  it("si con estas condiciones las paradas verificadas no alcanzan, usa la pasada 1 sin verificación", () => {
+    // La verificación se hizo sin paradas; con 60 % no se llegan los 300 km sin cargar.
+    const out = computePlansFromSnapshot(snapshot([]), places, vehicle, conditions);
+    const plan = out.plans.find((p) => p.id === "r-flat")!;
+    expect(plan.feasible).toBe(true);
+    expect(plan.stops.map((s) => s.charger.id)).toEqual(["c150"]);
+    expect(plan.distanceKm).toBe(300);
+    expect(plan.verification).toBeUndefined();
   });
 });

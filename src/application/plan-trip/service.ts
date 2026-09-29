@@ -41,7 +41,7 @@ import { measureDetours } from "./detours";
 import { selectRoutes } from "./route-selection";
 import { buildEnergyShadowReport, formatEnergyShadowReport } from "./energy-shadow-report";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
-import { verifyPlan, verifyPlanDetailed } from "./verify-plan";
+import { verifyPlanDetailed } from "./verify-plan";
 import { checkStopDetails, offlineStopText } from "./stop-details";
 import { formatStationFunnel, stationFunnel } from "./station-funnel";
 import type { StationDetails } from "@/domain/ports/station-details";
@@ -256,8 +256,10 @@ export class EVRoutePlanningService {
       }
     }
     // Pasada 2 solo con el v2: una a tres rutas más por plan, y solo para el recomendado.
+    // La ruta verificada queda en el snapshot: el navegador recalcula sobre ella al cambiar condiciones.
+    let verifiedRoutes: PlanningSnapshot["verifiedRoutes"];
     if (mode === "v2" && ranked[0]?.stops.length) {
-      const verified = await verifyPlan(
+      const out = await verifyPlanDetailed(
         {
           routing,
           withElevation: (r) => this.withElevation(r),
@@ -273,6 +275,16 @@ export class EVRoutePlanningService {
           energyEngine: energy,
         },
       );
+      const verified = out.plan;
+      if (out.route && verified.verification && verified.verification.status !== "failed") {
+        verifiedRoutes = {
+          [verified.id]: {
+            route: out.route,
+            chargerIds: out.chargerIds ?? null,
+            verification: verified.verification,
+          },
+        };
+      }
       const describe = (p: RoutePlan) =>
         `${p.stops.map((s) => s.charger.name).join(" · ") || "sin paradas"}` +
         (p.departureCharge ? ` (+${p.departureCharge.additionalPct} % antes de salir)` : "") +
@@ -309,6 +321,7 @@ export class EVRoutePlanningService {
           stationsVersion: dataset.version,
           ...(elevationUnavailable ? { dataQuality: { elevation: "unavailable" as const } } : {}),
           ...(detours ? { detours } : {}),
+          ...(verifiedRoutes ? { verifiedRoutes } : {}),
         },
         plans: ranked,
         selectedId,

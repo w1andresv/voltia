@@ -77,13 +77,22 @@ export function computePlans(
   return { plans, selectedId: plans[0]?.id ?? "" };
 }
 
+/** Lo que hace falta de un snapshot para recalcular sus planes (también el `geo` del navegador). */
+export type SnapshotInputs = Pick<
+  PlanningSnapshot,
+  "routes" | "chargers" | "weather" | "detours" | "energyEngine" | "verifiedRoutes"
+> & { plannerEngine?: PlannerEngine };
+
 /**
- * Planes de un viaje guardado, sin consultar proveedores. Si el snapshot trae
- * la pasada 2 de alguna ruta (viaje compartido, D6), ese plan se arma sobre la
- * ruta real verificada y con las mismas estaciones, y conserva su verificación.
+ * Planes sin consultar proveedores: de un viaje guardado o del navegador al
+ * cambiar condiciones. Si el snapshot trae la pasada 2 de alguna ruta, ese plan
+ * se arma sobre la ruta real verificada, con las mismas estaciones, y conserva
+ * su verificación. Si con las condiciones nuevas esas estaciones ya no alcanzan
+ * pero el plan de la pasada 1 sí, se usa ese, sin verificación: la ruta
+ * verificada era para otras paradas.
  */
 export function computePlansFromSnapshot(
-  snapshot: PlanningSnapshot,
+  snapshot: SnapshotInputs,
   places: { origin: Place; destination: Place },
   vehicle: Vehicle,
   conditions: TripConditions,
@@ -96,7 +105,7 @@ export function computePlansFromSnapshot(
     destination: places.destination,
     detours: snapshot.detours,
   };
-  const engine = snapshot.plannerEngine;
+  const engine = snapshot.plannerEngine ?? "legacy";
   const energy = snapshot.energyEngine ?? "legacy";
   const plans = buildPlans(inputs, vehicle, conditions, engine, energy).map((plan) => {
     const v = snapshot.verifiedRoutes?.[plan.id];
@@ -113,6 +122,7 @@ export function computePlansFromSnapshot(
       engine,
       energyEngine: energy,
     });
+    if (!verified.feasible && plan.feasible) return plan;
     return { ...verified, verification: v.verification };
   });
   const ranked = rankPlans(plans, conditions.planningMode);
