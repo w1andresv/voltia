@@ -574,10 +574,10 @@ Sin la cassette real (P1 omitido), se prueban sobre la ruta **sintética** (`src
    - `geo.plannerEngine` y `geo.energyEngine` quedan solo para leer snapshots viejos.
 3. **Mover lo que queda** de `src/domain/planner.ts` (armado del `RoutePlan` e itinerario) y de `src/domain/plan/` (`stops-v2`, `presentation`: avisos de adaptador y orden de rutas) a `src/domain/ev/compute-plan.ts` o a módulos de `src/domain/ev/`. Objetivo: `src/domain/planner.ts` desaparece.
 4. **Documentación:**
-   - reescribir `docs/calculo-consumo-energia.md` con el modelo v2 (fórmulas de §5.4, perfil de velocidad, parámetros y fuentes);
+   - el modelo v2 ya está documentado en `docs/calculo-consumo-energia-v2.md` (2026-09-29): al borrar el anterior, reemplazar `docs/calculo-consumo-energia.md` por ese;
    - actualizar `README.md` si cita el modelo anterior.
 5. **Calibración:** contrato `TripObservation` definido (§5.8).
-6. **Cobertura:** ≥ umbrales (80/80/80/70) sobre `src/domain/ev`. Revisar con `npm run test:coverage` y el reporte en `coverage/`.
+6. **Cobertura:** ≥ umbrales (80/80/80/70) sobre `src/domain/ev`. Revisar con `npm run test:coverage` y el reporte en `coverage/`. Medido el 2026-09-29 sobre `src/domain`: 94,6 % sentencias, 83,9 % ramas, 97,4 % funciones y 96,1 % líneas.
 7. **Invariantes e informe** (§5.9) en verde.
 8. **Viajes guardados:** los snapshots con `schemaVersion: 1` siguen siendo válidos. Si F6 o F9 cambian el formato de `RawRoute` (p. ej. `legBoundariesKm`, `roadTier`, `structures`), esos campos son opcionales: no hace falta migrar. Si se sube `SNAPSHOT_SCHEMA_VERSION`, los viajes viejos se recalculan con datos de hoy (ya soportado).
 9. **Vercel:** después del paso a `main`, quitar las variables que ya no existen (`PLANNER_ENGINE`, `ENERGY_ENGINE` si se borraron).

@@ -1,5 +1,7 @@
 # Cálculo de consumo de energía
 
+> Este es el modelo **anterior** (`ENERGY_ENGINE=legacy`, el valor por defecto mientras no se active la v2). El modelo v2, física sin multiplicadores, está en [calculo-consumo-energia-v2.md](./calculo-consumo-energia-v2.md). En F9 este documento se reemplaza por ese.
+
 La ruta no usa los kWh/100 km de ficha como consumo del viaje. Cada tramo llama a `segmentEnergyKwh` en `src/domain/energy.ts`. Esa función devuelve los kWh netos que salen de la batería en ese tramo. El planificador la usa para el estado de carga, las paradas y la gráfica.
 
 Hay dos motores. Si el vehículo tiene consumo manual (`consumptionManual` y `consumptionKwhPer100km` mayor que 0), entra `manualSlice`. Si no, entra `physicsSlice`. Los dos devuelven la misma forma.
