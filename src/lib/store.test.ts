@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LEGACY_V2_CATALOG } from "@/domain/legacy-catalog";
 import { makeVehicle } from "@/domain/user/test-fixtures";
 import { GUEST_KEY } from "@/infrastructure/user-data/guest-storage";
-import { migratePlannerState, storedRegenLevel } from "./store";
+import { DEFAULT_CONDITIONS } from "@/domain/types";
+import { catalogVehicle } from "@/test-support/scenarios";
+import { minimalSnapshot } from "@/test-support/snapshot-fixture";
+import type { LastTrip } from "./last-trip";
+import { migratePlannerState, storedRegenLevel, usePlanner } from "./store";
 
 let data: Map<string, string>;
 beforeEach(() => {
@@ -83,5 +87,40 @@ describe("storedRegenLevel", () => {
     expect(storedRegenLevel({ regenPct: 70 }, undefined)).toBe("medium");
     expect(storedRegenLevel(undefined, 3)).toBe("medium");
     expect(storedRegenLevel({ regenLevel: "turbo" }, 3)).toBe("medium");
+  });
+});
+
+describe("restoreTrip", () => {
+  function lastTrip(overrides: Partial<LastTrip> = {}): LastTrip {
+    const snapshot = minimalSnapshot();
+    return {
+      savedAt: "2026-09-29T12:00:00.000Z",
+      origin: { label: "A", lat: 7, lon: -73 },
+      destination: { label: "B", lat: 7 - 10 / 111, lon: -73 },
+      waypoints: [],
+      vehicle: { ...catalogVehicle("mg-s5-ev-comfort"), id: "solo-en-el-viaje" },
+      conditions: { ...DEFAULT_CONDITIONS, initialSoc: 70 },
+      geo: { routes: snapshot.routes, chargers: snapshot.chargers, weather: null, warnings: [] },
+      selectedPlanId: "route-0",
+      ...overrides,
+    };
+  }
+
+  it("vuelve a mostrar el viaje guardado y recalcula sus planes sin consultar proveedores", () => {
+    usePlanner.getState().restoreTrip(lastTrip());
+    const s = usePlanner.getState();
+    expect(s.origin?.label).toBe("A");
+    expect(s.destination?.label).toBe("B");
+    expect(s.conditions.initialSoc).toBe(70);
+    expect(s.plans.map((p) => p.id)).toEqual(["route-0"]);
+    expect(s.selectedPlanId).toBe("route-0");
+    // El vehículo del viaje no está en la lista: entra como temporal.
+    expect(s.selectedVehicle().id).toBe("solo-en-el-viaje");
+    expect(s.tempVehicle?.id).toBe("solo-en-el-viaje");
+  });
+
+  it("si la ruta elegida ya no está, queda la primera", () => {
+    usePlanner.getState().restoreTrip(lastTrip({ selectedPlanId: "otra" }));
+    expect(usePlanner.getState().selectedPlanId).toBe("route-0");
   });
 });

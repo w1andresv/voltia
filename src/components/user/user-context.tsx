@@ -35,6 +35,7 @@ import {
   restorePendingSave,
 } from "@/infrastructure/user-data/save-preference";
 import { getBrowserSupabase } from "@/infrastructure/supabase/browser";
+import { forgetOfflineData } from "@/lib/pwa";
 import { usePlanner } from "@/lib/store";
 import { importGuestDataFn } from "@/server/actions/import-guest-data";
 import { listCatalogVehiclesFn } from "@/server/actions/catalog";
@@ -249,6 +250,7 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
   const discardGuestData = useCallback(() => {
     guest.clear();
     clearGuestSaveChoice();
+    forgetOfflineData();
     // Se vuelve a crear un invitado limpio (mismo navegador, bolsa vacía).
     setGuestId(guest.load().guestId);
     void invalidateUserData();

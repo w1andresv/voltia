@@ -26,7 +26,9 @@ export function MapPane({ mode }: { mode: ChargerAction }) {
   const searching = usePlanner((s) => s.placeSearchOpen);
   const seed = usePlanner((s) => s.stationSeed);
   const onMapClick = useBindMapClick();
-  const { data: dataset, isPending } = useStationDataset();
+  const { data: dataset, isPending, fetchStatus } = useStationDataset();
+  // Sin red y sin listado guardado la consulta queda en pausa: no se tapa el mapa.
+  const loadingStations = isPending && fetchStatus === "fetching";
   const chargers = useMemo(() => (dataset?.stations ?? []).map(toDisplayCharger), [dataset]);
   const setMapBounds = usePlanner((s) => s.setMapBounds);
   const isPlan = mode === "plan";
@@ -58,7 +60,7 @@ export function MapPane({ mode }: { mode: ChargerAction }) {
         chargerAction={mode}
         onViewChange={setMapBounds}
       />
-      {isPending && (
+      {loadingStations && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 rounded-lg bg-surface/95 px-6 py-4 shadow-float">
             <Loader className="h-6 w-6 animate-spin text-primary" />

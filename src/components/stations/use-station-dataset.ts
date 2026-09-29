@@ -81,6 +81,8 @@ export function stationDatasetQueryOptions(engine: StationEngine = null) {
     // 6 h con el dataset consolidado (igual que las cookies); 15 min con Blaze.
     staleTime: engine === "v2" ? BLAZE_STALE_MS : SIX_HOURS_MS,
     gcTime: SIX_HOURS_MS,
+    // Sin red igual se intenta: el service worker responde con el último listado (PWA).
+    networkMode: "offlineFirst" as const,
   };
 }
 

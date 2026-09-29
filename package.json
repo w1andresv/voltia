@@ -25,7 +25,8 @@
     "report": "vitest run --config vitest.record.config.ts src/test-support/report.record.ts",
     "calibration:report": "node scripts/calibration-report.mjs",
     "calibration:fit": "vitest run --config vitest.record.config.ts src/test-support/calibration-fit.record.ts",
-    "blaze:check": "node scripts/blaze-check.mjs"
+    "blaze:check": "node scripts/blaze-check.mjs",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.0",

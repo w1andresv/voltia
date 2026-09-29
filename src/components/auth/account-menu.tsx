@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useActorState } from "@/infrastructure/auth/use-actor";
 import { createSupabaseAuth } from "@/infrastructure/auth/supabase-auth";
+import { forgetOfflineData } from "@/lib/pwa";
 import { usePlanner } from "@/lib/store";
 
 /** Cierra sesión y refresca el estado del usuario en toda la app al instante. */
@@ -19,6 +20,7 @@ export function useSignOut() {
     setBusy(true);
     try {
       await createSupabaseAuth().signOut();
+      forgetOfflineData();
       await queryClient.invalidateQueries({ queryKey: ["actor"] });
       toast.success("Cerraste sesión. Tus rutas siguen en tu cuenta.");
     } catch {

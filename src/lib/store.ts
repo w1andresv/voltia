@@ -16,6 +16,7 @@ import { LEGACY_V2_CATALOG } from "@/domain/legacy-catalog";
 import { RegenLevelSchema, regenLevelFromLegacyPct } from "@/domain/schemas";
 import { extractOwnVehicles } from "@/domain/user/catalog-rules";
 import { createGuestStorage, MAX_GUEST_VEHICLES } from "@/infrastructure/user-data/guest-storage";
+import type { LastTrip } from "./last-trip";
 import { throttle } from "./throttle";
 
 export const DEMO_TRIPS: { label: string; origin: Place; destination: Place }[] = [
@@ -98,6 +99,11 @@ interface PlannerState {
     vehicle: Vehicle;
     conditions: TripConditions;
   }) => void;
+  /**
+   * Vuelve a mostrar el último plan guardado en el navegador (sin conexión):
+   * los planes se recalculan con su `geo`, sin consultar proveedores.
+   */
+  restoreTrip: (trip: LastTrip) => void;
   setResult: (geo: GeoBundle, plans: RoutePlan[], selectedId: string) => void;
   /** Quita el plan calculado (sin tocar origen, destino ni preferencias). */
   clearResult: () => void;
@@ -154,6 +160,24 @@ export function rankedPlansFor(
   // El `geo` es el snapshot que respondió el servidor: si trae la pasada 2, se conserva.
   return computePlansFromSnapshot(geo as SnapshotInputs, { origin, destination }, vehicle, conditions)
     .plans;
+}
+
+/**
+ * El vehículo de una ruta guardada: si no está en la lista del usuario ni en
+ * el catálogo, se usa como temporal (no se persiste ni entra a su lista).
+ */
+function withTripVehicle(
+  s: Pick<PlannerState, "vehicles" | "tempVehicle">,
+  vehicle: Vehicle,
+): Pick<PlannerState, "vehicles" | "tempVehicle" | "selectedVehicleId"> {
+  const known = s.vehicles.some((v) => v.id === vehicle.id);
+  return {
+    vehicles: known
+      ? s.vehicles
+      : [...s.vehicles.filter((v) => v.id !== s.tempVehicle?.id), vehicle],
+    tempVehicle: known ? null : vehicle,
+    selectedVehicleId: vehicle.id,
+  };
 }
 
 /** Plazo entre recálculos mientras se arrastra un control de condiciones. */
@@ -268,26 +292,45 @@ export const usePlanner = create<PlannerState>()(
           selectedPlanId: null,
         }),
       applySavedRequest: (req) =>
+        set((s) => ({
+          origin: req.origin,
+          destination: req.destination,
+          waypoints: req.waypoints,
+          ...withTripVehicle(s, req.vehicle),
+          conditions: req.conditions,
+          plans: [],
+          geo: null,
+          selectedPlanId: null,
+          myTripsOpen: false,
+        })),
+      restoreTrip: (trip) =>
         set((s) => {
-          // Si el vehículo de la ruta no está en la lista del usuario ni en el
-          // catálogo, se usa como temporal (no se persiste ni entra a su lista).
-          const known = s.vehicles.some((v) => v.id === req.vehicle.id);
-          const tempVehicle = known ? null : req.vehicle;
-          const vehicles = known
-            ? s.vehicles
-            : [...s.vehicles.filter((v) => v.id !== s.tempVehicle?.id), req.vehicle];
+          conditionsRecompute?.cancel();
+          const next = {
+            ...s,
+            origin: trip.origin,
+            destination: trip.destination,
+            waypoints: trip.waypoints,
+            ...withTripVehicle(s, trip.vehicle),
+            conditions: trip.conditions,
+            geo: trip.geo,
+          };
+          const plans = rankedPlansFor(next);
+          const selectedPlanId = plans.some((p) => p.id === trip.selectedPlanId)
+            ? trip.selectedPlanId
+            : (plans[0]?.id ?? null);
           return {
-            origin: req.origin,
-            destination: req.destination,
-            waypoints: req.waypoints,
-            vehicles,
-            tempVehicle,
-            selectedVehicleId: req.vehicle.id,
-            conditions: req.conditions,
-            plans: [],
-            geo: null,
-            selectedPlanId: null,
-            myTripsOpen: false,
+            origin: next.origin,
+            destination: next.destination,
+            waypoints: next.waypoints,
+            vehicles: next.vehicles,
+            tempVehicle: next.tempVehicle,
+            selectedVehicleId: next.selectedVehicleId,
+            conditions: next.conditions,
+            geo: next.geo,
+            plans,
+            selectedPlanId,
+            hoverKm: null,
           };
         }),
       setResult: (geo, plans, selectedId) => {

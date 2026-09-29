@@ -19,6 +19,7 @@ import { canSeeStationsMenu } from "@/lib/stations-access";
 import { BrandMark, BrandName } from "@/components/brand/brand";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { PwaSupport } from "./pwa";
 
 type NavLink = { to: string; label: string; hint: string; icon: ReactNode; active: (path: string) => boolean };
 
@@ -157,6 +158,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <BatteryDialog />
       <ConditionsDialog />
       <MyTripsDialog />
+      <PwaSupport />
     </>
   );
 }

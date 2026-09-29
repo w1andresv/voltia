@@ -7,6 +7,8 @@ import "@/styles.css";
 export const metadata: Metadata = {
   title: "EV-on-way",
   description: "Planificación energética de viajes en vehículo eléctrico: autonomía, elevación y recargas.",
+  // Instalada en iOS (PWA): abre sin la barra de Safari. El ícono es app/apple-icon.png.
+  appleWebApp: { capable: true, title: "EV-on-way", statusBarStyle: "black" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
