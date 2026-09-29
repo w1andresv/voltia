@@ -84,7 +84,7 @@ export type GuideParams = {
   cap: number;
   strategy: GuideStrategy;
   sanGil: boolean;
-  /** Puntos extra al cargar en DC (solo v2). */
+  /** Puntos extra al cargar en DC cuando hay otra parada después (solo v2). */
   fastBuffer: number;
 };
 
@@ -326,7 +326,8 @@ function planV2(p: GuideParams, start: number): Omit<GuidePlan, "preCharge"> | n
     const fast = from >= 0 && stations[from]!.dc && p.fastBuffer > 0 && depart < capBuffered;
     const margin = fast ? p.fastBuffer : 0;
     const dest = walk(e, depart, fromKm, GUIDE_DIST_KM);
-    if (dest.low >= floor + margin && dest.end >= reserve + margin) {
+    // Al destino solo se pide la reserva: el extra de carga rápida es para llegar a la siguiente parada.
+    if (dest.low >= floor && dest.end >= reserve) {
       const f: Final = {
         ...lab,
         low: Math.min(lab.low, dest.low),

@@ -1003,14 +1003,13 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     expect(p.stops[0]!.fastChargeExtraPct).toBeUndefined();
   });
 
-  it("en carga rápida (DC) carga 10 puntos más de lo necesario (decisión 2026-09-27)", () => {
+  it("en carga rápida como última parada carga solo lo necesario: el extra es para la siguiente parada, no para el destino", () => {
     const p = oneStop([chargerAt(150)]);
     const stop = p.stops[0]!;
-    expect(stop.departSoc - stop.minDepartSoc).toBeGreaterThanOrEqual(10 - 1e-6);
-    expect(stop.departSoc - stop.minDepartSoc).toBeLessThan(11.5);
-    expect(stop.fastChargeExtraPct).toBeCloseTo(stop.departSoc - stop.minDepartSoc, 9);
-    expect(p.arrivalSoc).toBeGreaterThanOrEqual(20 - 1e-6);
-    expect(p.arrivalSoc).toBeLessThan(21.5);
+    expect(stop.departSoc - stop.minDepartSoc).toBeLessThan(1.5);
+    expect(stop.fastChargeExtraPct).toBeUndefined();
+    expect(p.arrivalSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+    expect(p.arrivalSoc).toBeLessThan(11.5);
   });
 
   it("C8: con mínimo del vehículo 15 %, no llega a ninguna estación con menos", () => {

@@ -209,7 +209,7 @@ export const MODEL_PARAMETERS: ModelParameters = {
     maxVerifyIterations: 3,
     fastChargeBuffer: sourced({ extraPct: 10, maxSocPct: 90 }, "configurable", {
       notes:
-        "Decisión del dueño del producto (2026-09-27): aprovechar la velocidad de la carga rápida para evitar paradas largas en carga lenta.",
+        "Decisión del dueño del producto (2026-09-27): aprovechar la velocidad de la carga rápida para evitar paradas largas en carga lenta. Desde 2026-09-29 solo en tramos que terminan en otra estación, no al destino.",
     }),
   },
   speed: {

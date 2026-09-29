@@ -118,11 +118,11 @@ export const GUIDE_V2: GuideContent = {
     <>
       Electrolineras de <b>Blaze</b>
     </>,
-    "+10 % en carga rápida",
+    "+10 % en carga rápida antes de otra parada",
     "Pasada 2 con la ruta real",
   ],
   simulatorIntro:
-    "Simulación simplificada que sigue las reglas de v2 (piso de batería, reserva al llegar, tope de carga, +10 % en carga rápida, carga antes de salir). El consumo es un modelo de juguete sobre el perfil de altura aproximado; los números reales salen del terreno de Mapbox y de la física completa. Las estaciones son de ejemplo.",
+    "Simulación simplificada que sigue las reglas de v2 (piso de batería, reserva al llegar, tope de carga, +10 % en carga rápida cuando hay otra parada después, carga antes de salir). El consumo es un modelo de juguete sobre el perfil de altura aproximado; los números reales salen del terreno de Mapbox y de la física completa. Las estaciones son de ejemplo.",
   participants: [
     { id: "U", label: "Usuario", actor: "user" },
     { id: "B", label: "Navegador", actor: "browser" },
@@ -439,7 +439,7 @@ export const GUIDE_V2: GuideContent = {
               items: [
                 "Estaciones utilizables en orden de km, con desvío y tabla de minutos de carga (curva del vehículo, +5 min por parada).",
                 "Piso = máx(mínimo del vehículo, margen); reserva al llegar; tope de carga (80 %).",
-                "Estrategia; malla de SOC de 1 punto; regla de carga rápida (+10, hasta 90 %).",
+                "Estrategia; malla de SOC de 1 punto; regla de carga rápida (+10 hacia otra parada, hasta 90 %).",
               ],
             },
             {
@@ -450,7 +450,7 @@ export const GUIDE_V2: GuideContent = {
               ),
               items: [
                 "Estado = (estación, SOC con que sales). Desde cada estado recorre la batería por la ruta; no acepta ningún punto bajo el piso.",
-                "Al salir de una estación rápida, el tramo siguiente debe terminar 10 puntos sobre el piso y la reserva, salvo que salgas con el tope.",
+                "Al salir de una estación rápida hacia otra parada, se llega a ella 10 puntos sobre el piso, salvo que salgas con el tope. Hacia el destino solo se pide la reserva.",
                 "Compara con criterio por estrategia: más rápida = minutos; menos paradas = paradas; más segura = SOC mínimo.",
                 "Si no hay plan, busca (binaria) cuánto cargar antes de salir; si ni al 100 % alcanza, informa el motivo y el km donde se agota la batería.",
               ],
@@ -975,7 +975,7 @@ export const GUIDE_V1: GuideContent = {
     [
       "Carga rápida",
       'Al menos llegada + 8 (o + 12 en "más rápida")',
-      "Lo necesario + 10 puntos, hasta 90 %",
+      "Lo necesario + 10 puntos si hay otra parada después, hasta 90 %",
     ],
     [
       "Verificación",

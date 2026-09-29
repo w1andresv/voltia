@@ -306,8 +306,9 @@ function reasons(
     if (r.stops.some((s) => s.station.dc) && p.fastBuffer) {
       lines.push(
         <>
-          En carga rápida se carga el mínimo del tramo siguiente + {p.fastBuffer} puntos (sin pasar
-          de {Math.min(90, p.cap)} %): por eso llegas a Vélez con {f0(r.arrival)} %.
+          En carga rápida se carga el mínimo para llegar a la siguiente parada + {p.fastBuffer}{" "}
+          puntos (sin pasar de {Math.min(90, p.cap)} %). En la última parada se carga solo lo
+          necesario para llegar a Vélez con la reserva: llegas con {f0(r.arrival)} %.
         </>,
       );
     }
@@ -441,7 +442,7 @@ export function GuideSimulator({ engine }: { engine: GuideEngine }) {
             label="Extra en carga rápida"
             value={params.fastBuffer}
             options={[
-              [10, "+10 % (regla actual)"],
+              [10, "+10 % antes de otra parada (regla actual)"],
               [0, "Sin extra"],
             ]}
             onChange={set("fastBuffer")}

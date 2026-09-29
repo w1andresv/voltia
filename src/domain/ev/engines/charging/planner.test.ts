@@ -123,11 +123,12 @@ describe("planCharging", () => {
 describe("planCharging — extra en carga rápida (fastChargeBuffer)", () => {
   const buffer = { fastChargeBuffer: { extraPct: 10, maxSocPct: 90 } };
 
-  it("en una estación rápida carga 10 puntos más de lo necesario y llega con 10 de más", () => {
+  it("en la última parada, aunque sea rápida, carga solo lo necesario para el destino", () => {
     // Llega a la estación con 18 %; lo necesario para el destino con 10 % es salir con 24 %.
+    // El extra es para no llegar justo a la siguiente parada; al destino solo se pide la reserva.
     const r = planCharging(input(profile(66), [node(52, 150, { fast: true })], buffer));
-    expect(r.stops[0]).toMatchObject({ arriveSoc: 18, departSoc: 34 });
-    expect(r.arrivalSoc).toBeCloseTo(20, 9);
+    expect(r.stops[0]).toMatchObject({ arriveSoc: 18, departSoc: 24 });
+    expect(r.arrivalSoc).toBeCloseTo(10, 9);
   });
 
   it("en una estación lenta carga solo lo necesario", () => {
@@ -142,22 +143,25 @@ describe("planCharging — extra en carga rápida (fastChargeBuffer)", () => {
     const r = planCharging(input(samples, nodes, buffer));
     expect(r.feasible).toBe(true);
     expect(r.stops).toHaveLength(2);
+    // A la segunda parada llega con 10 de más; al destino, con la reserva.
     expect(r.stops[1]!.arriveSoc).toBeGreaterThanOrEqual(20 - 1e-9);
-    expect(r.arrivalSoc).toBeGreaterThanOrEqual(20 - 1e-9);
+    expect(r.arrivalSoc).toBeCloseTo(10, 9);
   });
 
   it("el extra no pasa del tope de carga del vehículo ni del 90 %", () => {
-    // Llega con 10 %; lo necesario es 75 %.
-    const samples = profile(125);
-    const nodes = [node(60, 150, { fast: true })];
+    // Llega a la primera (km 60) con 10 %; para llegar a la segunda (km 125) con el piso hace falta 75 %.
+    // El destino queda lejos (km 170): hay que parar en las dos.
+    const samples = profile(170);
+    const nodes = [node(60, 150, { fast: true }), node(125, 150, { fast: true })];
     expect(
       planCharging(input(samples, nodes, { ...buffer, maxChargePct: 80 })).stops[0]!.departSoc,
     ).toBe(80);
     expect(
       planCharging(input(samples, nodes, { ...buffer, maxChargePct: 100 })).stops[0]!.departSoc,
     ).toBe(85);
-    // Lo necesario es 88 %: el extra se corta en 90 %.
-    const near = planCharging(input(profile(138), nodes, { ...buffer, maxChargePct: 100 }));
+    // Segunda parada en el km 138: lo necesario es 88 %, y el extra se corta en 90 %.
+    const far = [node(60, 150, { fast: true }), node(138, 150, { fast: true })];
+    const near = planCharging(input(profile(180), far, { ...buffer, maxChargePct: 100 }));
     expect(near.stops[0]!.departSoc).toBe(90);
   });
 

@@ -164,11 +164,14 @@ describe("Bucaramanga → Bogotá, MG S5 EV al 100 %, motor v2 con estaciones de
     expect(p.minSoc).toBeGreaterThan(0);
   });
 
-  it("carga rápida: en la última parada carga 10 puntos más de lo necesario y llega con ~10 de margen extra", () => {
+  it("carga rápida: llega a Tunja con 10 de margen sobre el piso y a Bogotá solo con la reserva", () => {
     const p = plan(STATIONS);
-    const last = p.stops[p.stops.length - 1]!;
-    expect(last.departSoc - last.minDepartSoc).toBeGreaterThanOrEqual(10 - 1e-6);
-    expect(last.fastChargeExtraPct).toBeGreaterThanOrEqual(10 - 1e-6);
-    expect(p.arrivalSoc).toBeGreaterThanOrEqual(p.safetyPct + 10 - 0.5);
+    const [santana, tunja] = p.stops;
+    expect(tunja!.arriveSoc).toBeGreaterThanOrEqual(p.safetyPct + 10 - 0.5);
+    // En la última parada no se carga de más: el extra no sirve para llegar al destino.
+    expect(tunja!.fastChargeExtraPct).toBeUndefined();
+    expect(santana!.departSoc).toBeGreaterThan(0);
+    expect(p.arrivalSoc).toBeGreaterThanOrEqual(p.safetyPct - 0.5);
+    expect(p.arrivalSoc).toBeLessThan(p.safetyPct + 3);
   });
 });

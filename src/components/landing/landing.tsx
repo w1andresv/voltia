@@ -51,7 +51,7 @@ const ENGINES: {
       ],
       [
         "Paradas",
-        "Compara todas las combinaciones de paradas y cuánto cargar en cada una. En carga rápida carga 10 puntos extra, hasta 90 % o el tope del vehículo.",
+        "Compara todas las combinaciones de paradas y cuánto cargar en cada una. En carga rápida carga 10 puntos extra para no llegar justo a la siguiente parada, hasta 90 % o el tope del vehículo.",
       ],
       ["Verificación", "Segunda pasada con la ruta real que pasa por las paradas."],
     ],
@@ -108,7 +108,7 @@ const COMPARISON: [string, string, string][] = [
   [
     "Cuánto cargar",
     "Lo necesario + 2 o 4 puntos; en carga rápida al menos 8 más de lo que llegas",
-    "Lo óptimo; en carga rápida 10 puntos extra, hasta 90 % o el tope del vehículo",
+    "Lo óptimo; en carga rápida 10 puntos extra si hay otra parada después, hasta 90 % o el tope del vehículo",
   ],
   [
     "Si no alcanza",

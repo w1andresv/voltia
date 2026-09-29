@@ -48,10 +48,12 @@ export interface PlannerInput {
   gridPct: number;
   tolerancePct: number;
   /**
-   * Al salir de una estación rápida, el tramo siguiente debe terminar con
-   * `extraPct` puntos de más (sobre el piso y la reserva): se carga eso más de lo
-   * necesario. No aplica si ya se sale con `maxSocPct` o más (ni con el tope de
-   * carga): ahí se carga solo lo necesario, y ningún plan viable deja de serlo.
+   * Al salir de una estación rápida hacia otra estación, ese tramo debe terminar
+   * con `extraPct` puntos de más sobre el piso: se carga eso más de lo necesario
+   * para no llegar justo a la siguiente parada. No aplica al tramo final (no hay
+   * otra parada que cuidar: solo se pide la reserva al destino), ni si ya se
+   * sale con `maxSocPct` o más (ni con el tope de carga). Ningún plan viable
+   * deja de serlo.
    */
   fastChargeBuffer?: { extraPct: number; maxSocPct: number };
 }
@@ -136,7 +138,7 @@ export function planCharging(input: PlannerInput): PlannerResult {
 
   const buffer = input.fastChargeBuffer;
   const bufferCap = buffer ? Math.min(buffer.maxSocPct, input.maxChargePct) : 0;
-  /** Puntos de más con que debe terminar el tramo que sale de `fromNode` con `startSoc`. */
+  /** Puntos de más con que debe llegar a la siguiente estación el tramo que sale de `fromNode` con `startSoc`. */
   const marginFrom = (fromNode: number, startSoc: number): number => {
     if (!buffer || fromNode < 0 || !nodes[fromNode]!.fast) return 0;
     return startSoc < bufferCap - input.tolerancePct ? buffer.extraPct : 0;
@@ -150,7 +152,8 @@ export function planCharging(input: PlannerInput): PlannerResult {
       // Con el margen de carga rápida se sigue recorriendo (para `furthestIdx`), pero solo se acepta lo que lo cumple.
       const withMargin = lowest >= floor + margin;
       if (idx === destIdx) {
-        if (soc >= reserve + margin && withMargin) {
+        // Al destino no se exige el margen de carga rápida: solo la reserva.
+        if (soc >= reserve) {
           const final = { ...base, minSoc: Math.min(base.minSoc, lowest), arrival: soc, lastNode: fromNode, lastD: fromD };
           if (!best || compareLabels(final, best, objective) < 0) best = final;
         } else if (soc < reserve) {

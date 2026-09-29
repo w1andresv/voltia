@@ -9,7 +9,9 @@ import {
   type GuideParams,
 } from "./guide-sim";
 
-// Resultados de las demos originales (artifacts de v1 y v2) para los mismos casos:
+// Resultados de las demos originales (artifacts de v1 y v2) para los mismos casos. Desde
+// 2026-09-29 el extra de carga rápida del v2 no aplica al tramo final (ADR-0007), así que los
+// casos v2 donde la última parada era rápida cargan menos y llegan con la reserva.
 // [paradas "nombre llega→sale", carga previa, llegada a Vélez, minutos cargando].
 const CASES: Record<string, GuideParams> = {
   ...GUIDE_PRESETS,
@@ -46,9 +48,9 @@ const EXPECTED: Record<GuideEngine, Record<string, [string[], number, number, nu
     safer: [["San Gil 19→72", "Santana 19→54"], 0, 24, 246],
   },
   v2: {
-    local: [["Socorro 30→69", "Santana 31→59"], 0, 31, 45],
-    vercel: [["Socorro 20→90"], 1, 23, 43],
-    low: [["Socorro 15→75"], 16, 26, 35],
+    local: [["Socorro 30→69", "Santana 31→49"], 0, 21, 40],
+    vercel: [["Socorro 20→87"], 1, 20, 41],
+    low: [["Socorro 15→65"], 16, 16, 31],
     sanGilFewer: [["San Gil 16→27", "Socorro 15→74"], 0, 15, 87],
     safer: [["San Gil 19→33", "Socorro 19→90"], 0, 21, 110],
   },
