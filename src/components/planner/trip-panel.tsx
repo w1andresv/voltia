@@ -25,6 +25,7 @@ import { TripParams } from "./trip-params";
 import { CacheTools } from "./cache-tools";
 import { EngineNote } from "./engine-note";
 import { VehicleBar } from "./vehicle-bar";
+import { VehicleCompare } from "./vehicle-compare";
 import {
   CONNECTOR_LABEL,
   departureChargeAdvice,
@@ -389,6 +390,10 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
           <p className="-mt-1 text-xs text-subtle">Vías: {formatRoadMix(plan.roadMix)}</p>
         ) : null}
         <PlanStats plan={plan} />
+      </section>
+
+      <section>
+        <VehicleCompare plan={plan} />
       </section>
 
       <section className="space-y-3">
