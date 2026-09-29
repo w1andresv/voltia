@@ -10,6 +10,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Las pruebas del pipeline importan toda la aplicación en su primera prueba
+    // (import dinámico de container, servicio, etc.). Con la cobertura de v8 esa
+    // importación en frío pasa de 5 s en CI; la lógica de cada prueba tarda poco.
+    testTimeout: 20_000,
     coverage: {
       provider: "v8",
       include: ["src/domain/**/*.ts"],
