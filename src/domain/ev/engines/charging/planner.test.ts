@@ -217,6 +217,57 @@ describe("requiredInitialCharge", () => {
   });
 });
 
+describe("atajo lineal (linear)", () => {
+  // Generador determinista para casos aleatorios reproducibles.
+  function rng(seed: number) {
+    let x = seed >>> 0;
+    return () => ((x = (x * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  }
+  /** Perfil con subidas y bajadas: algunas muestras regeneran más de lo que gastan. */
+  function hilly(rand: () => number, steps: number): EnergySample[] {
+    let cum = 0;
+    return Array.from({ length: steps + 1 }, (_, i) => {
+      const gross = i ? rand() * 1.6 : 0;
+      const regen = i && rand() < 0.35 ? rand() * 2.4 : 0;
+      cum += gross - regen;
+      return { ...profile(steps)[i]!, energyKwh: gross - regen, energyGrossKwh: gross, energyRegenKwh: regen, cumulativeKwh: cum };
+    });
+  }
+  const spentOf = (samples: EnergySample[]) => {
+    const out = [0];
+    for (let i = 1; i < samples.length; i++) out.push(out[i - 1]! + (samples[i]!.energyGrossKwh - samples[i]!.energyRegenKwh));
+    return out;
+  };
+
+  it("da el mismo plan que recorrer muestra por muestra (500 casos aleatorios)", () => {
+    const objectives = ["fastest", "fewer_stops", "efficient", "safer"] as const;
+    for (let c = 0; c < 500; c++) {
+      const rand = rng(c + 1);
+      const steps = 60 + Math.floor(rand() * 160);
+      const samples = hilly(rand, steps);
+      const nodes = Array.from({ length: 2 + Math.floor(rand() * 10) }, () =>
+        node(1 + Math.floor(rand() * (steps - 2)), 20 + rand() * 200, { fast: rand() < 0.6, detourPct: rand() * 2 }),
+      ).sort((a, b) => a.sIdx - b.sIdx);
+      const base = input(samples, nodes, {
+        initialSocPct: 20 + rand() * 80,
+        maxChargePct: rand() < 0.5 ? 80 : 100,
+        objective: objectives[c % objectives.length],
+        fastChargeBuffer: rand() < 0.7 ? { extraPct: 10, maxSocPct: 90 } : undefined,
+      });
+      const slow = planCharging(base);
+      const fast = planCharging({ ...base, linear: { spentPct: spentOf(samples), fullRegenBelowPct: 80 } });
+      const where = `caso ${c}`;
+      expect(fast.feasible, where).toBe(slow.feasible);
+      expect(fast.stops.map((s) => [s.node, s.departSoc]), where).toEqual(slow.stops.map((s) => [s.node, s.departSoc]));
+      fast.stops.forEach((s, i) => expect(s.arriveSoc, where).toBeCloseTo(slow.stops[i]!.arriveSoc, 9));
+      if (slow.feasible) expect(fast.arrivalSoc, where).toBeCloseTo(slow.arrivalSoc, 9);
+      expect(fast.reachable, where).toEqual(slow.reachable);
+      expect(fast.furthestIdx, where).toBe(slow.furthestIdx);
+      expect(fast.destinationShort, where).toBe(slow.destinationShort);
+    }
+  }, 60_000);
+});
+
 describe("rendimiento", () => {
   it("30 estaciones en 220 muestras en menos de 400 ms", () => {
     const samples = profile(220, 0.9);

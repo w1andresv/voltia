@@ -56,6 +56,14 @@ export interface PlannerInput {
    * deja de serlo.
    */
   fastChargeBuffer?: { extraPct: number; maxSocPct: number };
+  /**
+   * Atajo opcional (mismo resultado que `walk`): SOC gastado acumulado por
+   * muestra (%), con la regeneración aceptada entera, y el SOC hasta el cual la
+   * batería la acepta entera. Un tramo cuyo SOC nunca pasa de ese valor es
+   * lineal: se resuelve con sumas entre estaciones en vez de muestra por muestra.
+   * Si el SOC puede pasarlo (regeneración recortada), se recorre con `walk`.
+   */
+  linear?: { spentPct: ArrayLike<number>; fullRegenBelowPct: number };
 }
 
 export interface PlannedStop {
@@ -144,47 +152,101 @@ export function planCharging(input: PlannerInput): PlannerResult {
     return startSoc < bufferCap - input.tolerancePct ? buffer.extraPct : 0;
   };
 
+  const cand: Pick<Label, "stops" | "minutes" | "detourKm" | "detourKwh" | "minSoc"> = { stops: 0, minutes: 0, detourKm: 0, detourKwh: 0, minSoc: 0 };
+  const reach = (j: number, soc: number, lowest: number, margin: number, fromNode: number, fromD: number, base: Label) => {
+    const node = nodes[j]!;
+    const arrive = soc - node.detourPct;
+    const low = Math.min(lowest, arrive);
+    if (low < floor + margin) return;
+    reachable.add(j);
+    const firstK = Math.floor(arrive / grid + EPS) + 1;
+    // Un solo candidato que cambia solo en los minutos: se copia únicamente si gana.
+    cand.stops = base.stops + 1;
+    cand.detourKm = base.detourKm + node.detourKm;
+    cand.detourKwh = base.detourKwh + node.detourKwh;
+    cand.minSoc = Math.min(base.minSoc, low);
+    const fixedMin = base.minutes + node.detourMin + node.waitMin;
+    const row = labels[j]!;
+    for (let k = Math.max(0, firstK); k <= levels; k++) {
+      cand.minutes = fixedMin + node.chargeMinutes(arrive, k * grid);
+      const cur = row[k];
+      if (!cur || compareLabels(cand, cur, objective) < 0) {
+        row[k] = { ...cand, arrive, prevNode: fromNode, prevD: fromD };
+      }
+    }
+  };
+  const atDestination = (soc: number, lowest: number, fromNode: number, fromD: number, base: Label) => {
+    // Al destino no se exige el margen de carga rápida: solo la reserva.
+    if (soc >= reserve) {
+      const final = { ...base, minSoc: Math.min(base.minSoc, lowest), arrival: soc, lastNode: fromNode, lastD: fromD };
+      if (!best || compareLabels(final, best, objective) < 0) best = final;
+    } else {
+      destinationShort = true;
+    }
+  };
+
+  // Atajo lineal: posiciones con estaciones (más el origen y el destino) y, entre posiciones
+  // seguidas, el máximo del gasto acumulado; el mínimo del gasto hacia adelante dice si el
+  // SOC de un tramo puede pasar del umbral de regeneración completa.
+  const lin = input.linear;
+  const spent = lin?.spentPct;
+  const positions = lin ? [...new Set([0, ...nodes.map((n) => n.sIdx), destIdx])].sort((a, b) => a - b) : [];
+  const posOf = new Map(positions.map((p, i) => [p, i]));
+  const segMax = positions.map((p, b) => {
+    if (!spent || b === 0) return -Infinity;
+    let m = -Infinity;
+    for (let i = positions[b - 1]! + 1; i <= p; i++) m = Math.max(m, spent[i]!);
+    return m;
+  });
+  const minAhead = new Float64Array(samples.length + 1).fill(Infinity);
+  if (spent) for (let i = samples.length - 1; i >= 0; i--) minAhead[i] = Math.min(minAhead[i + 1]!, spent[i]!);
+
+  const expandLinear = (fromNode: number, fromD: number, fromIdx: number, startSoc: number, base: Label, margin: number): boolean => {
+    if (!lin || !spent) return false;
+    const a = posOf.get(fromIdx);
+    const base0 = spent[fromIdx]!;
+    // El SOC más alto del tramo es el de salida, o más si se gana bajando: si no pasa del umbral, es lineal.
+    const maxSoc = startSoc + Math.max(0, base0 - minAhead[fromIdx + 1]!);
+    if (a == null || maxSoc > lin.fullRegenBelowPct) return false;
+    let runMax = -Infinity;
+    for (let b = a + 1; b < positions.length; b++) {
+      const pos = positions[b]!;
+      runMax = Math.max(runMax, segMax[b]!);
+      const lowest = Math.min(startSoc, startSoc - (runMax - base0));
+      if (lowest < floor) {
+        // Hasta dónde se llegó sobre el piso dentro de este tramo (para `furthestIdx`).
+        for (let i = positions[b - 1]! + 1; i < pos; i++) {
+          if (startSoc - (spent[i]! - base0) < floor) break;
+          if (i > furthestIdx) furthestIdx = i;
+        }
+        return true;
+      }
+      if (pos > furthestIdx) furthestIdx = pos;
+      const soc = startSoc - (spent[pos]! - base0);
+      if (pos === destIdx) {
+        atDestination(soc, lowest, fromNode, fromD, base);
+        return true;
+      }
+      if (lowest < floor + margin) continue;
+      for (const j of byIdx.get(pos) ?? []) reach(j, soc, lowest, margin, fromNode, fromD, base);
+    }
+    return true;
+  };
+
   const expand = (fromNode: number, fromD: number, fromIdx: number, startSoc: number, base: Label) => {
     const margin = marginFrom(fromNode, startSoc);
+    if (expandLinear(fromNode, fromD, fromIdx, startSoc, base, margin)) return;
     walk(fromIdx, startSoc, (idx, soc, lowest) => {
       if (lowest < floor) return false;
       if (idx > furthestIdx) furthestIdx = idx;
       // Con el margen de carga rápida se sigue recorriendo (para `furthestIdx`), pero solo se acepta lo que lo cumple.
       const withMargin = lowest >= floor + margin;
       if (idx === destIdx) {
-        // Al destino no se exige el margen de carga rápida: solo la reserva.
-        if (soc >= reserve) {
-          const final = { ...base, minSoc: Math.min(base.minSoc, lowest), arrival: soc, lastNode: fromNode, lastD: fromD };
-          if (!best || compareLabels(final, best, objective) < 0) best = final;
-        } else if (soc < reserve) {
-          destinationShort = true;
-        }
+        atDestination(soc, lowest, fromNode, fromD, base);
         return false;
       }
       if (!withMargin) return true;
-      for (const j of byIdx.get(idx) ?? []) {
-        const node = nodes[j]!;
-        const arrive = soc - node.detourPct;
-        const low = Math.min(lowest, arrive);
-        if (low < floor + margin) continue;
-        reachable.add(j);
-        const firstK = Math.floor(arrive / grid + EPS) + 1;
-        for (let k = Math.max(0, firstK); k <= levels; k++) {
-          const depart = k * grid;
-          const cand: Label = {
-            stops: base.stops + 1,
-            minutes: base.minutes + node.detourMin + node.waitMin + node.chargeMinutes(arrive, depart),
-            detourKm: base.detourKm + node.detourKm,
-            detourKwh: base.detourKwh + node.detourKwh,
-            minSoc: Math.min(base.minSoc, low),
-            arrive,
-            prevNode: fromNode,
-            prevD: fromD,
-          };
-          const cur = labels[j]![k];
-          if (!cur || compareLabels(cand, cur, objective) < 0) labels[j]![k] = cand;
-        }
-      }
+      for (const j of byIdx.get(idx) ?? []) reach(j, soc, lowest, margin, fromNode, fromD, base);
       return true;
     });
   };

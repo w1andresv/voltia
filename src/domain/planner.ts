@@ -25,7 +25,13 @@ import { detourEnergyV2, energyProfileForRoute, type EnergyEngine } from "./ev/e
 import type { MeasuredDetour } from "./ev/contracts/detour";
 import type { EnergySample } from "./ev/contracts/energy";
 import type { SocEvent } from "./ev/contracts/soc";
-import { legSoc, requiredStartSoc, simulateSoc, walkSoc } from "./ev/engines/soc/simulate";
+import {
+  legSoc,
+  requiredStartSoc,
+  simulateSoc,
+  spentSocPct,
+  walkSoc,
+} from "./ev/engines/soc/simulate";
 import { batteryDepletion } from "./ev/engines/soc/depletion";
 import type {
   ChargeChoice,
@@ -922,6 +928,10 @@ function planStopsV2(args: StopsArgs): StopsChoice {
     nodes,
     objective: conditions.planningMode,
     walk: (from, start, visit) => walkSoc(samples, from, start, cap, visit),
+    linear: {
+      spentPct: spentSocPct(samples, cap),
+      fullRegenBelowPct: MODEL_PARAMETERS.soc.regenAcceptance.fullBelowPct,
+    },
     gridPct: MODEL_PARAMETERS.planner.socGridPct,
     tolerancePct: ARRIVE_TOLERANCE,
     fastChargeBuffer: MODEL_PARAMETERS.planner.fastChargeBuffer.value,

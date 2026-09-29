@@ -447,6 +447,8 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
 3. **Calibrar la espera en estaciones ocupadas** (D11) cuando haya datos de ocupación (Blaze, §5.7).
 4. **Borrar el planificador anterior** en F9 (§5.10).
 
+> **Rendimiento (2026-09-29):** `planCharging` usa un solo candidato por estación alcanzada, y solo crea la etiqueta cuando mejora a la guardada (antes creaba una por cada nivel de SOC). Además, `PlannerInput.linear` resuelve con sumas los tramos cuyo SOC no pasa del 80 %, porque ahí la regeneración entra entera. Los tramos que sí lo pasan se siguen recorriendo con `walk`. Da el mismo plan que recorrer muestra por muestra: lo prueban 500 casos aleatorios en `charging/planner.test.ts`, y la caracterización no cambió. Con 220 muestras la DP pasó de 6.5 a 2.4 ms con 10 estaciones, de 30 a 18–23 con 30, de 110 a 52 con 60 y de 525 a 205–230 con 120. En el navegador, `patchConditions` cambia las condiciones enseguida y recalcula los planes con `throttle` (a lo sumo cada 150 ms mientras se arrastra un control, y la última vez siempre). Las vistas previas esperan a que las condiciones dejen de cambiar.
+
 ---
 
 ### 5.6 F8 · Pasada 2 al guardar y compartir; activar v2

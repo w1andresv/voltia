@@ -55,6 +55,20 @@ export function walkSoc(
   }
 }
 
+/**
+ * SOC gastado acumulado (%) hasta cada muestra con la regeneración entera: el
+ * atajo lineal del planificador (`PlannerInput.linear`). Vale mientras el SOC
+ * no pase de `fullBelowPct`, donde la batería acepta toda la regeneración.
+ */
+export function spentSocPct(samples: EnergySample[], capacityKwh: number): Float64Array {
+  const out = new Float64Array(samples.length);
+  for (let i = 1; i < samples.length; i++) {
+    const s = samples[i]!;
+    out[i] = out[i - 1]! + kwhToSocPct(s.energyGrossKwh - s.energyRegenKwh, capacityKwh);
+  }
+  return out;
+}
+
 export interface LegSoc {
   /** SOC al llegar a `toIdx`. */
   endSoc: number;

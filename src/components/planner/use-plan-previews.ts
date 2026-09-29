@@ -1,7 +1,8 @@
-import { useDeferredValue, useMemo } from "react";
+import { useMemo } from "react";
 import { previewDelta, type PlanPreview } from "@/domain/conditions-advice";
 import type { DrivingStyle, PlanningMode, SafetyMode, TripConditions } from "@/domain/types";
-import { rankedPlansFor, usePlanner } from "@/lib/store";
+import { RECOMPUTE_THROTTLE_MS, rankedPlansFor, usePlanner } from "@/lib/store";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 
 export const STYLES: { id: DrivingStyle; label: string; hint: string }[] = [
   { id: "efficient", label: "Eficiente", hint: "≈ −10 % energía, ~7 % más lenta" },
@@ -67,7 +68,7 @@ function toPreview(p: PlanPreview | undefined): PlanPreview | null {
  * Vista previa: cómo cambiaría el plan recomendado con cada opción, recalculado
  * sobre las rutas ya encontradas (sin pedir rutas nuevas). Solo si `enabled` y
  * ya hay un viaje planificado, y solo para los grupos pedidos. Usa las
- * condiciones diferidas para que el clic en una opción responda primero.
+ * condiciones cuando dejan de cambiar para que el clic en una opción responda primero.
  */
 export function usePlanPreviews(groups: readonly Group[], enabled = true): PlanPreviews | null {
   const geo = usePlanner((s) => s.geo);
@@ -75,7 +76,11 @@ export function usePlanPreviews(groups: readonly Group[], enabled = true): PlanP
   const destination = usePlanner((s) => s.destination);
   const vehicles = usePlanner((s) => s.vehicles);
   const selectedVehicleId = usePlanner((s) => s.selectedVehicleId);
-  const conditions = useDeferredValue(usePlanner((s) => s.conditions));
+  // Con retraso: mientras se arrastra un control no se recalculan las vistas previas.
+  const conditions = useDebouncedValue(
+    usePlanner((s) => s.conditions),
+    RECOMPUTE_THROTTLE_MS,
+  );
   const key = groups.join(",");
   return useMemo(() => {
     if (!enabled || !geo?.routes.length || !origin || !destination) return null;

@@ -16,6 +16,7 @@ import { LEGACY_V2_CATALOG } from "@/domain/legacy-catalog";
 import { RegenLevelSchema, regenLevelFromLegacyPct } from "@/domain/schemas";
 import { extractOwnVehicles } from "@/domain/user/catalog-rules";
 import { createGuestStorage, MAX_GUEST_VEHICLES } from "@/infrastructure/user-data/guest-storage";
+import { throttle } from "./throttle";
 
 export const DEMO_TRIPS: { label: string; origin: Place; destination: Place }[] = [
   {
@@ -155,9 +156,17 @@ export function rankedPlansFor(
     .plans;
 }
 
+/** Plazo entre recálculos mientras se arrastra un control de condiciones. */
+export const RECOMPUTE_THROTTLE_MS = 150;
+
+/** Recálculo de las condiciones, con retraso (ver `patchConditions`). Se asigna al crear el store. */
+let conditionsRecompute: ReturnType<typeof throttle> | null = null;
+
 function withRecomputedPlans(
   s: PlannerState,
 ): Pick<PlannerState, "plans" | "selectedPlanId"> | Record<string, never> {
+  // Este recálculo ya cubre cualquiera pendiente por cambio de condiciones.
+  conditionsRecompute?.cancel();
   const ranked = rankedPlansFor(s);
   if (!ranked.length) return {};
   return { plans: ranked, selectedPlanId: ranked[0]?.id ?? null };
@@ -207,12 +216,17 @@ export const usePlanner = create<PlannerState>()(
           const next = { ...s, vehicles, selectedVehicleId, tempVehicle: temp };
           return { vehicles, selectedVehicleId, tempVehicle: temp, ...withRecomputedPlans(next) };
         }),
-      patchConditions: (p) =>
-        set((s) => {
-          const conditions = { ...s.conditions, ...p };
-          const next = { ...s, conditions };
-          return { conditions, ...withRecomputedPlans(next) };
-        }),
+      // Las condiciones cambian enseguida; los planes se recalculan con `throttle`
+      // para que arrastrar un control no recalcule todas las rutas en cada paso.
+      patchConditions: (p) => {
+        set((s) => ({ conditions: { ...s.conditions, ...p } }));
+        if (!get().geo) return;
+        conditionsRecompute ??= throttle(
+          () => set((s) => withRecomputedPlans(s)),
+          RECOMPUTE_THROTTLE_MS,
+        );
+        conditionsRecompute.run();
+      },
       setOrigin: (p) => set({ origin: p, plans: [], geo: null, selectedPlanId: null }),
       setDestination: (p) => set({ destination: p, plans: [], geo: null, selectedPlanId: null }),
       setWaypoints: (w) => set({ waypoints: w, plans: [], geo: null, selectedPlanId: null }),
@@ -276,9 +290,14 @@ export const usePlanner = create<PlannerState>()(
             myTripsOpen: false,
           };
         }),
-      setResult: (geo, plans, selectedId) =>
-        set({ geo, plans, selectedPlanId: selectedId, hoverKm: null }),
-      clearResult: () => set({ geo: null, plans: [], selectedPlanId: null, hoverKm: null }),
+      setResult: (geo, plans, selectedId) => {
+        conditionsRecompute?.cancel();
+        set({ geo, plans, selectedPlanId: selectedId, hoverKm: null });
+      },
+      clearResult: () => {
+        conditionsRecompute?.cancel();
+        set({ geo: null, plans: [], selectedPlanId: null, hoverKm: null });
+      },
       selectPlan: (id) => set({ selectedPlanId: id, hoverKm: null }),
       setHoverKm: (km) => set({ hoverKm: km }),
       setShowAllChargers: (v) => set({ showAllChargers: v }),
