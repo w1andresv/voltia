@@ -6,6 +6,7 @@ import {
   buildPlans,
   computePlans,
   computePlansFromSnapshot,
+  rankVerifiedFirst,
   type PlanInputs,
 } from "./compute-plan";
 
@@ -101,6 +102,33 @@ describe("computePlans", () => {
       plans: [],
       selectedId: "",
     });
+  });
+});
+
+describe("rankVerifiedFirst", () => {
+  it("un plan verificado y viable va primero aunque una alternativa sin verificar parezca mejor", () => {
+    const [fast, slow] = computePlans(inputs, vehicle, conditions, "v2").plans;
+    const verified = {
+      ...slow!,
+      verification: {
+        status: "verified" as const,
+        iterations: 1,
+        baseDistanceKm: slow!.distanceKm,
+      },
+    };
+    expect(rankVerifiedFirst([fast!, verified], "fastest").map((p) => p.id)).toEqual([
+      verified.id,
+      fast!.id,
+    ]);
+    // Una verificación fallida no cuenta.
+    const failed = {
+      ...verified,
+      verification: { ...verified.verification, status: "failed" as const },
+    };
+    expect(rankVerifiedFirst([failed, fast!], "fastest").map((p) => p.id)).toEqual([
+      fast!.id,
+      failed.id,
+    ]);
   });
 });
 

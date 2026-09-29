@@ -7,6 +7,7 @@ import type { ModelParameters } from "@/domain/ev/core/params";
 import {
   buildPlans,
   computePlans,
+  rankVerifiedFirst,
   type EnergyEngine,
   type PlanInputs,
   type PlannerEngine,
@@ -77,6 +78,9 @@ export interface PlanningDeps {
   /** Reloj inyectable (tests deterministas). */
   clock?: () => Date;
 }
+
+/** Vueltas de detalle de paradas: la del plan y, si cambió, la de las paradas nuevas. */
+const STOP_DETAIL_ROUNDS = 2;
 
 export interface PlanResult {
   response: PlanResponse & { geo: PlanningSnapshot };
@@ -232,17 +236,34 @@ export class EVRoutePlanningService {
         buildPlans(inputs, vehicle, conditions, responding, "v2"),
       );
     }
-    // Detalle de las paradas (Blaze): si alguna está fuera de servicio, se replanifica una vez sin ella.
-    if (this.deps.stationDetails && ranked[0]?.stops.length) {
-      console.log(
-        `[blaze] detalle de las paradas del plan recomendado: ${ranked[0].stops.map((s) => `${s.charger.id} ${s.charger.name}`).join(" · ")}`,
-      );
-      const check = await checkStopDetails(this.deps.stationDetails, ranked[0], chargers);
-      console.log(
-        `[stations:detail] ${check.requested} parada(s) consultadas, ${check.changed} con cambios, ` +
-          `${check.offline.length} fuera de servicio${check.failed ? `, ${check.failed} sin respuesta` : ""}`,
-      );
-      if (check.changed) {
+    // Detalle de las paradas (Blaze): si cambia algo (p. ej. una fuera de servicio), se
+    // replanifica y se consultan también las paradas nuevas, una vuelta más como mucho.
+    if (this.deps.stationDetails) {
+      const checked = new Set<string>();
+      const offline: string[] = [];
+      for (let round = 1; round <= STOP_DETAIL_ROUNDS; round++) {
+        const plan = ranked[0];
+        if (!plan?.stops.some((s) => !checked.has(s.charger.id))) break;
+        console.log(
+          `[blaze] detalle de las paradas del plan recomendado${round > 1 ? " (paradas nuevas)" : ""}: ` +
+            plan.stops
+              .filter((s) => !checked.has(s.charger.id))
+              .map((s) => `${s.charger.id} ${s.charger.name}`)
+              .join(" · "),
+        );
+        const check = await checkStopDetails(
+          this.deps.stationDetails,
+          plan,
+          chargers,
+          undefined,
+          checked,
+        );
+        for (const id of check.checkedIds) checked.add(id);
+        console.log(
+          `[stations:detail] ${check.requested} parada(s) consultadas, ${check.changed} con cambios, ` +
+            `${check.offline.length} fuera de servicio${check.failed ? `, ${check.failed} sin respuesta` : ""}`,
+        );
+        if (!check.changed) break;
         chargers = check.chargers;
         inputs = { ...inputs, chargers };
         ({ plans: ranked, selectedId } = computePlans(
@@ -252,8 +273,9 @@ export class EVRoutePlanningService {
           responding,
           energy,
         ));
-        if (check.offline.length) warnings.push(offlineStopText(check.offline.map((c) => c.name)));
+        offline.push(...check.offline.map((c) => c.name));
       }
+      if (offline.length) warnings.push(offlineStopText(offline));
     }
     // Pasada 2 solo con el v2: una a tres rutas más por plan, y solo para el recomendado.
     // La ruta verificada queda en el snapshot: el navegador recalcula sobre ella al cambiar condiciones.
@@ -293,7 +315,7 @@ export class EVRoutePlanningService {
         `[plan-trip:verify] ${verified.verification?.status ?? "sin paradas"} en ${verified.verification?.iterations ?? 0} ruta(s):` +
           ` ${describe(ranked[0])} → ${describe(verified)}, ${ranked[0].distanceKm.toFixed(1)} → ${verified.distanceKm.toFixed(1)} km`,
       );
-      ranked = rankPlans([verified, ...ranked.slice(1)], conditions.planningMode);
+      ranked = rankVerifiedFirst([verified, ...ranked.slice(1)], conditions.planningMode);
       selectedId = ranked[0]?.id ?? "";
     }
 

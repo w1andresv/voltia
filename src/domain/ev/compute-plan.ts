@@ -77,6 +77,26 @@ export function computePlans(
   return { plans, selectedId: plans[0]?.id ?? "" };
 }
 
+/**
+ * Orden final cuando hay pasada 2: un plan verificado (sobre la ruta real) y
+ * viable va primero; las alternativas solo tienen la pasada 1, con desvíos
+ * estimados, y no deben recomendarse por encima de él. El resto, por estrategia.
+ */
+export function rankVerifiedFirst(
+  plans: RoutePlan[],
+  mode: TripConditions["planningMode"],
+): RoutePlan[] {
+  const verified = (p: RoutePlan) =>
+    p.feasible && p.verification != null && p.verification.status !== "failed";
+  return [
+    ...rankPlans(plans.filter(verified), mode),
+    ...rankPlans(
+      plans.filter((p) => !verified(p)),
+      mode,
+    ),
+  ];
+}
+
 /** Lo que hace falta de un snapshot para recalcular sus planes (también el `geo` del navegador). */
 export type SnapshotInputs = Pick<
   PlanningSnapshot,
@@ -125,6 +145,6 @@ export function computePlansFromSnapshot(
     if (!verified.feasible && plan.feasible) return plan;
     return { ...verified, verification: v.verification };
   });
-  const ranked = rankPlans(plans, conditions.planningMode);
+  const ranked = rankVerifiedFirst(plans, conditions.planningMode);
   return { plans: ranked, selectedId: ranked[0]?.id ?? "" };
 }

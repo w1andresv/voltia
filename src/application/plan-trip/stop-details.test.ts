@@ -23,6 +23,21 @@ describe("checkStopDetails", () => {
     expect(check.chargers).toEqual(chargers);
   });
 
+  it("no vuelve a pedir las estaciones ya consultadas", async () => {
+    const byId = new Map(stations.map((s) => [s.id, s]));
+    const get = vi.fn(async (id: string) => byId.get(id) ?? null);
+    const check = await checkStopDetails(
+      { get },
+      plan,
+      chargers,
+      undefined,
+      new Set([chargers[0]!.id]),
+    );
+    expect(get.mock.calls.map(([id]) => id)).toEqual([chargers[2]!.id]);
+    expect(check.checkedIds).toEqual([chargers[2]!.id]);
+    expect(check.requested).toBe(1);
+  });
+
   it("aplica la potencia real del detalle y marca la estación sin cargadores en servicio", async () => {
     const [a, , b] = stations as [ConsolidatedStation, ConsolidatedStation, ConsolidatedStation];
     const faster: ConsolidatedStation = {

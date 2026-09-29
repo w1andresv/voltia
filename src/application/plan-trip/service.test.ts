@@ -292,7 +292,14 @@ describe("detalle de las paradas (Blaze, ADR-0008)", () => {
     const { response } = await new EVRoutePlanningService(
       deps({ stationDetails: { get }, stationSource: "blaze" }),
     ).plan(lowSoc);
-    expect(get.mock.calls.map(([id]) => id).every((id) => stopIds.has(id))).toBe(true);
+    // Primera vuelta: solo las paradas del plan. Segunda: solo las paradas nuevas del plan recalculado.
+    const asked = get.mock.calls.map(([id]) => id);
+    const newStops = response.plans[0]!.stops.map((s) => s.charger.id).filter(
+      (id) => !stopIds.has(id),
+    );
+    expect(asked.slice(0, stopIds.size).every((id) => stopIds.has(id))).toBe(true);
+    expect(new Set(asked.slice(stopIds.size))).toEqual(new Set(newStops));
+    expect(new Set(asked).size).toBe(asked.length);
     expect(response.plans[0]!.stops.some((s) => s.charger.id === firstStop.id)).toBe(false);
     expect(response.geo.chargers.find((c) => c.id === firstStop.id)?.availability).toBe("offline");
     expect(response.geo.warnings.some((w) => w.includes(firstStop.name))).toBe(true);

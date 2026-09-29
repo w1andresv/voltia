@@ -14,6 +14,8 @@ export interface StopDetailsCheck {
   changed: number;
   requested: number;
   failed: number;
+  /** Ids consultados en esta vuelta. */
+  checkedIds: string[];
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -35,15 +37,17 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /**
  * Detalle de las estaciones donde para el plan (ADR-0008, D9): una consulta
  * por parada, en paralelo y con tiempo máximo. Una parada sin ningún cargador
- * en servicio queda "offline", y los dos planificadores ya la descartan.
+ * en servicio queda "offline", y los dos planificadores ya la descartan. Las
+ * de `skip` (ya consultadas en una vuelta anterior) no se vuelven a pedir.
  */
 export async function checkStopDetails(
   details: StationDetails,
   plan: RoutePlan,
   chargers: Charger[],
   timeoutMs = STOP_DETAILS_TIMEOUT_MS,
+  skip: ReadonlySet<string> = new Set(),
 ): Promise<StopDetailsCheck> {
-  const ids = [...new Set(plan.stops.map((s) => s.charger.id))];
+  const ids = [...new Set(plan.stops.map((s) => s.charger.id))].filter((id) => !skip.has(id));
   const results = await Promise.allSettled(
     ids.map((id) => withTimeout(details.get(id), timeoutMs)),
   );
@@ -83,6 +87,7 @@ export async function checkStopDetails(
     changed: updated.size,
     requested: ids.length,
     failed,
+    checkedIds: ids,
   };
 }
 

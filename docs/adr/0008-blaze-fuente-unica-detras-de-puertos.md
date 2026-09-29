@@ -79,3 +79,6 @@ La documentación está en `docs/blaze/api-publica-v1.md`.
 - Correr `npm run blaze:check` con la key real y ajustar el esquema o los traductores si algo llega distinto (etiquetas de conector, campos extra, paginación).
 - **Navegador:** el mapa guarda el listado 6 h en cookies (`station-dataset-cookies`). Con Blaze, el estado del mapa puede tener hasta 6 h de retraso. La planificación usa el del servidor (15 min) y el detalle de las paradas (2 min).
 - **F9:** cuando v2 sea el motor por defecto y Blaze esté estable, borrar las fuentes del dataset consolidado, la fusión y el cron de refresco.
+
+## Paradas nuevas tras el detalle (2026-09-29)
+Si el detalle de las paradas cambia el plan (p. ej. una estación fuera de servicio), el plan recalculado puede parar en estaciones que no se consultaron. Ahora hay una segunda vuelta que pide el detalle solo de esas paradas nuevas (`checkStopDetails` con `skip`); como mucho dos vueltas (`STOP_DETAIL_ROUNDS` en `service.ts`), así una estación nunca se consulta dos veces y el tiempo sigue acotado.
