@@ -43,6 +43,31 @@ const conditions: TripConditions = {
 const vehicle = catalogVehicle("mg-s5-ev-deluxe");
 
 describe("energyProfileForRoute", () => {
+  it("con el perfil denso cuenta las subidas y bajadas cortas entre muestras", () => {
+    // Muestras cada 2 km, todas a 1000 m: entre ellas, lomas de 30 m que solo ve el perfil denso.
+    const flat = hillRoute(20);
+    const samples = flat.samples.filter((s) => s.km % 2 === 0).map((s) => ({ ...s, elevM: 1000 }));
+    const route: RawRoute = {
+      ...flat,
+      samples,
+      elevation: { gainM: 0, lossM: 0, minM: 1000, maxM: 1000 },
+    };
+    const hills = {
+      stepKm: 0.1,
+      elevM: Array.from({ length: 201 }, (_, i) => 1000 + 30 * Math.sin((Math.PI * i) / 10) ** 2),
+    };
+    const coarse = energyProfileForRoute(route, vehicle, conditions, null);
+    const dense = energyProfileForRoute(
+      { ...route, elevationProfile: hills },
+      vehicle,
+      conditions,
+      null,
+    );
+    // Subir cuesta más de lo que devuelve bajar: más energía neta y más regeneración.
+    expect(dense.totals.netEnergyKwh).toBeGreaterThan(coarse.totals.netEnergyKwh);
+    expect(dense.totals.energyRegeneratedKwh).toBeGreaterThan(coarse.totals.energyRegeneratedKwh);
+  });
+
   it("perfil por muestra, duración del perfil de velocidad y supuestos", () => {
     const out = energyProfileForRoute(hillRoute(40), vehicle, conditions, null);
     expect(out.samples).toHaveLength(41);

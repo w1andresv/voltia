@@ -79,6 +79,21 @@ async function withSampling(
 }
 
 /**
+ * El perfil denso viaja al navegador en el snapshot (~4 000 alturas en 400 km):
+ * se redondea a 0,1 m antes de planificar, así el servidor y el navegador
+ * calculan con los mismos números y el JSON pesa menos. 0,1 m está muy por
+ * debajo de la histéresis (5 m) y del error del modelo de terreno.
+ */
+function compactProfile(route: RawRoute): RawRoute {
+  if (!route.elevationProfile) return route;
+  const { stepKm, elevM } = route.elevationProfile;
+  return {
+    ...route,
+    elevationProfile: { stepKm, elevM: elevM.map((h) => Math.round(h * 10) / 10) },
+  };
+}
+
+/**
  * La ruta con su perfil de elevación. Si el proveedor principal falla, se usa
  * el de respaldo con la estrategia fija; si también falla, la ruta sigue plana
  * y el plan lo avisa (como antes).
@@ -93,7 +108,7 @@ export async function profileRoute(
   try {
     const out = await withSampling(route, setup.provider, setup.sampling, params);
     return {
-      route: out.route,
+      route: compactProfile(out.route),
       report: {
         source: elevationSourceLabel(setup.provider, setup.sampling),
         points: out.points,

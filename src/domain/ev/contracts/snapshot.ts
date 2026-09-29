@@ -83,6 +83,9 @@ const RawRouteSchema = z
     structures: z
       .array(z.object({ kind: z.enum(["tunnel", "bridge"]), fromKm: z.number(), toKm: z.number() }))
       .optional(),
+    elevationProfile: z
+      .object({ stepKm: z.number().positive(), elevM: z.array(z.number()) })
+      .optional(),
   })
   .passthrough();
 

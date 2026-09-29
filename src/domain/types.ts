@@ -242,6 +242,18 @@ export interface RawRoute {
   legBoundariesKm?: number[];
   /** Túneles (km en el eje de las muestras): ahí la elevación se limpia (F2b). */
   structures?: { kind: "tunnel" | "bridge"; fromKm: number; toKm: number }[];
+  /**
+   * Perfil de altura denso ya limpio y suavizado, en una rejilla uniforme desde
+   * el km 0 (eje de las muestras): `elevM[i]` es la altura en `i × stepKm`. Lo
+   * arma la elevación por malla; la energía v2 lo usa para no perder las
+   * subidas y bajadas cortas entre muestras (que están a ~2 km).
+   */
+  elevationProfile?: ElevationProfile;
+}
+
+export interface ElevationProfile {
+  stepKm: number;
+  elevM: number[];
 }
 
 export interface DepartureCharge {

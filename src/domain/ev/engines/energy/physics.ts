@@ -1,4 +1,5 @@
-import type { RouteSample } from "@/domain/types";
+import type { ElevationProfile, RouteSample } from "@/domain/types";
+import { elevationAtKm } from "@/domain/ev/core/elevation-grid";
 import type { EnergySample } from "@/domain/ev/contracts/energy";
 import type { SpeedProfilePoint } from "@/domain/ev/contracts/speed";
 import type { AxisPoint } from "@/domain/ev/core/axis";
@@ -228,8 +229,9 @@ type RouteSampleIn = Omit<
 
 /**
  * Perfil de energía por muestra a partir de la malla y el perfil de velocidad
- * (mismo número de puntos, mismo km). La elevación de cada punto se interpola
- * de las muestras. Cada tramo de la malla cae dentro de un intervalo entre
+ * (mismo número de puntos, mismo km). La elevación de cada punto sale del
+ * perfil denso (`profile`, cada 100 m) si lo hay; si no, se interpola entre
+ * muestras, que están a ~2 km y pierden las subidas cortas. Cada tramo de la malla cae dentro de un intervalo entre
  * muestras (la malla incluye el km de cada muestra) y se suma a esa muestra.
  */
 export function energyProfileV2(
@@ -239,6 +241,8 @@ export function energyProfileV2(
   vp: VehicleEnergyParams,
   ctx: EnergyContext,
   regen: RegenModeParams,
+  /** Perfil de altura denso; sin él, la altura se interpola entre muestras. */
+  profile?: ElevationProfile,
 ): EnergyProfileV2 {
   const n = samples.length;
   const acc = samples.map(() => ({ gross: 0, regen: 0, net: 0, seconds: 0, meters: 0 }));
@@ -253,6 +257,7 @@ export function energyProfileV2(
   let si = 1;
   let ei = 1;
   const elevAt = (km: number) => {
+    if (profile) return elevationAtKm(profile, km);
     ei = intervalIndex(samples, km, ei);
     const a = samples[ei - 1]!;
     const b = samples[ei]!;

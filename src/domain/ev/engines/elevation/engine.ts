@@ -1,5 +1,6 @@
 import { downsample, lerp } from "@/domain/geo";
 import { pointAtKm, routeLine, type AxisPoint } from "@/domain/ev/core/axis";
+import { toElevationGrid } from "@/domain/ev/core/elevation-grid";
 import type { LatLon, RawRoute } from "@/domain/types";
 import { MODEL_PARAMETERS, type ModelParameters } from "@/domain/ev/core/params";
 
@@ -267,9 +268,17 @@ export function applyDenseElevationProfile(
     withElev[i]!.slopePct = ((withElev[i]!.elevM - withElev[i - 1]!.elevM) / (dKm * 1000)) * 100;
   }
   const { gainM, lossM } = hysteresisGainLoss(smoothed, params.dense.hysteresisM);
+  // Perfil denso para la energía v2: sin él, las subidas y bajadas entre muestras (~2 km) se pierden.
+  const elevationProfile = toElevationGrid(
+    km,
+    smoothed,
+    withElev[withElev.length - 1]!.km,
+    params.mesh.spacingM / 1000,
+  );
   return {
     ...route,
     samples: withElev,
+    ...(elevationProfile ? { elevationProfile } : {}),
     elevation: {
       gainM,
       lossM,

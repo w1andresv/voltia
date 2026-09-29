@@ -66,7 +66,15 @@ export function energyProfileForRoute(
   }
   const regen =
     params.energy.regenModes.value[conditions.regenLevel] ?? params.energy.regenModes.value.medium;
-  const profile = energyProfileV2(raw.samples, mesh, speed.points, vp, ctx, regen);
+  const profile = energyProfileV2(
+    raw.samples,
+    mesh,
+    speed.points,
+    vp,
+    ctx,
+    regen,
+    raw.elevationProfile,
+  );
   return {
     ...profile,
     speed,

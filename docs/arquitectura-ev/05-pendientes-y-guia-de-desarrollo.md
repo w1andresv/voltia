@@ -253,6 +253,8 @@ Cada pendiente sigue el mismo formato: **Contexto → Pasos → Archivos → Tes
 > - **Verificar al compartir:** `shareTripFn` llama a `verifySnapshot` (máximo 8 s, nunca bloquea) y guarda `snapshot.verifiedRoutes`. `/v/[shareId]` usa `computePlansFromSnapshot`.
 >
 > Con los datos sintéticos, cambiar a `mapbox-terrain` movió la energía unas décimas de kWh. En montaña real la diferencia será mayor.
+>
+> **Perfil denso para la energía v2 (2026-09-29):** las muestras de la ruta están a ~2 km (`buildSamples`: como mucho ~220 por ruta) y, al interpolar la altura entre ellas, la energía v2 no veía las subidas y bajadas cortas. Ahora la elevación por malla deja en la ruta `RawRoute.elevationProfile` (altura limpia y suavizada cada 100 m, redondeada a 0,1 m en `application/plan-trip/elevation-profile.ts`) y `energyProfileV2` lee la altura de ahí. Bucaramanga → Bogotá con el MG S5 EV (vía real, Copernicus GLO-30): 63,4 kWh antes, **69,0 kWh** ahora, contra 69,5 kWh calculando con muestras cada 100 m; la llegada a la primera parada pasa de 40 % a 33 % (referencia 32 %). v1 no cambia.
 
 #### 5.1.1 Elegir la fuente por defecto — ✅ hecho (sesión B: `mapbox-terrain`, D1)
 - **Contexto:** hoy `ELEVATION_SOURCE` es configurable y por defecto `open-meteo` (96 puntos por ruta). Hay que elegir con datos (D1, O4).
