@@ -362,7 +362,7 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
   2. Agregar `legBoundariesKm?: number[]` a `RawRoute` (`src/domain/types.ts`) y al esquema del snapshot como opcional.
   3. En `speedMesh` (`src/domain/ev/engines/speed/engine.ts`), incluir esos km en la malla y marcarlos con `stop: true`.
   4. En `buildSpeedProfile`, antes de las pasadas, poner `v = 0` y `limitingFactor = "stop"` en los puntos con `stop: true`.
-  5. **Paradas de la pasada 1** (antes de saber dónde se para): no se puede usar el perfil. En su lugar, sumar a cada parada un evento de energía de "frenar y volver a arrancar", `½·m_eff·v²/η − recuperación del frenado`, con la `v` del perfil en ese km. Va en `stopEvents` (`src/domain/planner.ts`) solo con `energyEngine === "v2"`.
+  5. **Paradas de la pasada 1** (antes de saber dónde se para): no se puede usar el perfil. En su lugar, sumar a cada parada un evento de energía de "frenar y volver a arrancar", `½·m_eff·v²/η − recuperación del frenado`, con la `v` del perfil en ese km. Va en `stopEvents` (`src/domain/plan/shared.ts`) solo con `energyEngine === "v2"`.
 - **Tests:** perfil con un punto intermedio (0 km/h en ese km, aceleración antes y después); energía de una ruta con un punto intermedio > sin él; `stopEvents` con v2 suma el evento.
 - **Cierre:** en la pasada 2, cada estación aparece como parada con 0 km/h.
 
@@ -446,6 +446,8 @@ Ver O3. Lo que se mira: energía, kWh/100 km, tiempo de manejo frente al del pro
 2. **Activar:** cambiar el valor por defecto de `PLANNER_ENGINE` a `v2` en `src/infrastructure/config/env.ts` (o solo en Vercel primero). Con `v2` se activa también la pasada 2 (ADR-0009): vigilar el log `[plan-trip:verify]` (cuántas veces queda `failed`) y el cupo de Mapbox.
 3. **Calibrar la espera en estaciones ocupadas** (D11) cuando haya datos de ocupación (Blaze, §5.7).
 4. **Borrar el planificador anterior** en F9 (§5.10).
+
+> **División de `planner.ts` (2026-09-29):** `src/domain/planner.ts` quedó con `buildPlan` y reexporta la API pública de antes, así que los imports no cambian. Las piezas están en `src/domain/plan/`: `shared.ts` (colocar cargadores, energía y minutos del desvío, eventos de parada, tipos comunes), `stops-v1.ts` (planificador por puntaje y carga previa), `stops-v2.ts` (programación dinámica) y `presentation.ts` (adaptadores, `rankPlans`, `effectiveMinutes`, `extraMassLabel`). Ninguna lee `MODEL_PARAMETERS`: los umbrales llegan en `params`. `buildPlan`, `buildPlans`, `computePlans` y `computePlansFromSnapshot` aceptan un `params` opcional; sin él usan los calibrados. Esto permite calibrar o simular con otros valores sin tocar el global.
 
 > **Rendimiento (2026-09-29):** `planCharging` usa un solo candidato por estación alcanzada, y solo crea la etiqueta cuando mejora a la guardada (antes creaba una por cada nivel de SOC). Además, `PlannerInput.linear` resuelve con sumas los tramos cuyo SOC no pasa del 80 %, porque ahí la regeneración entra entera. Los tramos que sí lo pasan se siguen recorriendo con `walk`. Da el mismo plan que recorrer muestra por muestra: lo prueban 500 casos aleatorios en `charging/planner.test.ts`, y la caracterización no cambió. Con 220 muestras la DP pasó de 6.5 a 2.4 ms con 10 estaciones, de 30 a 18–23 con 30, de 110 a 52 con 60 y de 525 a 205–230 con 120. En el navegador, `patchConditions` cambia las condiciones enseguida y recalcula los planes con `throttle` (a lo sumo cada 150 ms mientras se arrastra un control, y la última vez siempre). Las vistas previas esperan a que las condiciones dejen de cambiar.
 
@@ -563,11 +565,11 @@ Sin la cassette real (P1 omitido), se prueban sobre la ruta **sintética** (`src
 1. **Contrato del plan (D7, decidido):**
    - `RoutePlan` queda como contrato definitivo, ampliado con lo que le falta de `EVRoutePlan` (`dataQuality`, `assumptions`, `modelVersion`, `snapshotId`). Se documenta en un ADR y no se crea `legacy-adapter.ts`.
 2. **Borrar el código anterior:**
-   - `planStopsLegacy` y todo lo que solo usa él en `src/domain/planner.ts`: `pickStops`, `assessFirstCharger`, la selección por puntaje y constantes asociadas;
+   - `src/domain/plan/stops-v1.ts` entero (`planStopsLegacy`, `pickStops`, `assessFirstCharger`, la selección por puntaje) y lo de `src/domain/plan/shared.ts` que solo usa él;
    - `PLANNER_ENGINE`, `logShadow`, `shadow-report.ts` y sus tests;
    - lo que quede de `src/domain/energy.ts` tras F6;
    - `geo.plannerEngine` y `geo.energyEngine` quedan solo para leer snapshots viejos.
-3. **Mover lo que queda** de `src/domain/planner.ts` (armado del `RoutePlan`, itinerario, avisos de adaptador) a `src/domain/ev/compute-plan.ts` o a módulos de `src/domain/ev/`. Objetivo: `src/domain/planner.ts` desaparece.
+3. **Mover lo que queda** de `src/domain/planner.ts` (armado del `RoutePlan` e itinerario) y de `src/domain/plan/` (`stops-v2`, `presentation`: avisos de adaptador y orden de rutas) a `src/domain/ev/compute-plan.ts` o a módulos de `src/domain/ev/`. Objetivo: `src/domain/planner.ts` desaparece.
 4. **Documentación:**
    - reescribir `docs/calculo-consumo-energia.md` con el modelo v2 (fórmulas de §5.4, perfil de velocidad, parámetros y fuentes);
    - actualizar `README.md` si cita el modelo anterior.
@@ -669,7 +671,8 @@ O3 activar sombra en Vercel          Dueño decide ─► ENERGY v2 (D3) ─► 
 | Núcleo | `src/domain/ev/core/{params,provenance,units,trip-config,axis}.ts` |
 | Engines | `src/domain/ev/engines/{route,elevation,speed,energy,soc,corridor,compatibility,charging,feasibility,chart}/` |
 | Composición pura | `src/domain/ev/compute-plan.ts`, `src/domain/ev/energy-v2.ts` |
-| Código anterior (se va en F6/F9) | `src/domain/planner.ts`, `src/domain/energy.ts` |
+| Plan de una ruta | `src/domain/planner.ts` (`buildPlan`), `src/domain/plan/{shared,stops-v1,stops-v2,presentation}.ts` |
+| Código anterior (se va en F6/F9) | `src/domain/plan/stops-v1.ts`, `src/domain/energy.ts` |
 | Proveedores | `src/infrastructure/providers/{adapters,routing.mapbox,routing.osrm,elevation.openmeteo,elevation.mapbox-terrain,png,http,weather.openmeteo,geocode.photon}.ts` |
 | Estaciones | `src/infrastructure/stations/`, `src/domain/stations/` |
 | Viajes guardados y compartidos | `src/server/actions/trips.ts`, `src/app/v/[shareId]/page.tsx`, `src/components/trips/` |

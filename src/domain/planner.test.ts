@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { annotateEnergy, energyBetween } from "./energy";
 import { simulateSoc } from "./ev/engines/soc/simulate";
 import { buildPlan, classifyFirstChargerCharge, rankPlans } from "./planner";
+import { MODEL_PARAMETERS, type ModelParameters } from "./ev/core/params";
 import { DEFAULT_CURVE } from "./charging";
 import {
   departureChargeAdvice,
@@ -1026,6 +1027,32 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     expect(p.feasible).toBe(true);
     expect(p.minSoc).toBeGreaterThanOrEqual(15 - 1e-6);
     expect(p.stops.every((s) => s.arriveSoc >= 15 - 1e-6)).toBe(true);
+  });
+
+  it("usa los parámetros que recibe, no los globales", () => {
+    const run = (params?: ModelParameters) =>
+      buildPlan({
+        raw: straightRoute(400),
+        vehicle: vehicle(),
+        conditions: conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 }),
+        chargers: [100, 150, 200, 250, 300].map((km) => chargerAt(km)),
+        weather: null,
+        origin: ORIGIN,
+        destination: dest(400),
+        engine: "v2",
+        params,
+      });
+    expect(run().stops.some((s) => (s.fastChargeExtraPct ?? 0) >= 1)).toBe(true);
+    const noBuffer: ModelParameters = {
+      ...MODEL_PARAMETERS,
+      planner: {
+        ...MODEL_PARAMETERS.planner,
+        fastChargeBuffer: { ...MODEL_PARAMETERS.planner.fastChargeBuffer, value: { extraPct: 0, maxSocPct: 90 } },
+      },
+    };
+    const p = run(noBuffer);
+    expect(p.feasible).toBe(true);
+    expect(p.stops.every((s) => s.fastChargeExtraPct == null)).toBe(true);
   });
 
   it("pide cargar antes de salir cuando con el SOC actual no hay plan", () => {

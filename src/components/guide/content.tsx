@@ -580,7 +580,8 @@ export const GUIDE_V2: GuideContent = {
   sources: (
     <>
       Parámetros en <Code>src/domain/ev/core/params.ts</Code>; programación dinámica en{" "}
-      <Code>src/domain/ev/engines/charging/planner.ts</Code>; decisiones en los ADR 0007–0014.
+      <Code>src/domain/ev/engines/charging/planner.ts</Code>, que arma{" "}
+      <Code>src/domain/plan/stops-v2.ts</Code>; decisiones en los ADR 0007–0014.
     </>
   ),
 };
@@ -985,7 +986,7 @@ export const GUIDE_V1: GuideContent = {
   ],
   sources: (
     <>
-      <Code>src/domain/planner.ts</Code> (planStopsLegacy, pickStops) y{" "}
+      <Code>src/domain/plan/stops-v1.ts</Code> (planStopsLegacy, pickStops) y{" "}
       <Code>src/domain/energy.ts</Code>.
     </>
   ),

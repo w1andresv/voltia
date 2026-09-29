@@ -3,7 +3,8 @@
  * (rutas con elevación, cargadores del corredor, clima), arma y ordena un plan
  * por ruta. La usan el servidor (EVRoutePlanningService) y el navegador
  * (lib/store.ts, al cambiar condiciones sin volver a pedir rutas), así los dos
- * calculan exactamente lo mismo.
+ * calculan exactamente lo mismo. `params` (opcional) reemplaza los parámetros
+ * del modelo; sin él, los calibrados.
  */
 import { buildPlan, rankPlans } from "../planner";
 import type {
@@ -16,6 +17,7 @@ import type {
   WeatherSnapshot,
 } from "../types";
 import type { EnergyEngine } from "./energy-v2";
+import type { ModelParameters } from "./core/params";
 import type { PlanningSnapshot } from "./contracts/snapshot";
 import { detoursForRoute, type MeasuredDetour } from "./contracts/detour";
 
@@ -46,6 +48,7 @@ export function buildPlans(
   conditions: TripConditions,
   engine: PlannerEngine = "legacy",
   energyEngine: EnergyEngine = "legacy",
+  params?: ModelParameters,
 ): RoutePlan[] {
   return inputs.routes.map((raw) =>
     buildPlan({
@@ -59,6 +62,7 @@ export function buildPlans(
       engine,
       energyEngine,
       detours: detoursForRoute(inputs.detours, raw.id),
+      params,
     }),
   );
 }
@@ -69,9 +73,10 @@ export function computePlans(
   conditions: TripConditions,
   engine: PlannerEngine = "legacy",
   energyEngine: EnergyEngine = "legacy",
+  params?: ModelParameters,
 ): ComputedPlans {
   const plans = rankPlans(
-    buildPlans(inputs, vehicle, conditions, engine, energyEngine),
+    buildPlans(inputs, vehicle, conditions, engine, energyEngine, params),
     conditions.planningMode,
   );
   return { plans, selectedId: plans[0]?.id ?? "" };
@@ -116,6 +121,7 @@ export function computePlansFromSnapshot(
   places: { origin: Place; destination: Place },
   vehicle: Vehicle,
   conditions: TripConditions,
+  params?: ModelParameters,
 ): ComputedPlans {
   const inputs: PlanInputs = {
     routes: snapshot.routes,
@@ -127,7 +133,7 @@ export function computePlansFromSnapshot(
   };
   const engine = snapshot.plannerEngine ?? "legacy";
   const energy = snapshot.energyEngine ?? "legacy";
-  const plans = buildPlans(inputs, vehicle, conditions, engine, energy).map((plan) => {
+  const plans = buildPlans(inputs, vehicle, conditions, engine, energy, params).map((plan) => {
     const v = snapshot.verifiedRoutes?.[plan.id];
     if (!v) return plan;
     const ids = v.chargerIds ? new Set(v.chargerIds) : null;
@@ -141,6 +147,7 @@ export function computePlansFromSnapshot(
       destination: inputs.destination,
       engine,
       energyEngine: energy,
+      params,
     });
     if (!verified.feasible && plan.feasible) return plan;
     return { ...verified, verification: v.verification };
