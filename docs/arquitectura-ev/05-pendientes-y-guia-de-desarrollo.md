@@ -111,6 +111,7 @@ Un valor inválido en `PLANNER_ENGINE`, `ENERGY_ENGINE` o `ELEVATION_SOURCE` cae
 | `npm run build` | Build de producción | No |
 | `npm run elevation:compare` | Compara las tres fuentes de elevación sobre una ruta real (`ORIGIN=lat,lon DESTINATION=lat,lon` opcionales) | Mapbox y Open-Meteo |
 | `npm run calibration:report` | Error del modelo según lo que anotaron los usuarios (D13), por modelo y vehículo | Base (solo lectura) |
+| `npm run calibration:fit` | Propone parámetros físicos ajustados con esas observaciones (§5.8); `KNOBS` y `MIN_TRIPS` opcionales | Base (solo lectura) |
 | `npm run report` | Informe del plan (§8.5) en `docs/arquitectura-ev/informes/`; sintético por defecto, `REAL=1` con Mapbox | Sin red (sintético) o Mapbox |
 | `npm run snapshot:record` | Graba la cassette real (opcional, P1 omitido; `STATIONS_URL` evita la base) | Mapbox, Open-Meteo y base o API |
 
@@ -516,11 +517,13 @@ Rutas, elevación, clima, geocodificación y vehículos siguen con los proveedor
 10. **ESLint:** nada fuera de `src/infrastructure/` y `container.ts` importa `@/infrastructure/blaze/*`. La regla actual ya lo cubre; verificarlo con un import de prueba.
 11. **Limpieza (F9):** con `DATA_SOURCE=blaze` estable, borrar las fuentes que Blaze reemplaza en `src/infrastructure/stations/sources/*`, la fusión (`src/domain/stations/merge.ts`, `src/infrastructure/stations/registry.ts`) y el cron de refresco del dataset, si ya no se usan.
 
-### 5.8 Calibración (`TripObservation`) — ✅ contrato y registro hechos (sesiones D y E, ADR-0014); falta el ajuste automático cuando haya datos
+### 5.8 Calibración (`TripObservation`) — ✅ contrato, registro y ajuste automático hechos (ADR-0014); falta correrlo cuando haya viajes
 
 > **Sesión D (2026-09-26):** `src/domain/ev/contracts/calibration.ts` define `TripObservation` y su esquema zod (plan, modelo, vehículo, condiciones y al menos dos SOC observados). También define `compareObservation`, que calcula el error de SOC en cada punto, el error medio y máximo, el error de energía y la razón de consumo observado/predicho. 
 >
-> **Sesión E (2026-09-26, D13):** "¿Con cuánto llegaste?" en Mis viajes, con la tabla `voltia_trip_observations` (migración 0014), `recordArrivalFn`, `record-arrival.ts` y `npm run calibration:report`. Falta aplicar la migración (O8) y, con suficientes viajes, el ajuste automático de parámetros (paso 3).
+> **Sesión E (2026-09-26, D13):** "¿Con cuánto llegaste?" en Mis viajes, con la tabla `voltia_trip_observations` (migración 0014), `recordArrivalFn`, `record-arrival.ts` y `npm run calibration:report`. Falta aplicar la migración (O8).
+>
+> **Ajuste automático (2026-09-29, paso 3):** `npm run calibration:fit` solo lee la base. Por cada observación arma el caso con `calibrationCase`: toma la ruta del plan mostrado y calcula lo consumido como la caída de SOC más lo que cargaba el plan. Descarta los viajes sin snapshot y los vehículos con consumo manual. Luego `fitParameters` (`src/application/calibration/fit-parameters.ts`) ajusta los parámetros de `KNOBS` (por defecto `drivetrainEfficiency`; también `rollingResistance`, `dragAreaM2` y `baseAuxPowerKw`). Cada uno se ajusta como un factor sobre el valor actual, por sección dorada, minimizando el error relativo de energía v2 más una penalización `(factor − 1)²` para que con pocos viajes no se aleje. Lo hace por vehículo (con al menos `MIN_TRIPS`, 3 por defecto) y para todos juntos. Compara energía y no SOC con paradas porque, al cambiar los parámetros, el planificador elegiría otras paradas. El informe queda en `mediciones/calibracion-AAAA-MM-DD.md`. Los valores se pasan a mano como `sourced(x, "calculated", …)`: el script no cambia `ModelParameters` ni el catálogo. Con solo salida y llegada, la eficiencia y la rodadura se confunden entre sí: conviene ajustar un parámetro a la vez hasta tener viajes con puntos intermedios o rutas muy distintas.
 
 
 - **Contexto:** la especificación §9 define solo el contrato de datos. Casi todos los parámetros físicos son `estimated`; la calibración los vuelve `calculated`.

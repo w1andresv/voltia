@@ -24,6 +24,7 @@
     "elevation:dem": "vitest run --config vitest.record.config.ts --reporter=verbose src/test-support/compare-terrain-dem.record.ts",
     "report": "vitest run --config vitest.record.config.ts src/test-support/report.record.ts",
     "calibration:report": "node scripts/calibration-report.mjs",
+    "calibration:fit": "vitest run --config vitest.record.config.ts src/test-support/calibration-fit.record.ts",
     "blaze:check": "node scripts/blaze-check.mjs"
   },
   "dependencies": {
