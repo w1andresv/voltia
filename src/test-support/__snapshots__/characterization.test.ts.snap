@@ -453,7 +453,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > menos parad
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > menos paradas, SOC 90 % 2`] = `"93e97943a06e19c7"`;
+exports[`caracterización del pipeline con proveedores sintéticos > menos paradas, SOC 90 % 2`] = `"40865a9a07bc582e"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 1`] = `
 {
@@ -548,7 +548,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > modo más r
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 2`] = `"f4e120ea08a40302"`;
+exports[`caracterización del pipeline con proveedores sintéticos > modo más rápido, SOC 35 %: resumen y huella del resultado completo 2`] = `"e192f134528ab638"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 1`] = `
 {
@@ -643,7 +643,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > más segura
 }
 `;
 
-exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 2`] = `"602d5a0dadada162"`;
+exports[`caracterización del pipeline con proveedores sintéticos > más segura, SOC 15 %, margen conservador (pide carga antes de salir) 2`] = `"552c8e765fc9708e"`;
 
 exports[`caracterización del pipeline con proveedores sintéticos > planificador v2: menos paradas, SOC 90 % 1`] = `
 {

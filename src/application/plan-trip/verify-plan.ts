@@ -134,6 +134,8 @@ export async function verifyPlanDetailed(
         destination: inputs.destination,
         engine,
         energyEngine: args.energyEngine,
+        params: inputs.params,
+        elevationUnavailable: inputs.dataQuality?.elevation === "unavailable",
       });
     const verification = (status: "verified" | "changed") => ({
       status,

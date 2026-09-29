@@ -1,5 +1,6 @@
 import type { RoadMix, RoadTier } from "./road-hierarchy";
 import type { FeasibilityStatus, InfeasibilityReason } from "./ev/engines/feasibility/engine";
+import type { DataSource } from "./ev/core/provenance";
 import type {
   VehicleShape,
   PlaceShape,
@@ -339,6 +340,34 @@ export interface RoutePlan {
   weather: WeatherSnapshot | null;
   /** Pasada 2 (F8): el plan recalculado sobre la ruta real que pasa por las paradas. */
   verification?: PlanVerification;
+  /** Versión del modelo con que se calculó (`ModelParameters.modelVersion`, D7). */
+  modelVersion?: string;
+  /** Supuestos del cálculo: valores `estimated` que pesan en este plan (especificación §2, D7). */
+  assumptions?: PlanAssumption[];
+  /** Calidad de los datos del plan (especificación §6, D7). */
+  dataQuality?: PlanDataQuality;
+  /** Huella del snapshot con que se calculó (mismos datos ⇒ mismo id); falta si no hubo snapshot. */
+  snapshotId?: string;
+}
+
+/** Un supuesto del plan: qué parámetro, con qué valor y de dónde sale. */
+export interface PlanAssumption {
+  parameter: string;
+  value: unknown;
+  source: DataSource;
+  reference?: string;
+}
+
+/** Lo que se sabe de la calidad de los datos del plan. */
+export interface PlanDataQuality {
+  /** Ninguna fuente de elevación respondió: la ruta se calculó plana. */
+  elevation?: "unavailable";
+  /** Duración del perfil de velocidad frente a la del proveedor, % (solo energía v2). */
+  providerDurationDeviationPct?: number;
+  /** Paradas con el desvío estimado en línea recta (no medido por vía). */
+  estimatedDetours: number;
+  /** Paradas cuya potencia es un valor por defecto del conector, no reportada. */
+  stopsWithAssumedPower: number;
 }
 
 /**

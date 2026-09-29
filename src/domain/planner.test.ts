@@ -1055,6 +1055,38 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     expect(p.stops.every((s) => s.fastChargeExtraPct == null)).toBe(true);
   });
 
+  it("contrato D7: versión del modelo, supuestos y calidad de los datos", () => {
+    const args = {
+      raw: straightRoute(400),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 }),
+      chargers: [100, 150, 200, 250, 300].map((km) => chargerAt(km)),
+      weather: null,
+      origin: ORIGIN,
+      destination: dest(400),
+      engine: "v2" as const,
+    };
+    const v2 = buildPlan({ ...args, energyEngine: "v2", elevationUnavailable: true });
+    expect(v2.modelVersion).toBe(MODEL_PARAMETERS.modelVersion);
+    const names = v2.assumptions!.map((a) => a.parameter);
+    expect(names).toContain("vehicle.drivetrainEfficiency");
+    expect(names).toContain("charging.connectionOverheadMin");
+    // Sin matriz, los desvíos son estimados.
+    expect(names).toContain("corridor.detourRoadFactor");
+    expect(v2.assumptions!.every((a) => a.source === "estimated")).toBe(true);
+    expect(v2.dataQuality).toMatchObject({
+      elevation: "unavailable",
+      estimatedDetours: v2.stops.length,
+      stopsWithAssumedPower: 0,
+    });
+    expect(v2.dataQuality!.providerDurationDeviationPct).toEqual(expect.any(Number));
+
+    const legacy = buildPlan(args);
+    expect(legacy.assumptions!.map((a) => a.parameter)).toContain("energy.model");
+    expect(legacy.dataQuality!.elevation).toBeUndefined();
+    expect(legacy.dataQuality!.providerDurationDeviationPct).toBeUndefined();
+  });
+
   it("pide cargar antes de salir cuando con el SOC actual no hay plan", () => {
     const p = buildPlan({
       raw: straightRoute(300),

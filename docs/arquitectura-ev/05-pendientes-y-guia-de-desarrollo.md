@@ -565,8 +565,8 @@ Sin la cassette real (P1 omitido), se prueban sobre la ruta **sintética** (`src
 
 **Requisitos previos:** `PLANNER_ENGINE=v2` y `ENERGY_ENGINE=v2` en producción sin problemas (D2, D3), F6 hecha, D7 y D10 decididas.
 
-1. **Contrato del plan (D7, decidido):**
-   - `RoutePlan` queda como contrato definitivo, ampliado con lo que le falta de `EVRoutePlan` (`dataQuality`, `assumptions`, `modelVersion`, `snapshotId`). Se documenta en un ADR y no se crea `legacy-adapter.ts`.
+1. **Contrato del plan (D7) — ✅ hecho (2026-09-29, ADR-0015):**
+   - `RoutePlan` quedó como contrato definitivo, ampliado con `modelVersion`, `assumptions`, `dataQuality` y `snapshotId` (`src/domain/plan/quality.ts`, `snapshotHash`). No se creó `legacy-adapter.ts`.
 2. **Borrar el código anterior:**
    - `src/domain/plan/stops-v1.ts` entero (`planStopsLegacy`, `pickStops`, `assessFirstCharger`, la selección por puntaje) y lo de `src/domain/plan/shared.ts` que solo usa él;
    - `PLANNER_ENGINE`, `logShadow`, `shadow-report.ts` y sus tests;

@@ -22,4 +22,5 @@ Casi todos los parámetros físicos y de conducción son `estimated`. La especif
 ## Consecuencias
 - Hay que aplicar la migración 0014 (`npm run db:migrate`) antes de que el botón guarde. Sin ella, la app sigue funcionando y el botón muestra el error de guardado.
 - El dato es simple y ruidoso: el usuario pudo no seguir el plan (otra velocidad, otras cargas). Sirve para detectar sesgos por modelo y vehículo con varios viajes, no para calibrar con uno solo.
-- **Pendiente:** el ajuste automático de parámetros (mínimos cuadrados sobre las observaciones, guía §5.8 paso 3) cuando haya suficientes viajes, e importar datos del vehículo (API del fabricante, OBD).
+- **Ajuste automático (2026-09-29):** `npm run calibration:fit` propone parámetros ajustados con las observaciones (guía §5.8 paso 3). No los escribe.
+- **Pendiente:** correr el ajuste cuando haya suficientes viajes, e importar datos del vehículo (API del fabricante, OBD).

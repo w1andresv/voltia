@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { stableHash } from "../core/hash";
 import type { GeoBundle, PlanVerification, RawRoute } from "../../types";
 
 /**
@@ -33,6 +34,8 @@ export interface PlanningSnapshot extends GeoBundle {
   createdAt: string;
   /** Versión del modelo con que se calculó (ModelParameters.modelVersion). */
   modelVersion: string;
+  /** Huella de los datos (`snapshotHash`); falta en snapshots anteriores a 2026-09-29. */
+  snapshotId?: string;
   plannerEngine: "legacy" | "v2";
   providers: { routing: string; elevation: string; weather: string | null; stations: string };
   /** Por id de ruta. Solo en viajes compartidos cuyo plan se verificó (D6). */
@@ -117,6 +120,7 @@ const SnapshotObjectSchema = z.object({
   schemaVersion: z.literal(SNAPSHOT_SCHEMA_VERSION),
   createdAt: z.string(),
   modelVersion: z.string(),
+  snapshotId: z.string().max(64).optional(),
   plannerEngine: z.enum(["legacy", "v2"]),
   /** Falta en snapshots anteriores a F5: equivale a "legacy". */
   energyEngine: z.enum(["legacy", "v2"]).optional(),
@@ -132,7 +136,9 @@ const SnapshotObjectSchema = z.object({
   warnings: z.array(z.string()),
   stationsVersion: z.string().optional(),
   dataQuality: z.object({ elevation: z.literal("unavailable").optional() }).optional(),
-  detours: z.record(z.string(), z.object({ distanceKm: z.number(), durationMin: z.number() })).optional(),
+  detours: z
+    .record(z.string(), z.object({ distanceKm: z.number(), durationMin: z.number() }))
+    .optional(),
   verifiedRoutes: z
     .record(
       z.string(),
@@ -161,7 +167,38 @@ export function parsePlanningSnapshot(value: unknown): PlanningSnapshot | null {
   return parsed.success ? (parsed.data as unknown as PlanningSnapshot) : null;
 }
 
+/**
+ * Huella de los datos del snapshot (el `inputHash` de la especificación §6):
+ * mismos datos y modelo ⇒ mismo id. No cuenta cuándo se reunieron, los avisos
+ * ni la pasada 2 que se agrega al compartir.
+ */
+export function snapshotHash(
+  s: Omit<
+    PlanningSnapshot,
+    "createdAt" | "schemaVersion" | "warnings" | "snapshotId" | "verifiedRoutes"
+  >,
+): string {
+  return stableHash({
+    modelVersion: s.modelVersion,
+    plannerEngine: s.plannerEngine,
+    energyEngine: s.energyEngine ?? "legacy",
+    providers: s.providers,
+    routes: s.routes,
+    chargers: s.chargers,
+    weather: s.weather,
+    stationsVersion: s.stationsVersion ?? null,
+    dataQuality: s.dataQuality ?? null,
+    detours: s.detours ?? null,
+  });
+}
+
 /** Los datos del snapshot que necesita `computePlans` (sin el origen y el destino, que van en la petición). */
 export function snapshotInputs(s: PlanningSnapshot) {
-  return { routes: s.routes, chargers: s.chargers, weather: s.weather };
+  return {
+    routes: s.routes,
+    chargers: s.chargers,
+    weather: s.weather,
+    ...(s.dataQuality ? { dataQuality: s.dataQuality } : {}),
+    ...(s.snapshotId ? { snapshotId: s.snapshotId } : {}),
+  };
 }

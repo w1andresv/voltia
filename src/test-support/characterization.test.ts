@@ -196,6 +196,9 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
       stored!.plannerEngine,
     );
     expect(normalized(again.plans)).toBe(normalized(res.plans));
+    // D7: los planes llevan la huella del snapshot con que se calcularon.
+    expect(stored!.snapshotId).toMatch(/^[0-9a-f]{14}$/);
+    expect(res.plans.every((p) => p.snapshotId === stored!.snapshotId)).toBe(true);
     expect(again.selectedId).toBe(res.selectedId);
   });
 

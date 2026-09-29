@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { minimalSnapshot } from "@/test-support/snapshot-fixture";
-import { MAX_SNAPSHOT_BYTES, parsePlanningSnapshot, snapshotInputs } from "./snapshot";
+import {
+  MAX_SNAPSHOT_BYTES,
+  parsePlanningSnapshot,
+  snapshotHash,
+  snapshotInputs,
+} from "./snapshot";
 
 describe("parsePlanningSnapshot", () => {
   it("acepta un snapshot válido tal cual, con campos extra", () => {
@@ -36,6 +41,29 @@ describe("snapshotInputs", () => {
       routes: s.routes,
       chargers: s.chargers,
       weather: s.weather,
+    });
+  });
+});
+
+describe("snapshotHash", () => {
+  it("mismos datos, mismo id, aunque cambien la fecha, los avisos o la pasada 2", () => {
+    const s = minimalSnapshot();
+    const again = minimalSnapshot({ createdAt: "2027-01-01T00:00:00.000Z", warnings: ["otro"] });
+    expect(snapshotHash(again)).toBe(snapshotHash(s));
+    expect(snapshotHash(s)).toMatch(/^[0-9a-f]{14}$/);
+  });
+
+  it("cambia si cambian los datos o el modelo", () => {
+    const s = minimalSnapshot();
+    expect(snapshotHash({ ...s, modelVersion: "1.0.0" })).not.toBe(snapshotHash(s));
+    expect(snapshotHash({ ...s, chargers: [] })).not.toBe(snapshotHash(s));
+  });
+
+  it("snapshotInputs pasa el id y la calidad de los datos cuando los hay", () => {
+    const s = minimalSnapshot({ snapshotId: "abc", dataQuality: { elevation: "unavailable" } });
+    expect(snapshotInputs(s)).toMatchObject({
+      snapshotId: "abc",
+      dataQuality: { elevation: "unavailable" },
     });
   });
 });

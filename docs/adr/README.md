@@ -18,6 +18,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0012](./0012-energia-v2-detras-de-energy-engine.md) | Energía v2 (física sin multiplicadores y perfil de velocidad) detrás de ENERGY_ENGINE | Aceptada |
 | [0013](./0013-desvios-medidos-con-la-matriz.md) | Desvíos medidos con la matriz de Mapbox, detrás de DETOUR_SOURCE | Aceptada |
 | [0014](./0014-calibracion-con-soc-de-llegada.md) | Calibración con el SOC de llegada ("¿Con cuánto llegaste?") | Aceptada |
+| [0015](./0015-routeplan-contrato-definitivo.md) | `RoutePlan` ampliado como contrato definitivo del plan | Aceptada |
 
 ## Plantilla
 

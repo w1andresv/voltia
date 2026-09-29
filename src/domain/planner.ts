@@ -6,6 +6,7 @@ import { detourEnergyV2, energyProfileForRoute, type EnergyEngine } from "./ev/e
 import { batteryDepletion } from "./ev/engines/soc/depletion";
 import { simulateSoc } from "./ev/engines/soc/simulate";
 import { adapterSummary } from "./plan/presentation";
+import { planAssumptions, planDataQuality } from "./plan/quality";
 import { placeChargers, stopEvents } from "./plan/shared";
 import { planStopsLegacy } from "./plan/stops-v1";
 import { planStopsV2 } from "./plan/stops-v2";
@@ -64,6 +65,8 @@ export function buildPlan(args: {
   detours?: Record<string, MeasuredDetour>;
   /** Parámetros del modelo; por defecto, los calibrados (`MODEL_PARAMETERS`). */
   params?: ModelParameters;
+  /** Ninguna fuente de elevación respondió (va a `dataQuality`). */
+  elevationUnavailable?: boolean;
 }): RoutePlan {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
   const params = args.params ?? MODEL_PARAMETERS;
@@ -233,5 +236,12 @@ export function buildPlan(args: {
     itinerary,
     elevation: raw.elevation,
     weather,
+    modelVersion: params.modelVersion,
+    assumptions: planAssumptions({ energyV2, stops, params }),
+    dataQuality: planDataQuality({
+      energyV2,
+      stops,
+      elevationUnavailable: args.elevationUnavailable,
+    }),
   };
 }

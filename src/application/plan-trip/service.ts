@@ -29,6 +29,7 @@ import {
 } from "@/domain/types";
 import {
   SNAPSHOT_SCHEMA_VERSION,
+  snapshotHash,
   type PlanningSnapshot,
   type VerifiedRoute,
 } from "@/domain/ev/contracts/snapshot";
@@ -212,6 +213,8 @@ export class EVRoutePlanningService {
       origin: data.origin,
       destination: data.destination,
       ...(detours ? { detours } : {}),
+      ...(elevationUnavailable ? { dataQuality: { elevation: "unavailable" as const } } : {}),
+      params,
     };
     const vehicle = data.vehicle as Vehicle;
     const conditions = data.conditions as TripConditions;
@@ -319,33 +322,38 @@ export class EVRoutePlanningService {
       selectedId = ranked[0]?.id ?? "";
     }
 
+    const geoBody = {
+      modelVersion: params.modelVersion,
+      plannerEngine: responding,
+      energyEngine: energy,
+      providers: {
+        routing: routed.engine,
+        // La fuente que de verdad dio el perfil (con respaldo puede no ser la configurada).
+        elevation:
+          [...new Set(elevationReports.map((r) => r.source ?? "ninguna"))].join(",") ||
+          elevationSourceLabel(this.deps.elevation, this.deps.elevationSampling ?? "fixed"),
+        weather: weather?.id ?? null,
+        stations: this.deps.stationSource ?? "dataset",
+      },
+      routes,
+      chargers,
+      weather: snapshot,
+      stationsVersion: dataset.version,
+      ...(elevationUnavailable ? { dataQuality: { elevation: "unavailable" as const } } : {}),
+      ...(detours ? { detours } : {}),
+    };
+    const snapshotId = snapshotHash(geoBody);
     return {
       response: {
         geo: {
           schemaVersion: SNAPSHOT_SCHEMA_VERSION,
           createdAt: (this.deps.clock ?? (() => new Date()))().toISOString(),
-          modelVersion: params.modelVersion,
-          plannerEngine: responding,
-          energyEngine: energy,
-          providers: {
-            routing: routed.engine,
-            // La fuente que de verdad dio el perfil (con respaldo puede no ser la configurada).
-            elevation:
-              [...new Set(elevationReports.map((r) => r.source ?? "ninguna"))].join(",") ||
-              elevationSourceLabel(this.deps.elevation, this.deps.elevationSampling ?? "fixed"),
-            weather: weather?.id ?? null,
-            stations: this.deps.stationSource ?? "dataset",
-          },
-          routes,
-          chargers,
-          weather: snapshot,
+          snapshotId,
+          ...geoBody,
           warnings,
-          stationsVersion: dataset.version,
-          ...(elevationUnavailable ? { dataQuality: { elevation: "unavailable" as const } } : {}),
-          ...(detours ? { detours } : {}),
           ...(verifiedRoutes ? { verifiedRoutes } : {}),
         },
-        plans: ranked,
+        plans: ranked.map((p) => ({ ...p, snapshotId })),
         selectedId,
       },
       engine: routed.engine,
@@ -404,6 +412,8 @@ export class EVRoutePlanningService {
       origin: request.origin,
       destination: request.destination,
       detours: snapshot.detours,
+      ...(snapshot.dataQuality ? { dataQuality: snapshot.dataQuality } : {}),
+      params,
     };
     const energyEngine = snapshot.energyEngine ?? "legacy";
     const [plan] = computePlans(
