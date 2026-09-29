@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { adapterNote } from "./adapter-note";
+import type { ConnectorType } from "@/domain/types";
+import { adapterNote, adapterRequirementNote } from "./adapter-note";
 
 describe("adapterNote", () => {
   it("no lo lleva: lo indica y aclara que el plan no cuenta con esa opción", () => {
@@ -27,5 +28,46 @@ describe("adapterNote", () => {
     expect(n.title).toBe("Requiere adaptador CCS1 → CCS2 (lo llevas)");
     expect(n.withLine).not.toContain("no cuenta");
     expect(n.withoutLine).toBe("Sin adaptador: esta estación no tiene otra toma para tu vehículo");
+  });
+});
+
+describe("adapterRequirementNote", () => {
+  const car = { name: "BYD Dolphin", connectors: ["ccs2", "type2"] as ConnectorType[] };
+  const gbt = { from: "gb_t", to: "ccs2" } as const;
+
+  it("no lo lleva: dice cuál requiere y que lo marque", () => {
+    const n = adapterRequirementNote(
+      { station: ["gb_t"], adapter: gbt, carried: false, fastCharge: true },
+      car,
+    );
+    expect(n).toBe(
+      "Requiere adaptador GB/T → CCS2. Si lo llevas, márcalo en tu vehículo y la ruta contará con esta estación.",
+    );
+  });
+
+  it("lo lleva", () => {
+    const n = adapterRequirementNote(
+      { station: ["gb_t"], adapter: gbt, carried: true, fastCharge: true },
+      car,
+    );
+    expect(n).toBe("Requiere adaptador GB/T → CCS2 (lo llevas).");
+  });
+
+  it("toma sin carga rápida confirmada", () => {
+    const n = adapterRequirementNote(
+      { station: ["gb_t"], adapter: gbt, carried: true, fastCharge: false },
+      car,
+    );
+    expect(n).toContain("Requiere adaptador GB/T → CCS2, pero la fuente no confirma");
+  });
+
+  it("sin adaptador verificado: requiere adaptador y dice qué tiene cada uno", () => {
+    const n = adapterRequirementNote(
+      { station: ["type1"], adapter: null, carried: false, fastCharge: false },
+      car,
+    );
+    expect(n).toBe(
+      "Requiere adaptador para BYD Dolphin: la estación tiene Tipo 1 y el vehículo usa CCS2, Tipo 2.",
+    );
   });
 });

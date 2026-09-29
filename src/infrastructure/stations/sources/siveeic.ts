@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { NormalizedRecord, StationConnector } from "@/domain/stations/model";
-import { standardizeConnector, currentFromStandard } from "@/domain/stations/connectors";
+import { standardizeConnector, currentFromLabel, currentFromStandard } from "@/domain/stations/connectors";
 import type { StationSource } from "./types";
 import { fetchJson } from "@/infrastructure/providers/http";
 
@@ -28,7 +28,9 @@ function parseSockets(conectores: Record<string, number> | undefined): StationCo
   for (const [label, count] of Object.entries(conectores)) {
     if (!(count > 0)) continue;
     const standard = standardizeConnector(label);
-    const current = currentFromStandard(standard);
+    // "GB-T DC - GB": la etiqueta dice la corriente, y eso es un dato reportado.
+    const labelled = currentFromLabel(label);
+    const current = labelled ?? currentFromStandard(standard);
     
     sockets.push({
       standard,
@@ -36,7 +38,7 @@ function parseSockets(conectores: Record<string, number> | undefined): StationCo
       quantity: count,
       powerKw: null, // SIVEEIC no reporta potencia; merge.ts asume un valor por defecto por estándar
       current: current as any,
-      currentOrigin: current ? "standard" : null,
+      currentOrigin: labelled ? "reported" : current ? "standard" : null,
       voltageV: null,
       amperageA: null,
       status: "unknown",

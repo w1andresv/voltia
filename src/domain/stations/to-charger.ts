@@ -4,7 +4,7 @@ import type { Charger, ChargerSocket, ChargerSource, ConnectorType } from "../ty
 /** attributes/conflicts no hacen falta aquí: el listado liviano de /api/stations los omite. */
 type StationForCharger = Omit<ConsolidatedStation, "attributes" | "conflicts">;
 
-const PLANNING_STANDARDS = ["ccs2", "ccs1", "type2", "chademo", "nacs", "gb_t"];
+const PLANNING_STANDARDS = ["ccs2", "ccs1", "type2", "type1", "chademo", "nacs", "gb_t"];
 
 function toSockets(station: StationForCharger, onlyEligible: boolean): ChargerSocket[] {
   const sockets: ChargerSocket[] = [];
@@ -63,18 +63,19 @@ export function toPlanningCharger(station: ConsolidatedStation): Charger {
  * Convierte una ConsolidatedStation para mostrarla en el mapa: incluye todos
  * los conectores (aunque no tengan potencia confirmada) — "se muestra en el
  * mapa" aunque no sirva para planificar (decisión 4 del plan).
+ *
+ * Un conector que no se reconoce no saca a la estación del plan: se ignora y
+ * se informa aparte. Solo los motivos de elegibilidad la excluyen.
  */
 export function toDisplayCharger(station: StationForCharger): Charger {
   const unknown = station.connectors
     .filter((c) => !PLANNING_STANDARDS.includes(c.standard))
     .map((c) => c.rawLabel || c.standard);
-  const issues = [
-    ...(station.planning.eligible ? [] : station.planning.reasons),
-    ...(unknown.length ? [`Conector sin reconocer: ${unknown.join(", ")}`] : []),
-  ];
+  const issues = station.planning.eligible ? [] : station.planning.reasons;
   return {
     ...toChargerBase(station, toSockets(station, false)),
     verified: station.planning.eligible,
     ...(issues.length ? { planningIssues: issues } : {}),
+    ...(unknown.length ? { unknownConnectors: unknown } : {}),
   };
 }

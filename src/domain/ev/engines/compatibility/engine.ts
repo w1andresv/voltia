@@ -26,7 +26,7 @@ export function socketCurrent(socket: ChargerSocket): "AC" | "DC" | null {
     return socket.currentOrigin === "reported" ? (socket.current ?? null) : null;
   }
   if (socket.current) return socket.current;
-  if (socket.connector === "type2") return "AC";
+  if (socket.connector === "type2" || socket.connector === "type1") return "AC";
   return DC_ONLY.includes(socket.connector) ? "DC" : null;
 }
 
@@ -128,4 +128,45 @@ export function routeSocket(charger: Charger, vehicle: Vehicle): RoutePlug | nul
   const plugs = routePlugs(charger, vehicle);
   if (!plugs.length) return null;
   return plugs.reduce((best, plug) => (plug.powerKw > best.powerKw ? plug : best));
+}
+
+export interface AdapterRequirement {
+  /** Conectores de la estación, sin repetir. */
+  station: ConnectorType[];
+  /** Un adaptador de la lista verificada que serviría; null si no hay ninguno. */
+  adapter: { from: ConnectorType; to: ConnectorType } | null;
+  /** El usuario marcó que lleva ese adaptador. */
+  carried: boolean;
+  /**
+   * Con ese adaptador la estación sirve: la toma es de carga rápida (DC).
+   * Un GB/T sin corriente reportada no lo es (C4). Con `carried`, el plan la usa.
+   */
+  fastCharge: boolean;
+}
+
+/**
+ * La estación no tiene ningún conector del vehículo: hace falta un adaptador.
+ * Dice cuál (si hay uno verificado), si el usuario lo lleva y si con él la
+ * estación serviría. null si el vehículo conecta directo o no hay conectores.
+ */
+export function adapterRequirement(charger: Charger, vehicle: Vehicle): AdapterRequirement | null {
+  const station = [...new Set(charger.sockets.map((s) => s.connector))];
+  if (!station.length || station.some((c) => vehicle.connectors.includes(c))) return null;
+  const candidates = VERIFIED_DC_ADAPTERS.filter(
+    (v) => station.includes(v.from) && vehicle.connectors.includes(v.to),
+  );
+  const carries = (a: ChargeAdapter) =>
+    (vehicle.adapters ?? []).some((c) => c.from === a.from && c.to === a.to);
+  const works = (a: ChargeAdapter) => routeSocket(charger, { ...vehicle, adapters: [a] }) != null;
+  const adapter =
+    candidates.find((a) => carries(a) && works(a)) ??
+    candidates.find(works) ??
+    candidates[0] ??
+    null;
+  return {
+    station,
+    adapter,
+    carried: adapter ? carries(adapter) : false,
+    fastCharge: adapter ? works(adapter) : false,
+  };
 }

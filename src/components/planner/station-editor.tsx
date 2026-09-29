@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-const CONNECTORS: ConnectorType[] = ["ccs2", "type2", "chademo", "nacs", "ccs1", "gb_t"];
+const CONNECTORS: ConnectorType[] = ["ccs2", "type2", "chademo", "nacs", "ccs1", "type1", "gb_t"];
 const AVAIL: { id: StationAvailability; label: string }[] = [
   { id: "unknown", label: "Sin dato" },
   { id: "available", label: "Disponible" },

@@ -5,6 +5,7 @@ import type {
 } from "@/domain/stations/model";
 import type { StationAvailability } from "@/domain/types";
 import {
+  currentFromLabel,
   currentFromStandard,
   defaultKwForStandard,
   standardizeConnector,
@@ -44,14 +45,14 @@ export function availabilityOf(status: BlazeStatus | null | undefined): StationA
   }
 }
 
-/** Blaze escribe los conectores en español y con variantes: "Tipo 2", "Tipo2", "CCS 2", "CCS-2". */
+/** Blaze escribe los conectores en español y con variantes; standardizeConnector ya las lee. */
 export function standardOf(label: string): ExtendedConnectorType {
-  return standardizeConnector(
-    label
-      .replace(/\btipo[\s-]*(\d)/gi, "Type $1")
-      .replace(/\btipo\b/gi, "Type")
-      .replace(/\bccs[\s-]*([12])\b/gi, "CCS$1"),
-  );
+  return standardizeConnector(label);
+}
+
+/** La corriente que dice la etiqueta ("GB-T DC") o, si no la dice, la del estándar. */
+function currentOf(standard: ExtendedConnectorType, rawLabel: string) {
+  return currentFromLabel(rawLabel) ?? currentFromStandard(standard);
 }
 
 /** Potencia máxima típica de un conector de corriente alterna (Tipo 2 trifásico). */
@@ -66,7 +67,9 @@ const AC_MAX_KW = 43;
  * Sin `maxKw` (key sin chargers:read) todos quedan con la del estándar.
  */
 export function connectorsFromList(station: BlazeStation): StationConnector[] {
+  // "/" separa conectores ("CCS2 / Tipo 2"), salvo en "GB/T": se protege antes de partir.
   const labels = (station.connectors ?? "")
+    .replace(/\bgb\s*\/\s*t\b/gi, "GB-T")
     .split(/[,;/|]/)
     .map((l) => l.trim())
     .filter(Boolean);
@@ -76,10 +79,10 @@ export function connectorsFromList(station: BlazeStation): StationConnector[] {
     if (!byStandard.has(standard)) byStandard.set(standard, label);
   }
   const maxKw = station.maxKw != null && station.maxKw > 0 ? station.maxKw : null;
-  const hasDc = [...byStandard.keys()].some((s) => currentFromStandard(s) !== "AC");
+  const hasDc = [...byStandard].some(([s, label]) => currentOf(s, label) !== "AC");
   const single = byStandard.size === 1;
   return [...byStandard].map(([standard, rawLabel]) => {
-    const isAc = currentFromStandard(standard) === "AC";
+    const isAc = currentOf(standard, rawLabel) === "AC";
     const reported = maxKw != null && (isAc ? !hasDc && maxKw <= AC_MAX_KW : true);
     const fallback = defaultKwForStandard(standard);
     const powerKw = reported
@@ -96,14 +99,21 @@ export function connectorsFromList(station: BlazeStation): StationConnector[] {
   });
 }
 
-/** Conectores del detalle: uno por estándar, con la cantidad y el estado de sus cargadores. */
+/**
+ * Conectores del detalle: uno por estándar (y por corriente, si la etiqueta la
+ * dice: "GB-T DC" y "GB-T AC" no se juntan), con la cantidad y el estado de sus cargadores.
+ */
 export function connectorsFromChargers(chargers: BlazeCharger[]): StationConnector[] {
-  const groups = new Map<ExtendedConnectorType, BlazeCharger[]>();
+  const groups = new Map<string, { standard: ExtendedConnectorType; list: BlazeCharger[] }>();
   for (const c of chargers) {
-    const standard = standardOf(c.connectorType ?? "");
-    groups.set(standard, [...(groups.get(standard) ?? []), c]);
+    const label = c.connectorType ?? "";
+    const standard = standardOf(label);
+    const key = `${standard}:${currentFromLabel(label) ?? ""}`;
+    const group = groups.get(key) ?? { standard, list: [] };
+    group.list.push(c);
+    groups.set(key, group);
   }
-  return [...groups].map(([standard, list]) => {
+  return [...groups.values()].map(({ standard, list }) => {
     const powers = list.map((c) => c.powerKw).filter((p): p is number => p != null && p > 0);
     const powerKw = powers.length ? Math.max(...powers) : defaultKwForStandard(standard);
     return connector(standard, list[0]?.connectorType ?? "", {
@@ -127,12 +137,13 @@ function connector(
   rawLabel: string,
   fields: Pick<StationConnector, "powerKw" | "powerOrigin" | "quantity" | "status">,
 ): StationConnector {
-  const current = currentFromStandard(standard);
+  const labelled = currentFromLabel(rawLabel);
+  const current = labelled ?? currentFromStandard(standard);
   return {
     standard,
     rawLabel,
     current,
-    currentOrigin: current ? "standard" : null,
+    currentOrigin: labelled ? "reported" : current ? "standard" : null,
     voltageV: null,
     amperageA: null,
     // Blaze es la fuente oficial del operador: sus conectores cuentan como confirmados.

@@ -5,7 +5,7 @@ import type { Charger, StationStatus } from "@/domain/types";
 import { requireUser, requireAdmin } from "@/infrastructure/auth/server-actor";
 import { checkRateLimit } from "@/infrastructure/rate-limit";
 
-const ConnectorSchema = z.enum(["ccs2", "ccs1", "type2", "chademo", "nacs", "gb_t"]);
+const ConnectorSchema = z.enum(["ccs2", "ccs1", "type2", "type1", "chademo", "nacs", "gb_t"]);
 
 const SocketSchema = z.object({
   connector: ConnectorSchema,

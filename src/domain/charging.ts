@@ -9,11 +9,13 @@ import { lerpFactor } from "./ev/engines/charging/curve";
 
 export {
   VERIFIED_DC_ADAPTERS,
+  adapterRequirement,
   isDcSocket,
   routePlugs,
   routeSocket,
   socketCurrent,
   usableAdapters,
+  type AdapterRequirement,
   type RoutePlug,
 } from "./ev/engines/compatibility/engine";
 export { DEFAULT_CURVE, FLAT_CURVE, chargeTimeMinutes, lerpFactor } from "./ev/engines/charging/curve";

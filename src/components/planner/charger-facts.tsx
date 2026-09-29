@@ -9,20 +9,18 @@ import {
 import { formatKw, formatPrice, formatUpdatedAt } from "@/lib/format";
 import { stationPhotoUrl } from "@/infrastructure/storage/station-photos";
 import { Badge } from "@/components/ui/badge";
-import { routeSocket } from "@/domain/ev/engines/compatibility/engine";
+import { adapterRequirement } from "@/domain/ev/engines/compatibility/engine";
 import { vehicleLabel } from "@/domain/vehicles";
+import { adapterRequirementNote } from "@/lib/adapter-note";
 import { usePlanner } from "@/lib/store";
 import { LiveChargerStatus } from "./live-charger-status";
 
-/** Por qué esta estación no entra en el plan del vehículo elegido; vacío si sí entra. */
-function planningIssues(charger: Charger, vehicle: Vehicle): string[] {
-  const issues = [...(charger.planningIssues ?? [])];
-  if (charger.sockets.length && !routeSocket(charger, vehicle)) {
-    const has = [...new Set(charger.sockets.map((s) => CONNECTOR_LABEL[s.connector]))].join(", ");
-    const uses = vehicle.connectors.map((c) => CONNECTOR_LABEL[c]).join(", ");
-    issues.push(`Ningún conector sirve para ${vehicleLabel(vehicle)}: la estación tiene ${has} y el vehículo usa ${uses}`);
-  }
-  return issues;
+/** Si el conector de la estación no coincide con el del vehículo: qué adaptador requiere. */
+function adapterMessage(charger: Charger, vehicle: Vehicle): string | null {
+  const requirement = adapterRequirement(charger, vehicle);
+  return requirement
+    ? adapterRequirementNote(requirement, { name: vehicleLabel(vehicle), connectors: vehicle.connectors })
+    : null;
 }
 
 export function ChargerFacts({ charger, compact = false }: { charger: Charger; compact?: boolean }) {
@@ -32,7 +30,8 @@ export function ChargerFacts({ charger, compact = false }: { charger: Charger; c
   const avail = charger.availability ?? "unknown";
   const coords = `${charger.lat.toFixed(5)}, ${charger.lon.toFixed(5)}`;
   const vehicle = usePlanner((s) => s.selectedVehicle());
-  const issues = planningIssues(charger, vehicle);
+  const issues = charger.planningIssues ?? [];
+  const adapter = adapterMessage(charger, vehicle);
   const verified = isVerifiedForPlanning(charger);
 
   return (
@@ -60,6 +59,12 @@ export function ChargerFacts({ charger, compact = false }: { charger: Charger; c
       </div>
       {issues.length ? (
         <div className="text-xs text-warn">No se usa para planificar: {issues.join(" · ")}.</div>
+      ) : null}
+      {adapter ? <div className="text-xs text-warn">{adapter}</div> : null}
+      {charger.unknownConnectors?.length ? (
+        <div className="text-xs text-muted">
+          Conector sin reconocer: {charger.unknownConnectors.join(", ")} (no se tiene en cuenta).
+        </div>
       ) : null}
       {!verified && charger.source === "community" ? (
         <div className="text-xs text-warn">No se usa para planificar hasta que la comunidad la confirme.</div>

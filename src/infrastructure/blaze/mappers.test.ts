@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { toDisplayCharger } from "@/domain/stations/to-charger";
 import { BlazeStationSchema } from "./schemas";
 import {
   availabilityOf,
@@ -129,6 +130,80 @@ describe("etiquetas de conector", () => {
     expect(standardOf("CHAdeMO")).toBe("chademo");
     // Ambiguo (¿CCS1 o CCS2?): no se adivina.
     expect(standardOf("CCS")).toBe("other");
+  });
+
+  it("reconoce GB/T escrito como Blaze lo manda: 'GB', 'GB-T DC - GB'", () => {
+    for (const l of ["GB", "GB/T", "GB-T", "GBT", "GB-T DC - GB"])
+      expect(standardOf(l), l).toBe("gb_t");
+  });
+
+  it("'Tipo 1' es un conector conocido que la ruta tiene en cuenta", () => {
+    const st = toConsolidatedStation(
+      BlazeStationSchema.parse({ ...EXAMPLE, connectors: "Tipo 1", maxKw: 7 }),
+      AT,
+    )!;
+    const c = toDisplayCharger(st);
+    expect(c.sockets).toEqual([
+      expect.objectContaining({ connector: "type1", powerKw: 7, current: "AC" }),
+    ]);
+    expect(c.unknownConnectors).toBeUndefined();
+    expect(c.planningIssues).toBeUndefined();
+  });
+});
+
+describe("GB/T de Blaze", () => {
+  it("'CCS2, GB/T' no parte GB/T en 'GB' y 'T'", () => {
+    const s = BlazeStationSchema.parse({ id: 1, name: "X", connectors: "CCS2, GB/T", maxKw: 60 });
+    expect(connectorsFromList(s).map((c) => [c.standard, c.rawLabel])).toEqual([
+      ["ccs2", "CCS2"],
+      ["gb_t", "GB-T"],
+    ]);
+  });
+
+  it("la corriente que dice la etiqueta cuenta como reportada; sin ella, GB/T no la asume (C4)", () => {
+    const s = BlazeStationSchema.parse({
+      id: 1,
+      name: "X",
+      connectors: "GB-T DC - GB, GB",
+      maxKw: 60,
+    });
+    expect(connectorsFromList(s)[0]).toMatchObject({
+      standard: "gb_t",
+      powerKw: 60,
+      current: "DC",
+      currentOrigin: "reported",
+    });
+    const plain = BlazeStationSchema.parse({ id: 1, name: "X", connectors: "GB", maxKw: 60 });
+    expect(connectorsFromList(plain)[0]).toMatchObject({
+      standard: "gb_t",
+      current: null,
+      currentOrigin: null,
+    });
+  });
+
+  it("en el detalle, GB-T DC y GB-T AC no se juntan", () => {
+    const connectors = connectorsFromChargers([
+      { connectorType: "GB-T DC", powerKw: 60, status: "en_servicio" },
+      { connectorType: "GB-T AC", powerKw: 7, status: "en_servicio" },
+    ]);
+    expect(connectors.map((c) => [c.standard, c.current, c.powerKw])).toEqual([
+      ["gb_t", "DC", 60],
+      ["gb_t", "AC", 7],
+    ]);
+  });
+
+  it("una estación con CCS2 y GB queda elegible, sin conectores sin reconocer", () => {
+    for (const connectors of ["CCS2, GB", "CCS2, GB-T DC - GB"]) {
+      const st = toConsolidatedStation(
+        BlazeStationSchema.parse({ ...EXAMPLE, connectors, maxKw: 60 }),
+        AT,
+      )!;
+      expect(st.planning, connectors).toEqual({ eligible: true, reasons: [] });
+      const c = toDisplayCharger(st);
+      expect(c.planningIssues, connectors).toBeUndefined();
+      expect(c.unknownConnectors, connectors).toBeUndefined();
+      expect(c.sockets.map((k) => k.connector)).toEqual(["ccs2", "gb_t"]);
+    }
   });
 });
 

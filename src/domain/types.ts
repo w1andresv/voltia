@@ -9,7 +9,7 @@ import type {
   BodyTypeShape,
 } from "@/domain/schemas";
 
-export type ConnectorType = "ccs2" | "ccs1" | "type2" | "chademo" | "nacs" | "gb_t";
+export type ConnectorType = "ccs2" | "ccs1" | "type2" | "type1" | "chademo" | "nacs" | "gb_t";
 
 export type DrivingStyle = "efficient" | "normal" | "sport";
 export type ClimateControl = "off" | "eco" | "normal" | "max";
@@ -112,10 +112,12 @@ export interface Charger {
   nearestSampleIndex?: number;
   fromRouteKm?: number;
   /**
-   * Solo en el mapa: por qué la estación no sirve para planificar (no elegible,
-   * conectores que no se reconocen). La compatibilidad con el vehículo se ve aparte.
+   * Solo en el mapa: por qué la estación no sirve para planificar (no elegible).
+   * La compatibilidad con el vehículo se ve aparte.
    */
   planningIssues?: string[];
+  /** Solo en el mapa: etiquetas de conectores que no se reconocen; no cuentan para el plan. */
+  unknownConnectors?: string[];
 }
 
 export interface ChargeChoice {
@@ -433,6 +435,7 @@ export const CONNECTOR_LABEL: Record<ConnectorType, string> = {
   ccs2: "CCS2",
   ccs1: "CCS1",
   type2: "Tipo 2",
+  type1: "Tipo 1",
   chademo: "CHAdeMO",
   nacs: "NACS",
   gb_t: "GB/T",

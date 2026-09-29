@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { currentFromStandard, defaultKwForStandard, standardizeConnector } from "./connectors";
+import {
+  currentFromLabel,
+  currentFromStandard,
+  defaultKwForStandard,
+  standardizeConnector,
+} from "./connectors";
 import type { ConsolidatedStation, StationConnector } from "./model";
 import {
   addressSimilarity,
@@ -90,12 +95,22 @@ describe("standardizeConnector", () => {
     ["type2_combo", "ccs2"],
     ["Combo 1", "ccs1"],
     ["Type 2", "type2"],
+    ["Tipo 2", "type2"],
+    ["Tipo2", "type2"],
+    ["Tipo 1", "type1"],
+    ["CCS 2", "ccs2"],
     ["Mennekes", "type2"],
     ["J1772", "type1"],
     ["CHAdeMO", "chademo"],
     ["Tesla Supercharger", "nacs"],
     ["SAE J3400", "nacs"],
     ["GB/T", "gb_t"],
+    ["GB", "gb_t"],
+    ["GB-T", "gb_t"],
+    ["GBT", "gb_t"],
+    ["gb_t", "gb_t"],
+    ["GB DC", "gb_t"],
+    ["GB-T DC - GB", "gb_t"],
     ["Schuko", "schuko"],
     ["Tesla Destination", "tesla_destination"],
     ["", "other"],
@@ -103,6 +118,19 @@ describe("standardizeConnector", () => {
     ["enchufe raro", "other"],
   ])("%s → %s", (raw, expected) => {
     expect(standardizeConnector(raw)).toBe(expected);
+  });
+});
+
+describe("currentFromLabel", () => {
+  it.each([
+    ["GB-T DC - GB", "DC"],
+    ["GB/T AC", "AC"],
+    ["GB/T corriente continua", "DC"],
+    ["GB/T", null],
+    ["GB/T AC/DC", null],
+    ["Tipo 2", null],
+  ])("%s → %s", (raw, expected) => {
+    expect(currentFromLabel(raw)).toBe(expected);
   });
 });
 
@@ -223,7 +251,7 @@ describe("toPlanningCharger / toDisplayCharger", () => {
     expect(toDisplayCharger(station()).available).toBeNull();
   });
 
-  it("para el mapa dice por qué no sirve para planificar, con los conectores que no reconoce", () => {
+  it("para el mapa dice por qué no sirve para planificar y, aparte, los conectores que no reconoce", () => {
     const c = toDisplayCharger(
       station({
         planning: { eligible: false, reasons: ["Sin conectores compatibles conocidos"] },
@@ -231,7 +259,20 @@ describe("toPlanningCharger / toDisplayCharger", () => {
       }),
     );
     expect(c.sockets).toEqual([]);
-    expect(c.planningIssues).toEqual(["Sin conectores compatibles conocidos", "Conector sin reconocer: CCS"]);
+    expect(c.planningIssues).toEqual(["Sin conectores compatibles conocidos"]);
+    expect(c.unknownConnectors).toEqual(["CCS"]);
     expect(toDisplayCharger(station()).planningIssues).toBeUndefined();
+    expect(toDisplayCharger(station()).unknownConnectors).toBeUndefined();
+  });
+
+  it("un conector sin reconocer no saca del plan a una estación elegible", () => {
+    const c = toDisplayCharger(
+      station({
+        connectors: [connector(), connector({ standard: "other", rawLabel: "Enchufe raro" })],
+      }),
+    );
+    expect(c.verified).toBe(true);
+    expect(c.planningIssues).toBeUndefined();
+    expect(c.unknownConnectors).toEqual(["Enchufe raro"]);
   });
 });

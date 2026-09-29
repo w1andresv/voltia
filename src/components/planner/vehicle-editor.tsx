@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { slowTailNoteForCap } from "@/lib/charge-notes";
 
-const CONNECTORS: ConnectorType[] = ["ccs2", "ccs1", "type2", "chademo", "nacs", "gb_t"];
+const CONNECTORS: ConnectorType[] = ["ccs2", "ccs1", "type2", "type1", "chademo", "nacs", "gb_t"];
 
 export function VehicleEditor() {
   const open = usePlanner((s) => s.vehicleModalOpen);

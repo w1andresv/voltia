@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 
-export const ConnectorTypeSchema = z.enum(["ccs2", "ccs1", "type2", "chademo", "nacs", "gb_t"]);
+export const ConnectorTypeSchema = z.enum(["ccs2", "ccs1", "type2", "type1", "chademo", "nacs", "gb_t"]);
 /** Un adaptador que el usuario lleva: del conector de la estación (`from`) al del vehículo (`to`). */
 export const ChargeAdapterSchema = z.object({
   from: ConnectorTypeSchema,

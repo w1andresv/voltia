@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  adapterRequirement,
   chargeCurveSeries,
   chargeTimeMinutes,
   DEFAULT_CURVE,
@@ -55,6 +56,7 @@ describe("isDc / socketCurrent", () => {
     expect(isDc("chademo")).toBe(true);
     expect(isDc("nacs")).toBe(true);
     expect(isDc("type2")).toBe(false);
+    expect(socketCurrent({ connector: "type1", powerKw: 7, count: 1 })).toBe("AC");
   });
 
   it("GB/T existe en AC y DC: sin dato reportado no se asume ninguna (C4)", () => {
@@ -207,6 +209,87 @@ describe("routePlugs", () => {
     const c = charger({ sockets: [{ connector: "chademo", powerKw: 50, count: 1 }] });
     expect(routePlugs(c, vehicle({ connectors: ["ccs2"] }))).toEqual([]);
     expect(routeSocket(c, vehicle({ connectors: ["ccs2"] }))).toBeNull();
+  });
+});
+
+describe("adapterRequirement", () => {
+  const ccs2Car = (adapters: Vehicle["adapters"] = []) =>
+    vehicle({ connectors: ["ccs2", "type2"], adapters });
+
+  it("si algún conector de la estación es del vehículo, no requiere adaptador", () => {
+    expect(
+      adapterRequirement(
+        charger({ sockets: [{ connector: "ccs2", powerKw: 60, count: 1 }, GBT_DC] }),
+        ccs2Car(),
+      ),
+    ).toBeNull();
+    expect(adapterRequirement(charger({ sockets: [] }), ccs2Car())).toBeNull();
+  });
+
+  it("GB/T DC con un vehículo CCS2 que no lleva el adaptador: lo requiere y serviría", () => {
+    expect(adapterRequirement(charger({ sockets: [GBT_DC] }), ccs2Car())).toEqual({
+      station: ["gb_t"],
+      adapter: { from: "gb_t", to: "ccs2" },
+      carried: false,
+      fastCharge: true,
+    });
+  });
+
+  it("con el adaptador marcado, el plan la usa", () => {
+    const r = adapterRequirement(
+      charger({ sockets: [GBT_DC] }),
+      ccs2Car([{ from: "gb_t", to: "ccs2" }]),
+    );
+    expect(r).toMatchObject({ carried: true, fastCharge: true });
+  });
+
+  it("GB/T sin corriente reportada: requiere adaptador pero no se confirma carga rápida (C4)", () => {
+    const r = adapterRequirement(
+      charger({ sockets: [{ connector: "gb_t", powerKw: 60, count: 1 }] }),
+      ccs2Car([{ from: "gb_t", to: "ccs2" }]),
+    );
+    expect(r).toMatchObject({
+      adapter: { from: "gb_t", to: "ccs2" },
+      carried: true,
+      fastCharge: false,
+    });
+  });
+
+  it("prefiere el adaptador que sirve: CCS1 antes que un GB/T sin corriente", () => {
+    const r = adapterRequirement(
+      charger({
+        sockets: [
+          { connector: "gb_t", powerKw: 60, count: 1 },
+          { connector: "ccs1", powerKw: 50, count: 1 },
+        ],
+      }),
+      ccs2Car(),
+    );
+    expect(r?.adapter).toEqual({ from: "ccs1", to: "ccs2" });
+    expect(r?.fastCharge).toBe(true);
+  });
+
+  it("sin adaptador verificado (CHAdeMO, Tipo 1): lo requiere igual, sin proponer uno", () => {
+    expect(
+      adapterRequirement(
+        charger({ sockets: [{ connector: "chademo", powerKw: 50, count: 1 }] }),
+        ccs2Car(),
+      ),
+    ).toEqual({
+      station: ["chademo"],
+      adapter: null,
+      carried: false,
+      fastCharge: false,
+    });
+    expect(
+      adapterRequirement(
+        charger({ sockets: [{ connector: "type1", powerKw: 7, count: 1 }] }),
+        ccs2Car(),
+      ),
+    ).toMatchObject({
+      station: ["type1"],
+      adapter: null,
+    });
   });
 });
 
