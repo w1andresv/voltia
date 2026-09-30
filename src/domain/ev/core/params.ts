@@ -85,6 +85,11 @@ export interface ModelParameters {
     socTolerancePct: number;
     /** Piso de SOC con "permitir bajar del margen". */
     belowSafetyFloorPct: number;
+    /**
+     * Tope de carga en ruta: ninguna parada carga por encima de este SOC. Antes
+     * era `maxSocTravel` de cada vehículo; desde 2026-09-30 es uno solo (ADR-0016).
+     */
+    maxChargeTargetSocPct: SourcedValue<number>;
     /** Planificador v2: resolución del SOC de salida, en puntos. */
     socGridPct: number;
     /** Planificador v2: minutos de espera supuestos en una estación reportada ocupada. */
@@ -94,7 +99,7 @@ export interface ModelParameters {
     /**
      * Planificador v2: en una estación de carga rápida (DC) se carga `extraPct`
      * puntos más de lo que pide el tramo siguiente, sin pasar de `maxSocPct`
-     * (del 90 al 100 % la carga se vuelve lenta) ni del tope de carga del vehículo.
+     * (del 90 al 100 % la carga se vuelve lenta) ni del tope de carga en ruta.
      */
     fastChargeBuffer: SourcedValue<{ extraPct: number; maxSocPct: number }>;
   };
@@ -204,6 +209,10 @@ export const MODEL_PARAMETERS: ModelParameters = {
     detourSpeedKmh: 50,
     socTolerancePct: 1e-4,
     belowSafetyFloorPct: 2,
+    maxChargeTargetSocPct: sourced(80, "configurable", {
+      notes:
+        "Decisión del dueño del producto (2026-09-30): el vehículo ya no define mínimo ni tope; la reserva es el margen del viaje y el tope es este (ADR-0016).",
+    }),
     socGridPct: 1,
     occupiedWaitMin: sourced(15, "estimated", { notes: "Sin datos de ocupación; calibrar." }),
     maxVerifyIterations: 3,

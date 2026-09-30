@@ -34,8 +34,6 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     dcMaxKw: 120,
     chargeCurve: DEFAULT_CURVE,
     connectors: ["ccs2", "type2"],
-    minSocRecommended: 15,
-    maxSocTravel: 80,
     ...overrides,
   };
 }
@@ -110,15 +108,15 @@ describe("ModelParameters", () => {
 });
 
 describe("socFloors", () => {
-  it("la reserva es el mayor entre el margen y el mínimo del vehículo", () => {
-    expect(socFloors({ minSocRecommended: 15 }, conditions()).reservePct).toBe(15);
-    expect(socFloors({ minSocRecommended: 5 }, conditions()).reservePct).toBe(10);
-    expect(socFloors({ minSocRecommended: 5 }, conditions({ safetyMode: "conservative" })).reservePct).toBe(20);
+  it("la reserva es solo el margen de seguridad del viaje (ADR-0016)", () => {
+    expect(socFloors(conditions()).reservePct).toBe(10);
+    expect(socFloors(conditions({ safetyMode: "conservative" })).reservePct).toBe(20);
+    expect(socFloors(conditions({ safetyMode: "custom", customSafetyPct: 7 })).reservePct).toBe(7);
   });
 
   it("el objetivo al destino no baja de la reserva", () => {
-    expect(socFloors({ minSocRecommended: 15 }, conditions()).arrivalTargetPct).toBe(15);
-    expect(socFloors({ minSocRecommended: 15 }, conditions({ arrivalSoc: 30 })).arrivalTargetPct).toBe(30);
+    expect(socFloors(conditions({ arrivalSoc: 5 })).arrivalTargetPct).toBe(10);
+    expect(socFloors(conditions({ arrivalSoc: 30 })).arrivalTargetPct).toBe(30);
   });
 });
 
@@ -134,9 +132,9 @@ describe("toTripConfiguration", () => {
       hvacMode: "normal",
       ambient: { temperatureC: null, temperatureSource: "none", windKmh: null, windDirDeg: null },
       cruiseSpeedKmh: null,
-      reserveSocPercent: 15,
-      minimumSocPercent: 15,
-      destinationReserveSocPercent: 15,
+      reserveSocPercent: 10,
+      minimumSocPercent: 10,
+      destinationReserveSocPercent: 10,
       maxChargeTargetSocPercent: 80,
       planningEnergyMarginPercent: 0,
       objective: "fastest",
@@ -146,7 +144,7 @@ describe("toTripConfiguration", () => {
 
   it("los pisos coinciden con socFloors", () => {
     for (const c of [conditions(), conditions({ safetyMode: "conservative", arrivalSoc: 25 })]) {
-      const floors = socFloors(vehicle(), c);
+      const floors = socFloors(c);
       const cfg = toTripConfiguration(vehicle(), c);
       expect(cfg.reserveSocPercent).toBe(floors.reservePct);
       expect(cfg.destinationReserveSocPercent).toBe(floors.arrivalTargetPct);
@@ -167,7 +165,11 @@ describe("toTripConfiguration", () => {
   });
 
   it("sin pasajeros ni equipaje negativos; tope de carga a 100 %", () => {
-    const cfg = toTripConfiguration(vehicle({ maxSocTravel: 120 }), conditions({ passengers: -1, luggageKg: -5 }));
+    const params = {
+      ...MODEL_PARAMETERS,
+      planner: { ...MODEL_PARAMETERS.planner, maxChargeTargetSocPct: sourced(120, "configurable") },
+    };
+    const cfg = toTripConfiguration(vehicle(), conditions({ passengers: -1, luggageKg: -5 }), null, params);
     expect(cfg.occupantsMassKg).toBe(75);
     expect(cfg.luggageMassKg).toBe(0);
     expect(cfg.maxChargeTargetSocPercent).toBe(100);

@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { socFloors } from "@/domain/ev/core/trip-config";
+import { routeChargeCapPct, socFloors } from "@/domain/ev/core/trip-config";
 import { vehicleLabel, vehicleSub } from "@/domain/vehicles";
 import { formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
@@ -11,7 +11,7 @@ export function VehicleBar() {
   const soc = conditions.initialSoc;
   const openVehicle = usePlanner((s) => s.setVehicleModalOpen);
   const openBattery = usePlanner((s) => s.setBatteryOpen);
-  const floor = socFloors(vehicle, conditions).arrivalTargetPct;
+  const floor = socFloors(conditions).arrivalTargetPct;
 
   return (
     <div className="flex items-center gap-2">
@@ -33,7 +33,7 @@ export function VehicleBar() {
         aria-label={`Batería ${formatPct(soc)}. Abrir gestión`}
       >
         <span className="font-mono text-sm tabular-nums text-accent">{formatPct(soc)}</span>
-        <BatteryPack soc={soc} floor={floor} maxTravel={vehicle.maxSocTravel} cells={8} compact />
+        <BatteryPack soc={soc} floor={floor} maxTravel={routeChargeCapPct()} cells={8} compact />
       </button>
     </div>
   );

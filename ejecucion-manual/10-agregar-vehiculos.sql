@@ -131,8 +131,6 @@ select
     'connectors', to_jsonb(n.conectores),
     'consumptionKwhPer100km', null,
     'consumptionManual', false,
-    'minSocRecommended', 15,
-    'maxSocTravel', 80,
     'chargeCurve', case n.curva
       when 'tesla' then '[{"soc":0,"powerFactor":0.7},{"soc":10,"powerFactor":1},{"soc":25,"powerFactor":1},{"soc":50,"powerFactor":0.82},{"soc":70,"powerFactor":0.5},{"soc":80,"powerFactor":0.32},{"soc":90,"powerFactor":0.18},{"soc":100,"powerFactor":0.08}]'::jsonb
       else '[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}]'::jsonb

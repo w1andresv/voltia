@@ -28,8 +28,6 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     dcMaxKw: 120,
     chargeCurve: DEFAULT_CURVE,
     connectors: ["ccs2", "type2"],
-    minSocRecommended: 10,
-    maxSocTravel: 90,
     ...overrides,
   };
 }
@@ -715,21 +713,21 @@ describe("rankPlans: 'Más eficiente' también respeta la jerarquía vial", () =
   });
 });
 
-describe("buildPlan — reserva con el mínimo recomendado del vehículo (C8)", () => {
+describe("buildPlan — la reserva es el margen del viaje, sin mínimo del vehículo (ADR-0016)", () => {
   const distance = 400;
   const cond = conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 });
   const destination: Place = { label: "Destino", lat: 4 + distance / 111, lon: -74 };
-  // Cargador donde el vehículo llega con 10–15 %: entre el margen "bajo" y el mínimo del vehículo.
+  // Cargador donde el vehículo llega con 10–15 %: entre el margen "bajo" y el "normal".
   const soc = simulateSoc(annotateEnergy(straightRoute(distance).samples, { vehicle: vehicle(), conditions: cond, weather: null }), {
     initialSocPct: cond.initialSoc,
     capacityKwh: vehicle().batteryKwh,
   }).samples;
   const hit = soc.find((s) => s.soc < 14)!;
-  const plan = (minSocRecommended: number) =>
+  const plan = (margin: Partial<TripConditions>) =>
     buildPlan({
       raw: straightRoute(distance),
-      vehicle: vehicle({ minSocRecommended }),
-      conditions: cond,
+      vehicle: vehicle(),
+      conditions: { ...cond, ...margin },
       chargers: [chargerAt(hit.km)],
       weather: null,
       origin: ORIGIN,
@@ -741,22 +739,22 @@ describe("buildPlan — reserva con el mínimo recomendado del vehículo (C8)", 
     expect(hit.soc).toBeLessThan(15);
   });
 
-  it("con mínimo del vehículo 10 % basta el margen bajo: no pide carga previa", () => {
-    const p = plan(10);
+  it("con margen bajo (10 %) no pide carga previa", () => {
+    const p = plan({ safetyMode: "low" });
     expect(p.safetyPct).toBe(10);
     expect(p.departureCharge).toBeUndefined();
     expect(p.stops[0]!.arriveSoc).toBeLessThan(15);
   });
 
-  it("con mínimo del vehículo 15 % la reserva sube a 15 % y pide cargar antes de salir", () => {
-    const p = plan(15);
+  it("con margen normal (15 %) la reserva sube a 15 % y pide cargar antes de salir", () => {
+    const p = plan({ safetyMode: "normal" });
     expect(p.safetyPct).toBe(15);
     expect(p.departureCharge).toBeDefined();
     expect(p.stops[0]!.arriveSoc).toBeGreaterThanOrEqual(15 - 1e-6);
   });
 
-  it("usa el valor que el usuario haya puesto en el vehículo", () => {
-    expect(plan(25).safetyPct).toBe(25);
+  it("usa el margen personalizado del viaje", () => {
+    expect(plan({ safetyMode: "custom", customSafetyPct: 25 }).safetyPct).toBe(25);
   });
 });
 
@@ -858,7 +856,7 @@ describe("buildPlan — el piso de SOC se respeta en todo el tramo, no solo al l
   const plan = (chargers: Charger[]) =>
     buildPlan({
       raw: mountain(),
-      vehicle: vehicle({ minSocRecommended: 10 }),
+      vehicle: vehicle(),
       conditions: cond,
       chargers,
       weather: null,
@@ -895,14 +893,23 @@ describe("buildPlan — la regeneración depende del SOC real después de cargar
     const samples = base.samples.map((s) => ({ ...s, elevM: elev(s.km), speedKmh: 70 }));
     return { ...base, samples, elevation: { gainM: 0, lossM: 2000, minM: 500, maxM: 2500 } };
   };
+  // Tope de carga en ruta a 100 % para que la batería llegue casi llena a la bajada.
+  const params: ModelParameters = {
+    ...MODEL_PARAMETERS,
+    planner: {
+      ...MODEL_PARAMETERS.planner,
+      maxChargeTargetSocPct: { ...MODEL_PARAMETERS.planner.maxChargeTargetSocPct, value: 100 },
+    },
+  };
   const plan = buildPlan({
     raw: route(),
-    vehicle: vehicle({ maxSocTravel: 100 }),
+    vehicle: vehicle(),
     conditions: conditions({ initialSoc: 45, planningMode: "fewer_stops", avgSpeedKmh: null, regenLevel: "high" }),
     chargers: [chargerAt(150)],
     weather: null,
     origin: ORIGIN,
     destination: { label: "Destino", lat: 4 + distance / 111, lon: -74 },
+    params,
   });
   const stop = plan.stops[0]!;
 
@@ -1013,11 +1020,11 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     expect(p.arrivalSoc).toBeLessThan(11.5);
   });
 
-  it("C8: con mínimo del vehículo 15 %, no llega a ninguna estación con menos", () => {
+  it("con margen del viaje 15 %, no llega a ninguna estación con menos", () => {
     const p = buildPlan({
       raw: straightRoute(400),
-      vehicle: vehicle({ minSocRecommended: 15 }),
-      conditions: conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 }),
+      vehicle: vehicle(),
+      conditions: conditions({ initialSoc: 50, safetyMode: "normal", arrivalSoc: 10 }),
       chargers: [100, 150, 200, 250, 300].map((km) => chargerAt(km)),
       weather: null,
       origin: ORIGIN,

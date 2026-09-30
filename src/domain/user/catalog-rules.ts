@@ -61,8 +61,6 @@ const SAME_FIELDS = [
   "motorKw",
   "acMaxKw",
   "dcMaxKw",
-  "minSocRecommended",
-  "maxSocTravel",
 ] as const;
 
 /** ¿El vehículo difiere del de catálogo con su mismo id? Sin catálogo con ese id, es personalizado (true). */

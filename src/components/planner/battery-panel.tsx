@@ -1,7 +1,7 @@
 import { chargeCurveSeries, chargeTimeMinutes } from "@/domain/charging";
 import { batteryBudget } from "@/domain/energy";
 import { departureChargeAdvice } from "@/domain/types";
-import { socFloors } from "@/domain/ev/core/trip-config";
+import { routeChargeCapPct, socFloors } from "@/domain/ev/core/trip-config";
 import { vehicleLabel } from "@/domain/vehicles";
 import { formatKm, formatKw, formatKwh, formatKwhPer100, formatMinutes, formatPct, formatSoc } from "@/lib/format";
 import { DepletionNotice } from "./depletion-notice";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { SLOW_TAIL_TEXT, slowTailNoteForCap } from "@/lib/charge-notes";
+import { SLOW_TAIL_TEXT } from "@/lib/charge-notes";
 
 const START_PRESETS = [50, 70, 80, 90, 100];
 const ARRIVE_PRESETS = [10, 15, 20, 30];
@@ -25,7 +25,8 @@ export function BatteryDialog() {
   const weather = usePlanner((s) => s.geo?.weather ?? null);
   const plan = usePlanner((s) => s.plans.find((p) => p.id === s.selectedPlanId) ?? s.plans[0] ?? null);
 
-  const floor = socFloors(vehicle, conditions).reservePct;
+  const floor = socFloors(conditions).reservePct;
+  const cap = routeChargeCapPct();
   const budget = batteryBudget(vehicle, conditions, weather);
   const to80 = chargeTimeMinutes(vehicle.batteryKwh, 10, 80, vehicle.dcMaxKw, vehicle.dcMaxKw, vehicle.chargeCurve, undefined, {
     withOverhead: false,
@@ -37,19 +38,15 @@ export function BatteryDialog() {
         <DialogHeader>
           <DialogTitle>Gestión de batería</DialogTitle>
           <DialogDescription>
-            {vehicleLabel(vehicle)} · {formatKwh(vehicle.batteryKwh)} · ventana de viaje {vehicle.minSocRecommended}–
-            {vehicle.maxSocTravel}%
+            {vehicleLabel(vehicle)} · {formatKwh(vehicle.batteryKwh)}
           </DialogDescription>
         </DialogHeader>
 
-        <BatteryPack soc={conditions.initialSoc} floor={budget.floorPct} maxTravel={vehicle.maxSocTravel} />
+        <BatteryPack soc={conditions.initialSoc} floor={budget.floorPct} maxTravel={cap} />
         <div className="mt-2 flex justify-between text-xs text-muted">
           <span>Reserva {formatPct(budget.floorPct)}</span>
-          <span>Tope en ruta {formatPct(vehicle.maxSocTravel)}</span>
+          <span>Tope en ruta {formatPct(cap)}</span>
         </div>
-        {slowTailNoteForCap(vehicle.maxSocTravel) ? (
-          <p className="mt-1.5 text-xs leading-relaxed text-warn">{slowTailNoteForCap(vehicle.maxSocTravel)}</p>
-        ) : null}
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           <Metric label="Usable" value={formatKwh(budget.usableKwh)} hint={`${Math.round(budget.usablePct)} %`} />
@@ -127,9 +124,7 @@ export function BatteryDialog() {
           <ChargeCurve vehicleKw={vehicle.dcMaxKw} />
           <p className="mt-2 text-[11px] leading-relaxed text-muted">
             La potencia cae al subir el SOC.{" "}
-            {vehicle.maxSocTravel < 100
-              ? `Por eso el planificador suele recargar hasta ${vehicle.maxSocTravel}% y no hasta 100%.`
-              : SLOW_TAIL_TEXT}
+            {cap < 100 ? `Por eso el planificador suele recargar hasta ${cap}% y no hasta 100%.` : SLOW_TAIL_TEXT}
           </p>
         </section>
 

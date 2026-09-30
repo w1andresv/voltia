@@ -14,7 +14,8 @@
 --   batteryKwh   capacidad útil/neta cuando se publica; si no, la cifra citada (ver nota de la fila).
 --   motorKw      potencia máxima combinada; weightKg peso en vacío.
 --   chargeCurve  curva genérica de la app (los fabricantes no la publican; no es verificable).
---   minSocRecommended / maxSocTravel  valores por defecto de la app (15 y 80), no especificaciones.
+--   Sin mínimo ni tope de SOC: la reserva es el margen del viaje y el tope de carga en ruta es
+--                uno solo para la app (ModelParameters.planner.maxChargeTargetSocPct, ADR-0016).
 --   consumptionKwhPer100km  null: la app lo estima con su modelo de energía.
 --   bodyType     carrocería (sedan, suv_compact, suv_large).
 --   dragAreaM2   Cd x área frontal (m²), desde 2026-09-27 por vehículo. [DERIVADO] Cd publicado x área
@@ -40,7 +41,7 @@
 --   física [DERIVADO] dragAreaM2 = 0,275 x (0,85 x 1,849 x 1,621 = 2,55 m²) = 0,70 (área frontal estimada con el factor 0,85 del rectángulo ancho x alto)
 --   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; menor que los Tesla (75) por motor y batería más pequeños.
 insert into public.voltia_vehicles as v (id, owner_id, payload)
-values ('mg-s5-ev-comfort', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"mg-s5-ev-comfort","brand":"MG","model":"S5 EV","year":2027,"version":"Comfort","batteryKwh":47.1,"rangeKm":340,"weightKg":1627,"motorKw":125,"acMaxKw":7,"dcMaxKw":120,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.7,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+values ('mg-s5-ev-comfort', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"mg-s5-ev-comfort","brand":"MG","model":"S5 EV","year":2027,"version":"Comfort","batteryKwh":47.1,"rangeKm":340,"weightKg":1627,"motorKw":125,"acMaxKw":7,"dcMaxKw":120,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.7,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;
@@ -55,7 +56,7 @@ on conflict (id) do update
 --   física [DERIVADO] dragAreaM2 = 0,275 x (0,85 x 1,849 x 1,621 = 2,55 m²) = 0,70 (área frontal estimada con el factor 0,85 del rectángulo ancho x alto)
 --   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; menor que los Tesla (75) por motor y batería más pequeños.
 insert into public.voltia_vehicles as v (id, owner_id, payload)
-values ('mg-s5-ev-deluxe', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"mg-s5-ev-deluxe","brand":"MG","model":"S5 EV","year":2027,"version":"Deluxe","batteryKwh":47.1,"rangeKm":340,"weightKg":1672,"motorKw":125,"acMaxKw":7,"dcMaxKw":120,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.7,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+values ('mg-s5-ev-deluxe', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"mg-s5-ev-deluxe","brand":"MG","model":"S5 EV","year":2027,"version":"Deluxe","batteryKwh":47.1,"rangeKm":340,"weightKg":1672,"motorKw":125,"acMaxKw":7,"dcMaxKw":120,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.7,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;
@@ -71,7 +72,7 @@ on conflict (id) do update
 --   física [DERIVADO] dragAreaM2 = 0,219 x (0,85 x 1,849 x 1,441 = 2,26 m²) = 0,50
 --   física [INT] https://teslamotorsclub.com/tmc/threads/max-regen-kw.205243/  -> regeneración máxima ~75 kW (medida por usuarios, no ficha de Tesla)
 insert into public.voltia_vehicles as v (id, owner_id, payload)
-values ('tesla-model-3-lr-awd', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.7},{"soc":10,"powerFactor":1},{"soc":25,"powerFactor":1},{"soc":50,"powerFactor":0.82},{"soc":70,"powerFactor":0.5},{"soc":80,"powerFactor":0.32},{"soc":90,"powerFactor":0.18},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"tesla-model-3-lr-awd","brand":"Tesla","model":"Model 3","year":2026,"version":"Long Range AWD","batteryKwh":75,"rangeKm":660,"weightKg":1828,"motorKw":371,"acMaxKw":11.5,"dcMaxKw":250,"connectors":["ccs2","type2"],"bodyType":"sedan","dragAreaM2":0.5,"rollingResistance":0.009,"maxRegenPowerKw":75}'::jsonb)
+values ('tesla-model-3-lr-awd', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.7},{"soc":10,"powerFactor":1},{"soc":25,"powerFactor":1},{"soc":50,"powerFactor":0.82},{"soc":70,"powerFactor":0.5},{"soc":80,"powerFactor":0.32},{"soc":90,"powerFactor":0.18},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"tesla-model-3-lr-awd","brand":"Tesla","model":"Model 3","year":2026,"version":"Long Range AWD","batteryKwh":75,"rangeKm":660,"weightKg":1828,"motorKw":371,"acMaxKw":11.5,"dcMaxKw":250,"connectors":["ccs2","type2"],"bodyType":"sedan","dragAreaM2":0.5,"rollingResistance":0.009,"maxRegenPowerKw":75}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;
@@ -86,7 +87,7 @@ on conflict (id) do update
 --   física [DERIVADO] dragAreaM2 = 0,22 x (0,85 x 1,920 x 1,624 = 2,65 m²) = 0,58
 --   física [ASUMIDO] maxRegenPowerKw 75: el del Model 3 (misma plataforma y motor trasero).
 insert into public.voltia_vehicles as v (id, owner_id, payload)
-values ('tesla-model-y-rwd', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.7},{"soc":10,"powerFactor":1},{"soc":25,"powerFactor":1},{"soc":50,"powerFactor":0.82},{"soc":70,"powerFactor":0.5},{"soc":80,"powerFactor":0.32},{"soc":90,"powerFactor":0.18},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"tesla-model-y-rwd","brand":"Tesla","model":"Model Y","year":2026,"version":"RWD","batteryKwh":60,"rangeKm":466,"weightKg":1928,"motorKw":223,"acMaxKw":11.5,"dcMaxKw":170,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.58,"rollingResistance":0.009,"maxRegenPowerKw":75}'::jsonb)
+values ('tesla-model-y-rwd', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.7},{"soc":10,"powerFactor":1},{"soc":25,"powerFactor":1},{"soc":50,"powerFactor":0.82},{"soc":70,"powerFactor":0.5},{"soc":80,"powerFactor":0.32},{"soc":90,"powerFactor":0.18},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"tesla-model-y-rwd","brand":"Tesla","model":"Model Y","year":2026,"version":"RWD","batteryKwh":60,"rangeKm":466,"weightKg":1928,"motorKw":223,"acMaxKw":11.5,"dcMaxKw":170,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.58,"rollingResistance":0.009,"maxRegenPowerKw":75}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;
@@ -101,7 +102,7 @@ on conflict (id) do update
 --   física [DERIVADO] dragAreaM2 = 0,22 x (0,85 x 1,920 x 1,624 = 2,65 m²) = 0,58
 --   física [ASUMIDO] maxRegenPowerKw 75: el del Model 3 (misma plataforma y motor trasero).
 insert into public.voltia_vehicles as v (id, owner_id, payload)
-values ('tesla-model-y-lr-awd', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.7},{"soc":10,"powerFactor":1},{"soc":25,"powerFactor":1},{"soc":50,"powerFactor":0.82},{"soc":70,"powerFactor":0.5},{"soc":80,"powerFactor":0.32},{"soc":90,"powerFactor":0.18},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"tesla-model-y-lr-awd","brand":"Tesla","model":"Model Y","year":2026,"version":"Long Range AWD","batteryKwh":75,"rangeKm":600,"weightKg":1992,"motorKw":383,"acMaxKw":11.5,"dcMaxKw":250,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.58,"rollingResistance":0.009,"maxRegenPowerKw":75}'::jsonb)
+values ('tesla-model-y-lr-awd', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.7},{"soc":10,"powerFactor":1},{"soc":25,"powerFactor":1},{"soc":50,"powerFactor":0.82},{"soc":70,"powerFactor":0.5},{"soc":80,"powerFactor":0.32},{"soc":90,"powerFactor":0.18},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"tesla-model-y-lr-awd","brand":"Tesla","model":"Model Y","year":2026,"version":"Long Range AWD","batteryKwh":75,"rangeKm":600,"weightKg":1992,"motorKw":383,"acMaxKw":11.5,"dcMaxKw":250,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.58,"rollingResistance":0.009,"maxRegenPowerKw":75}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;
@@ -115,7 +116,7 @@ on conflict (id) do update
 --   física [DERIVADO] dragAreaM2 = 0,28 x (0,85 x 1,837 x 1,549 = 2,42 m²) = 0,68
 --   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5.
 insert into public.voltia_vehicles as v (id, owner_id, payload)
-values ('volvo-ex30-sm-er', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"volvo-ex30-sm-er","brand":"Volvo","model":"EX30","year":2026,"version":"Single Motor Extended Range","batteryKwh":64,"rangeKm":476,"weightKg":1775,"motorKw":200,"acMaxKw":11,"dcMaxKw":150,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.68,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+values ('volvo-ex30-sm-er', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"volvo-ex30-sm-er","brand":"Volvo","model":"EX30","year":2026,"version":"Single Motor Extended Range","batteryKwh":64,"rangeKm":476,"weightKg":1775,"motorKw":200,"acMaxKw":11,"dcMaxKw":150,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.68,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;
@@ -137,7 +138,7 @@ on conflict (id) do update
 --   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5 (SUV compacto LFP de potencia parecida).
 --   nota: los 405 km se midieron en la E-MAX Ultra; la E-MAX (rines más pequeños) no tiene cifra propia y usa la misma.
 insert into public.voltia_vehicles as v (id, owner_id, payload)
-values ('changan-nevo-q05-e-max', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"changan-nevo-q05-e-max","brand":"Changan","model":"Nevo Q05","year":2026,"version":"E-MAX","batteryKwh":51.9,"rangeKm":405,"weightKg":1510,"motorKw":120,"acMaxKw":6.6,"dcMaxKw":162,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.67,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+values ('changan-nevo-q05-e-max', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"changan-nevo-q05-e-max","brand":"Changan","model":"Nevo Q05","year":2026,"version":"E-MAX","batteryKwh":51.9,"rangeKm":405,"weightKg":1510,"motorKw":120,"acMaxKw":6.6,"dcMaxKw":162,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.67,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;
@@ -158,7 +159,7 @@ on conflict (id) do update
 --   física [DERIVADO] dragAreaM2 = 0,265 x (0,85 x 1,855 x 1,600 = 2,52 m²) = 0,67
 --   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5 (SUV compacto LFP de potencia parecida).
 insert into public.voltia_vehicles as v (id, owner_id, payload)
-values ('changan-nevo-q05-e-max-ultra', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"changan-nevo-q05-e-max-ultra","brand":"Changan","model":"Nevo Q05","year":2026,"version":"E-MAX Ultra","batteryKwh":51.9,"rangeKm":405,"weightKg":1550,"motorKw":120,"acMaxKw":6.6,"dcMaxKw":162,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.67,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+values ('changan-nevo-q05-e-max-ultra', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"changan-nevo-q05-e-max-ultra","brand":"Changan","model":"Nevo Q05","year":2026,"version":"E-MAX Ultra","batteryKwh":51.9,"rangeKm":405,"weightKg":1550,"motorKw":120,"acMaxKw":6.6,"dcMaxKw":162,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.67,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;

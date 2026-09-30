@@ -69,7 +69,7 @@ Todas las relaciones con el usuario son columnas `uuid` sueltas que guardan el i
 Detalles que condicionan el diseño:
 
 - **Vehículos por usuario.** El id de fila es `"<owner_id>:<vehicle.id>"` (`src/server/actions/vehicles.ts`). No hay índice único por dueño y vehículo más allá de ese texto.
-- **El payload del vehículo** sigue `VehicleSchema` (`src/domain/schemas.ts`): `id`, `brand`, `model`, `year`, `version`, `batteryKwh`, `rangeKm`, `consumptionKwhPer100km`, `consumptionManual`, `weightKg`, `motorKw`, `acMaxKw`, `dcMaxKw`, `chargeCurve`, `connectors`, `minSocRecommended`, `maxSocTravel`, `isCustom`. No hay torque.
+- **El payload del vehículo** sigue `VehicleSchema` (`src/domain/schemas.ts`): `id`, `brand`, `model`, `year`, `version`, `batteryKwh`, `rangeKm`, `consumptionKwhPer100km`, `consumptionManual`, `weightKg`, `motorKw`, `acMaxKw`, `dcMaxKw`, `chargeCurve`, `connectors`, `isCustom`. No hay torque. Desde 2026-09-30 no lleva `minSocRecommended` ni `maxSocTravel` (ADR 0016).
 - **El payload de una ruta** es `{ request, summary }`: la petición completa (origen, destino, paradas, **copia del vehículo**, condiciones) y un resumen. La ruta no referencia al vehículo por id, lo embebe; borrar un vehículo no rompe rutas guardadas.
 - **Ediciones de catálogo.** En el navegador, un vehículo con el mismo id que uno de catálogo es una versión editada de ese modelo (`mergeVehicles` en `src/lib/store.ts`). Esa regla se mantiene.
 - **Rol admin** sale de `ADMIN_EMAILS`, no de la base de datos. Queda igual en este plan.
@@ -284,7 +284,6 @@ on conflict (id) do update
 | `acMaxKw`, `dcMaxKw` | Potencia máxima de carga AC y DC |
 | `connectors` | Conectores de la versión vendida en Colombia (CCS2 + Tipo 2 en la mayoría) |
 | `chargeCurve` | Curva genérica de la app; los fabricantes no publican la curva, no es un dato verificable |
-| `minSocRecommended`, `maxSocTravel` | Valores por defecto de la app (15 y 80), no especificaciones |
 | `consumptionKwhPer100km` | `null`: la app lo estima con su modelo de energía |
 
 **Torque:** el modelo actual no tiene ese campo. Como `payload` es `jsonb`, agregarlo solo toca `VehicleSchema` (opcional, `torqueNm`), sin migración de tabla. Queda como decisión D7.

@@ -71,7 +71,7 @@ export function buildPlan(args: {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
   const params = args.params ?? MODEL_PARAMETERS;
   const tolerance = params.planner.socTolerancePct;
-  const { reservePct: safety, arrivalTargetPct } = socFloors(vehicle, conditions);
+  const { reservePct: safety, arrivalTargetPct } = socFloors(conditions);
   const ctx = { vehicle, conditions, weather, originAltitudeM: raw.samples[0]?.elevM };
 
   const styleSpeed = STYLE_SPEED_FACTOR[conditions.drivingStyle];

@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { slowTailNoteForCap } from "@/lib/charge-notes";
 
 const CONNECTORS: ConnectorType[] = ["ccs2", "ccs1", "type2", "type1", "chademo", "nacs", "gb_t"];
 
@@ -60,7 +59,7 @@ export function VehicleEditor() {
           <DialogDescription>
             {editing
               ? isNew
-                ? "Ficha técnica: batería, consumo, conectores y límites de carga."
+                ? "Ficha técnica: batería, consumo, conectores y potencia de carga."
                 : isCatalogId(editing.id)
                   ? "Los cambios se guardan en tu cuenta (o en este navegador si no has iniciado sesión). Puedes restaurar el modelo de fábrica."
                   : "Actualiza los datos de tu vehículo. Se guardan en tu cuenta (o en este navegador si no has iniciado sesión)."
@@ -290,15 +289,6 @@ function VehicleForm({
         </Field>
         <Field label="Carga DC máx (kW)">
           <Input type="number" value={n(value.dcMaxKw, 0)} onChange={(e) => num("dcMaxKw", e.target.value)} />
-        </Field>
-        <Field label="SOC mín. viaje (%)">
-          <Input type="number" value={n(value.minSocRecommended, 0)} onChange={(e) => num("minSocRecommended", e.target.value)} />
-        </Field>
-        <Field label="SOC máx. en ruta (%)">
-          <Input type="number" value={n(value.maxSocTravel, 0)} onChange={(e) => num("maxSocTravel", e.target.value)} />
-          {slowTailNoteForCap(value.maxSocTravel) ? (
-            <p className="mt-1 text-[11px] leading-relaxed text-warn">{slowTailNoteForCap(value.maxSocTravel)}</p>
-          ) : null}
         </Field>
       </div>
       <div>

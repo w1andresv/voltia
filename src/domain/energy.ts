@@ -375,7 +375,7 @@ export function batteryBudget(
   wltpKm: number;
   wltpKwhPer100: number | null;
 } {
-  const floorPct = socFloors(vehicle, conditions).arrivalTargetPct;
+  const floorPct = socFloors(conditions).arrivalTargetPct;
   const usablePct = Math.max(0, conditions.initialSoc - floorPct);
   const packedKwh = (conditions.initialSoc / 100) * vehicle.batteryKwh;
   const usableKwh = (usablePct / 100) * vehicle.batteryKwh;

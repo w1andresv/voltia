@@ -31,7 +31,7 @@ export interface TripConfiguration {
   };
   /** Velocidad fijada por el usuario, si la hay. */
   cruiseSpeedKmh: number | null;
-  /** Reserva: el mayor entre el margen de seguridad y el mínimo del vehículo (ADR-0003). */
+  /** Reserva: el margen de seguridad del viaje (ADR-0016). */
   reserveSocPercent: number;
   /** Piso en todo punto de la ruta: la reserva, o 2 % con "permitir bajar del margen". */
   minimumSocPercent: number;
@@ -50,7 +50,7 @@ export function toTripConfiguration(
   weather: WeatherSnapshot | null = null,
   params: ModelParameters = MODEL_PARAMETERS,
 ): TripConfiguration {
-  const floors = socFloors(vehicle, conditions);
+  const floors = socFloors(conditions);
   const userTemp = conditions.temperatureC;
   const weatherTemp = weather?.temperatureC ?? null;
   return {
@@ -72,24 +72,26 @@ export function toTripConfiguration(
       ? params.planner.belowSafetyFloorPct
       : floors.reservePct,
     destinationReserveSocPercent: floors.arrivalTargetPct,
-    maxChargeTargetSocPercent: Math.min(100, vehicle.maxSocTravel),
+    maxChargeTargetSocPercent: routeChargeCapPct(params),
     planningEnergyMarginPercent: params.planning.energyMarginPercent,
     objective: conditions.planningMode,
     adapters: vehicle.adapters ?? [],
   };
 }
 
+/** Tope de carga en ruta (ADR-0016): uno solo para todos los vehículos. */
+export function routeChargeCapPct(params: ModelParameters = MODEL_PARAMETERS): number {
+  return Math.min(100, params.planner.maxChargeTargetSocPct.value);
+}
+
 /**
- * Pisos de batería del viaje (ADR-0003). Los usan el planificador, el panel de
+ * Pisos de batería del viaje (ADR-0016). Los usan el planificador, el panel de
  * batería y la barra del vehículo.
- *  - reservePct: el SOC no debe bajar de aquí. Es el mayor entre el margen de
- *    seguridad y el mínimo recomendado del vehículo (si el usuario lo editó, vale su valor).
+ *  - reservePct: el SOC no debe bajar de aquí. Es el margen de seguridad del
+ *    viaje; el vehículo no tiene un mínimo propio.
  *  - arrivalTargetPct: SOC mínimo al destino (el pedido por el usuario, sin bajar de la reserva).
  */
-export function socFloors(
-  vehicle: Pick<Vehicle, "minSocRecommended">,
-  c: TripConditions,
-): { reservePct: number; arrivalTargetPct: number } {
-  const reservePct = Math.max(safetyPct(c), vehicle.minSocRecommended);
+export function socFloors(c: TripConditions): { reservePct: number; arrivalTargetPct: number } {
+  const reservePct = safetyPct(c);
   return { reservePct, arrivalTargetPct: Math.max(c.arrivalSoc, reservePct) };
 }

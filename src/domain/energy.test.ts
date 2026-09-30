@@ -40,8 +40,6 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     dcMaxKw: 120,
     chargeCurve: DEFAULT_CURVE,
     connectors: ["ccs2", "type2"],
-    minSocRecommended: 10,
-    maxSocTravel: 90,
     ...overrides,
   };
 }
@@ -316,12 +314,12 @@ describe("mixedCycleKwhPer100", () => {
 });
 
 describe("batteryBudget", () => {
-  it("el piso de SOC respeta el máximo entre seguridad, mínimo del vehículo y SOC de llegada", () => {
-    const v = vehicle({ minSocRecommended: 12 });
-    const c = conditions({ safetyMode: "normal", arrivalSoc: 25 });
-    const budget = batteryBudget(v, c, null);
-    // safetyPct("normal") = 15, minSocRecommended = 12, arrivalSoc = 25 -> floor = 25
-    expect(budget.floorPct).toBe(25);
+  it("el piso de SOC es el mayor entre el margen de seguridad y el SOC de llegada", () => {
+    const v = vehicle();
+    // safetyPct("normal") = 15, arrivalSoc = 25 -> floor = 25
+    expect(batteryBudget(v, conditions({ safetyMode: "normal", arrivalSoc: 25 }), null).floorPct).toBe(25);
+    // safetyPct("low") = 10, arrivalSoc = 5 -> floor = 10
+    expect(batteryBudget(v, conditions({ safetyMode: "low", arrivalSoc: 5 }), null).floorPct).toBe(10);
   });
 
   it("la autonomía usable es 0 si el SOC inicial ya está en el piso", () => {
