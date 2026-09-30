@@ -241,18 +241,6 @@ export function TripSetup() {
           placeholder={`Parada ${i + 1}`}
         />
       ))}
-      <ul className="space-y-1 text-xs">
-        <li className={origin ? "text-ok" : "text-warn"}>
-          Punto de inicio {origin ? "✓" : "— falta"}
-        </li>
-        <li className={destination ? "text-ok" : "text-warn"}>
-          Punto de destino {destination ? "✓" : "— falta"}
-        </li>
-        <li className={stationDataset ? "text-ok" : "text-warn"}>
-          Electrolineras{" "}
-          {stationDataset ? "✓" : loadingStations ? "— cargando..." : "— no disponibles"}
-        </li>
-      </ul>
       <div className="flex gap-2">
         <Button
           variant="outline"
@@ -317,27 +305,6 @@ export function TripSetup() {
           )}
         </Button>
       </div>
-      {!plan ? (
-        <div className="space-y-2">
-          <p className="text-xs text-muted">Ejemplos</p>
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {DEMO_TRIPS.map((t) => (
-              <button
-                key={t.label}
-                type="button"
-                onClick={() => {
-                  applyDemo(t);
-                  planMut.mutate();
-                }}
-                disabled={planMut.isPending}
-                className="h-11 shrink-0 rounded-full bg-bg-elevated px-3 text-xs text-fg hover:bg-surface-2 disabled:opacity-60"
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }
