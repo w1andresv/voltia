@@ -4,13 +4,14 @@ Consulta hecha el 2026-09-23. `seeds/0001_vehicle_catalog.sql` solo incluye veh�
 campos requeridos (`batteryKwh`, `rangeKm`, `weightKg`, `motorKw`, `acMaxKw`, `dcMaxKw`, `connectors`)
 respaldados por una fuente. Lo demás queda aquí, con lo que sí se encontró y lo que falta.
 
-## Entraron (6)
+## Entraron (8)
 
 | id | Qué respalda la fila | Confianza |
 | --- | --- | --- |
 | `mg-s5-ev-comfort`, `mg-s5-ev-deluxe` | Todo de fuentes colombianas (MG Colombia, ficha PDF, prensa) | Alta. Abrir el PDF a mano: su encabezado dice "ZS HYBRID+" aunque las cifras coinciden con el S5 |
 | `tesla-model-3-lr-awd`, `tesla-model-y-rwd`, `tesla-model-y-lr-awd` | Batería, autonomía, peso y DC de prensa colombiana; AC de Tesla EE. UU. (11,5 kW); kW derivados de hp | Media. Tesla no publica batería útil ni AC para Colombia |
 | `volvo-ex30-sm-er` | Autonomía, potencia y DC de Volvo Colombia; batería, peso, AC y conector de un agregador internacional | Media. Confirmar con la ficha de Volvo Colombia |
+| `changan-nevo-q05-e-max`, `changan-nevo-q05-e-max-ultra` (2026-09-30) | Batería, potencia, peso por versión, AC y conector de prensa colombiana y Changan Colombia; DC 162 kW de un agregador internacional | Media-baja. **La autonomía (405 km) no es WLTP homologado**: Changan solo publica 455 km NEDC; 405 es la estimación del computador (prueba de El Carro Colombiano) y se usa como WLTP por decisión del dueño del producto. Confirmar DC en Colombia |
 
 ## No entraron: qué se encontró y qué falta
 
@@ -44,6 +45,7 @@ Cada cifra tiene su fuente en `seeds/0001_vehicle_catalog.sql`, en las líneas q
 | Tesla Model 3 LR AWD | 0,219 | 1.849 × 1.441 | 2,26 | **0,50** (0,55) | 75 kW, medido por usuarios |
 | Tesla Model Y RWD y LR AWD | 0,22 | 1.920 × 1.624 | 2,65 | **0,58** (0,75) | 75 kW, asumido del Model 3 |
 | Volvo EX30 SM ER | 0,28 | 1.837 × 1.549 | 2,42 | **0,68** (0,75) | 60 kW, asumido |
+| Changan Nevo Q05 (E-MAX y E-MAX Ultra) | 0,265 | 1.855 × 1.600 | 2,52 | **0,67** (—) | 60 kW, asumido |
 
 **Sin fuente para ningún vehículo** (quedan con los valores por defecto marcados "estimado"):
 - rodadura (Crr 0,009);

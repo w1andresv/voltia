@@ -2,7 +2,7 @@
 -- Rerunnable: `npm run db:seed` puede correrse tantas veces como haga falta; cada fila
 -- hace upsert por id y nunca pisa un vehículo de usuario (where owner_id is null).
 --
--- Fecha de consulta de todas las fuentes: 2026-09-23.
+-- Fecha de consulta de las fuentes: 2026-09-23, salvo las filas que indican otra (Changan Nevo Q05: 2026-09-30).
 -- Etiqueta de cada fuente:
 --   [CO]       página o ficha de un sitio colombiano (fabricante, distribuidor o prensa local).
 --   [INT]      dato internacional de la MISMA variante, cuando la fuente colombiana no lo publica.
@@ -116,6 +116,49 @@ on conflict (id) do update
 --   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5.
 insert into public.voltia_vehicles as v (id, owner_id, payload)
 values ('volvo-ex30-sm-er', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"volvo-ex30-sm-er","brand":"Volvo","model":"EX30","year":2026,"version":"Single Motor Extended Range","batteryKwh":64,"rangeKm":476,"weightKg":1775,"motorKw":200,"acMaxKw":11,"dcMaxKw":150,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.68,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+on conflict (id) do update
+  set payload = excluded.payload, updated_at = now()
+  where v.owner_id is null;
+
+-- Changan Nevo Q05 E-MAX (2026) - consultado 2026-09-30
+--   fuente [CO] https://www.elcarrocolombiano.com/lanzamientos/changan-nevo-q05-colombia-suv-electrica-asequible-precio-datos/  -> 51,9 kWh LFP (CATL), 455 km NEDC, 160,9 hp, E-MAX 1.510 kg / E-MAX Ultra 1.550 kg, AC 6,6 kW, Tipo 2 / CCS2
+--   fuente [CO] https://www.elcarrocolombiano.com/pruebas/changan-nevo-q05-ultra-suv-electrica-primer-contacto/  -> con carga completa el computador del carro estimó 405 km ("proyección del vehículo, no una homologación WLTP")
+--   fuente [CO] https://changan.com.co/nevo-q05/  -> versiones E-MAX y E-MAX Ultra, 455 km NEDC, 51,9 kWh, carga rápida 3C (30-80 % en 15 min)
+--   fuente [INT] https://data.carnewschina.com/database/changan-nevo/changan-nevo-q05/2026/params  -> DC 162 kW, AC 6,6 kW (misma batería de 51,9 kWh; la prensa colombiana dice que los 162 kW aún no se confirman para Colombia)
+--   fuente [DERIVADO] motorKw = 160,9 hp x 0,7457 = 120 kW
+--   nota: rangeKm 405 NO es un WLTP homologado: Changan Colombia solo publica 455 km NEDC. Se usa 405 como WLTP por
+--         decisión del dueño del producto (2026-09-30): es la estimación del computador tras carga completa y cuadra con
+--         455 NEDC x ~0,89. Ojo: en China "405 km" es la cifra CLTC de otra versión (40,3 kWh); la de 51,9 kWh da 506 km CLTC.
+--   nota: batteryKwh = 51,9 según la marca; no se publica capacidad útil vs. bruta. year = 2026, año del lanzamiento en
+--         Colombia (agosto de 2026): la marca no publica el año modelo.
+--   nota: las páginas se consultaron a través de un buscador (el entorno no permitía abrirlas): confirmar con la ficha.
+--   física [INT] https://data.carnewschina.com/database/changan-nevo/changan-nevo-q05/2026/params  -> Cd 0,265; 4.435 x 1.855 x 1.600 mm
+--   física [DERIVADO] dragAreaM2 = 0,265 x (0,85 x 1,855 x 1,600 = 2,52 m²) = 0,67
+--   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5 (SUV compacto LFP de potencia parecida).
+--   nota: los 405 km se midieron en la E-MAX Ultra; la E-MAX (rines más pequeños) no tiene cifra propia y usa la misma.
+insert into public.voltia_vehicles as v (id, owner_id, payload)
+values ('changan-nevo-q05-e-max', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"changan-nevo-q05-e-max","brand":"Changan","model":"Nevo Q05","year":2026,"version":"E-MAX","batteryKwh":51.9,"rangeKm":405,"weightKg":1510,"motorKw":120,"acMaxKw":6.6,"dcMaxKw":162,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.67,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+on conflict (id) do update
+  set payload = excluded.payload, updated_at = now()
+  where v.owner_id is null;
+
+-- Changan Nevo Q05 E-MAX Ultra (2026) - consultado 2026-09-30
+--   fuente [CO] https://www.elcarrocolombiano.com/lanzamientos/changan-nevo-q05-colombia-suv-electrica-asequible-precio-datos/  -> 51,9 kWh LFP (CATL), 455 km NEDC, 160,9 hp, E-MAX 1.510 kg / E-MAX Ultra 1.550 kg, AC 6,6 kW, Tipo 2 / CCS2
+--   fuente [CO] https://www.elcarrocolombiano.com/pruebas/changan-nevo-q05-ultra-suv-electrica-primer-contacto/  -> con carga completa el computador del carro estimó 405 km ("proyección del vehículo, no una homologación WLTP")
+--   fuente [CO] https://changan.com.co/nevo-q05/  -> versiones E-MAX y E-MAX Ultra, 455 km NEDC, 51,9 kWh, carga rápida 3C (30-80 % en 15 min)
+--   fuente [INT] https://data.carnewschina.com/database/changan-nevo/changan-nevo-q05/2026/params  -> DC 162 kW, AC 6,6 kW (misma batería de 51,9 kWh; la prensa colombiana dice que los 162 kW aún no se confirman para Colombia)
+--   fuente [DERIVADO] motorKw = 160,9 hp x 0,7457 = 120 kW
+--   nota: rangeKm 405 NO es un WLTP homologado: Changan Colombia solo publica 455 km NEDC. Se usa 405 como WLTP por
+--         decisión del dueño del producto (2026-09-30): es la estimación del computador tras carga completa y cuadra con
+--         455 NEDC x ~0,89. Ojo: en China "405 km" es la cifra CLTC de otra versión (40,3 kWh); la de 51,9 kWh da 506 km CLTC.
+--   nota: batteryKwh = 51,9 según la marca; no se publica capacidad útil vs. bruta. year = 2026, año del lanzamiento en
+--         Colombia (agosto de 2026): la marca no publica el año modelo.
+--   nota: las páginas se consultaron a través de un buscador (el entorno no permitía abrirlas): confirmar con la ficha.
+--   física [INT] https://data.carnewschina.com/database/changan-nevo/changan-nevo-q05/2026/params  -> Cd 0,265; 4.435 x 1.855 x 1.600 mm
+--   física [DERIVADO] dragAreaM2 = 0,265 x (0,85 x 1,855 x 1,600 = 2,52 m²) = 0,67
+--   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5 (SUV compacto LFP de potencia parecida).
+insert into public.voltia_vehicles as v (id, owner_id, payload)
+values ('changan-nevo-q05-e-max-ultra', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"minSocRecommended":15,"maxSocTravel":80,"consumptionKwhPer100km":null,"consumptionManual":false,"id":"changan-nevo-q05-e-max-ultra","brand":"Changan","model":"Nevo Q05","year":2026,"version":"E-MAX Ultra","batteryKwh":51.9,"rangeKm":405,"weightKg":1550,"motorKw":120,"acMaxKw":6.6,"dcMaxKw":162,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.67,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;
