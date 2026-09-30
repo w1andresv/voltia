@@ -20,7 +20,6 @@ const request: PlanRequest = {
     passengers: 0,
     luggageKg: 0,
     initialSoc: 90,
-    arrivalSoc: 10,
     avgSpeedKmh: null,
     ac: "off",
     temperatureC: 20,

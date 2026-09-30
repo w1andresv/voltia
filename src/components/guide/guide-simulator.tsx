@@ -9,7 +9,9 @@ import {
   energyPerKm,
   floorOf,
   GUIDE_DIST_KM,
+  GUIDE_MIN_SESSION_MIN,
   GUIDE_PRESETS,
+  GUIDE_STRETCH_CAP,
   GUIDE_TOWNS,
   guideStations,
   pctOf,
@@ -307,7 +309,24 @@ function reasons(
         <>
           En carga rápida se carga el mínimo para llegar a la siguiente parada + {p.fastBuffer}{" "}
           puntos (sin pasar de {Math.min(90, p.cap)} %). En la última parada se carga solo lo
-          necesario para llegar a Vélez con la reserva: llegas con {f0(r.arrival)} %.
+          necesario para llegar a Vélez con el margen: llegas con {f0(r.arrival)} %.
+        </>,
+      );
+    }
+    if (r.stops.length) {
+      lines.push(
+        <>
+          Cada parada carga al menos {GUIDE_MIN_SESSION_MIN} min (o hasta el tope de {p.cap} %):
+          parar para cargar 1 % no vale la pena.
+        </>,
+      );
+    }
+    const stretchedStop = r.stops.find((s) => s.depart > p.cap);
+    if (stretchedStop) {
+      lines.push(
+        <>
+          En {short(stretchedStop.station.name)} sale con {stretchedStop.depart} %, por encima del
+          tope de {p.cap} %: así se ahorra una parada (se permite hasta {GUIDE_STRETCH_CAP} %).
         </>,
       );
     }
@@ -401,14 +420,6 @@ export function GuideSimulator({ engine }: { engine: GuideEngine }) {
           onChange={set("margin")}
         />
         <Range
-          label="Llegada al destino"
-          value={params.arrival}
-          shown={`${params.arrival} %`}
-          min={5}
-          max={40}
-          onChange={set("arrival")}
-        />
-        <Range
           label="Tope de carga en ruta"
           value={params.cap}
           shown={`${params.cap} %`}
@@ -472,7 +483,7 @@ export function GuideSimulator({ engine }: { engine: GuideEngine }) {
             <Card
               label="Llegada a Vélez"
               value={`${f0(result.arrival)} %`}
-              note={`reserva pedida ${Math.max(params.arrival, floor)} %`}
+              note={`margen ${floor} %`}
             />
             <Card
               label="Minutos cargando"

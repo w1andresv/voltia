@@ -19,7 +19,9 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0013](./0013-desvios-medidos-con-la-matriz.md) | Desvíos medidos con la matriz de Mapbox, detrás de DETOUR_SOURCE | Aceptada |
 | [0014](./0014-calibracion-con-soc-de-llegada.md) | Calibración con el SOC de llegada ("¿Con cuánto llegaste?") | Aceptada |
 | [0015](./0015-routeplan-contrato-definitivo.md) | `RoutePlan` ampliado como contrato definitivo del plan | Aceptada |
-| [0016](./0016-margen-solo-en-el-viaje.md) | El margen de SOC se define solo en el viaje; el vehículo no tiene mínimo ni tope | Aceptada |
+| [0016](./0016-margen-solo-en-el-viaje.md) | El margen de SOC se define solo en el viaje; el vehículo no tiene mínimo ni tope | Aceptada (destino: ver 0017) |
+| [0017](./0017-sin-llegada-minima.md) | Sin "Llegada mínima": el margen de seguridad también es la reserva al destino | Aceptada |
+| [0018](./0018-paradas-que-valen-la-pena.md) | Planificador v2: paradas que valen la pena (sesión mínima y tope estirado) | Aceptada |
 
 ## Plantilla
 

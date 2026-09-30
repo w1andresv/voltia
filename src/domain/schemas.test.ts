@@ -37,3 +37,15 @@ describe("regeneración: de porcentaje a nivel", () => {
     expect(TripConditionsSchema.parse(rest).regenLevel).toBe("medium");
   });
 });
+
+describe("sin 'Llegada mínima' (ADR-0017)", () => {
+  it("las condiciones por defecto no la traen", () => {
+    expect("arrivalSoc" in DEFAULT_CONDITIONS).toBe(false);
+  });
+
+  it("un viaje guardado con arrivalSoc se sigue leyendo, sin esa clave", () => {
+    const saved = TripConditionsSchema.parse({ ...DEFAULT_CONDITIONS, arrivalSoc: 30 });
+    expect("arrivalSoc" in saved).toBe(false);
+    expect(saved.safetyMode).toBe(DEFAULT_CONDITIONS.safetyMode);
+  });
+});

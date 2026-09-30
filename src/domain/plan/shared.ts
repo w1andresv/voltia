@@ -110,6 +110,7 @@ export interface StopsChoice {
   reason?: string;
   planningSoc: number;
   departureCharge?: RoutePlan["departureCharge"];
+  skipFirstStop?: RoutePlan["skipFirstStop"];
   firstChargerUnreachable?: boolean;
   feasibilityStatus?: FeasibilityStatus;
   infeasibilityCode?: InfeasibilityReason;

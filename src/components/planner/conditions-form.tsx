@@ -1,5 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import { conditionWarnings } from "@/domain/conditions-advice";
+import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import { usePlanner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,10 @@ export function ConditionsDialog() {
               onCheckedChange={(v) => patch({ allowBelowSafety: v })}
             />
           </label>
+          <p className="text-xs leading-relaxed text-muted">
+            En ruta la batería puede bajar hasta {MODEL_PARAMETERS.planner.belowSafetyFloorPct} %.
+            Al destino siempre se llega con el margen de seguridad.
+          </p>
         </section>
 
         <section className="mt-5 space-y-4">

@@ -83,13 +83,24 @@ export interface ModelParameters {
     detourSpeedKmh: number;
     /** Margen para comparar SOC calculados (redondeo de punto flotante). */
     socTolerancePct: number;
-    /** Piso de SOC con "permitir bajar del margen". */
+    /** Piso de SOC en ruta con "permitir bajar del margen" (al destino se sigue pidiendo el margen, ADR-0017). */
     belowSafetyFloorPct: number;
     /**
      * Tope de carga en ruta: ninguna parada carga por encima de este SOC. Antes
      * era `maxSocTravel` de cada vehículo; desde 2026-09-30 es uno solo (ADR-0016).
      */
     maxChargeTargetSocPct: SourcedValue<number>;
+    /**
+     * Planificador v2 (ADR-0018): si se para, se carga al menos estos minutos
+     * (sin contar los de conexión), o hasta el tope. Una parada para cargar 1 %
+     * no vale la pena: parquear, bajarse, abrir la app y conectar ya cuesta tiempo.
+     */
+    minChargeSessionMin: SourcedValue<number>;
+    /**
+     * Planificador v2 (ADR-0018): una parada puede cargar por encima del tope en
+     * ruta, hasta este SOC, solo si así el plan tiene menos paradas.
+     */
+    stretchChargeSocPct: SourcedValue<number>;
     /** Planificador v2: resolución del SOC de salida, en puntos. */
     socGridPct: number;
     /** Planificador v2: minutos de espera supuestos en una estación reportada ocupada. */
@@ -208,10 +219,19 @@ export const MODEL_PARAMETERS: ModelParameters = {
     minProgressKm: 4,
     detourSpeedKmh: 50,
     socTolerancePct: 1e-4,
-    belowSafetyFloorPct: 2,
+    // Decisión del dueño del producto (2026-09-30, ADR-0017): era 2 %.
+    belowSafetyFloorPct: 5,
     maxChargeTargetSocPct: sourced(80, "configurable", {
       notes:
         "Decisión del dueño del producto (2026-09-30): el vehículo ya no define mínimo ni tope; la reserva es el margen del viaje y el tope es este (ADR-0016).",
+    }),
+    minChargeSessionMin: sourced(10, "configurable", {
+      notes:
+        "Decisión del dueño del producto (2026-09-30, ADR-0018): una parada vale la pena si se carga al menos 10 min; los 5 min de conexión aparte.",
+    }),
+    stretchChargeSocPct: sourced(90, "configurable", {
+      notes:
+        "Decisión del dueño del producto (2026-09-30, ADR-0018): pasar del tope de 80 % hasta 90 % solo para ahorrar una parada. Del 90 al 100 % la carga se vuelve lenta.",
     }),
     socGridPct: 1,
     occupiedWaitMin: sourced(15, "estimated", { notes: "Sin datos de ocupación; calibrar." }),

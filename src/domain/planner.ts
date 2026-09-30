@@ -1,6 +1,6 @@
 import { annotateEnergy, energyMode, STYLE_SPEED_FACTOR } from "./energy";
 import { MODEL_PARAMETERS, type ModelParameters } from "./ev/core/params";
-import { socFloors } from "./ev/core/trip-config";
+import { reserveSocPct } from "./ev/core/trip-config";
 import type { MeasuredDetour } from "./ev/contracts/detour";
 import { detourEnergyV2, energyProfileForRoute, type EnergyEngine } from "./ev/energy-v2";
 import { batteryDepletion } from "./ev/engines/soc/depletion";
@@ -71,7 +71,7 @@ export function buildPlan(args: {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
   const params = args.params ?? MODEL_PARAMETERS;
   const tolerance = params.planner.socTolerancePct;
-  const { reservePct: safety, arrivalTargetPct } = socFloors(conditions);
+  const safety = reserveSocPct(conditions);
   const ctx = { vehicle, conditions, weather, originAltitudeM: raw.samples[0]?.elevM };
 
   const styleSpeed = STYLE_SPEED_FACTOR[conditions.drivingStyle];
@@ -144,9 +144,7 @@ export function buildPlan(args: {
   const depletion = batteryDepletion(samples);
   const remainingKwh = Math.max(0, (arrivalSoc / 100) * vehicle.batteryKwh);
   const canArriveWithoutCharge =
-    stops.length === 0 &&
-    arrivalSoc >= arrivalTargetPct - tolerance &&
-    minSoc >= safety - tolerance;
+    stops.length === 0 && arrivalSoc >= safety - tolerance && minSoc >= safety - tolerance;
 
   const itinerary: ItineraryNode[] = [
     {
@@ -220,6 +218,7 @@ export function buildPlan(args: {
     feasible,
     infeasibleReason: reason,
     departureCharge,
+    ...(chosen.skipFirstStop ? { skipFirstStop: chosen.skipFirstStop } : {}),
     firstChargerUnreachable: chosen.firstChargerUnreachable,
     ...(depletion ? { depletion } : {}),
     planner: args.engine === "v2" ? "v2" : "legacy",

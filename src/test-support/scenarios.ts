@@ -26,7 +26,6 @@ export const PIEDECUESTA_VELEZ = {
       passengers: 1,
       luggageKg: 30,
       initialSoc: 80,
-      arrivalSoc: 10,
       avgSpeedKmh: null,
       ac: "normal",
       temperatureC: 25,

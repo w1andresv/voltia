@@ -1,5 +1,5 @@
 import type { ModelParameters } from "../ev/core/params";
-import { routeChargeCapPct, socFloors } from "../ev/core/trip-config";
+import { reserveSocPct, routeChargeCapPct } from "../ev/core/trip-config";
 import type { EnergySample } from "../ev/contracts/energy";
 import type { RegenAcceptance } from "../ev/contracts/soc";
 import { chargeTimeMinutes, FLAT_CURVE } from "../ev/engines/charging/curve";
@@ -152,7 +152,9 @@ function pickStops(args: {
 }): { stops: ChargeStop[]; feasible: boolean; reason?: string } {
   const { samples, vehicle, conditions, weather, params } = args;
   const tolerance = params.planner.socTolerancePct;
-  const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(conditions);
+  const safety = reserveSocPct(conditions);
+  // Al destino se pide el mismo margen (ADR-0017).
+  const arrivalTarget = safety;
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
   const maxTravel = routeChargeCapPct(params);
@@ -600,7 +602,9 @@ function assessFirstCharger(args: {
 
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
-  const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(conditions);
+  const safety = reserveSocPct(conditions);
+  // Al destino se pide el mismo margen (ADR-0017).
+  const arrivalTarget = safety;
   const energyCtx: EnergyCtx = {
     vehicle,
     conditions,

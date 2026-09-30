@@ -13,7 +13,10 @@ import {
 // 2026-09-29 el extra de carga rápida del v2 no aplica al tramo final (ADR-0007), así que los
 // casos v2 donde la última parada era rápida cargan menos y llegan con la reserva. Desde
 // 2026-09-30 el piso es solo el margen del viaje, sin el mínimo de 15 % del vehículo
-// (ADR-0016): en v1 · safer (margen 10 %) se llega a Santana con 14 % y se carga menos en San Gil.
+// (ADR-0016), y la reserva al destino también es el margen, sin "llegada mínima" (ADR-0017):
+// los casos "safer" (margen 10 %, antes llegada 20 %) llegan con menos. Y en v2 cada parada carga
+// al menos 10 min y puede salir hasta 90 % si así se ahorra una parada (ADR-0018): "local" pasa
+// de Socorro + Santana (31→49) a solo Socorro saliendo con 87 %.
 // [paradas "nombre llega→sale", carga previa, llegada a Vélez, minutos cargando].
 const CASES: Record<string, GuideParams> = {
   ...GUIDE_PRESETS,
@@ -22,7 +25,6 @@ const CASES: Record<string, GuideParams> = {
     passengers: 1,
     consumption: 20,
     margin: 15,
-    arrival: 15,
     cap: 80,
     strategy: "fewer",
     sanGil: true,
@@ -33,7 +35,6 @@ const CASES: Record<string, GuideParams> = {
     passengers: 3,
     consumption: 24,
     margin: 10,
-    arrival: 20,
     cap: 100,
     strategy: "safer",
     sanGil: true,
@@ -47,14 +48,14 @@ const EXPECTED: Record<GuideEngine, Record<string, [string[], number, number, nu
     vercel: [["Socorro 20→89"], 1, 22, 42],
     low: [["Socorro 15→66"], 16, 17, 31],
     sanGilFewer: [["San Gil 16→64", "Santana 19→44"], 0, 19, 218],
-    safer: [["San Gil 19→67", "Santana 14→54"], 0, 24, 228],
+    safer: [["San Gil 19→96"], 0, 14, 321],
   },
   v2: {
-    local: [["Socorro 30→69", "Santana 31→49"], 0, 21, 40],
+    local: [["Socorro 30→87"], 0, 21, 36],
     vercel: [["Socorro 20→87"], 1, 20, 41],
     low: [["Socorro 15→65"], 16, 16, 31],
     sanGilFewer: [["San Gil 16→27", "Socorro 15→74"], 0, 15, 87],
-    safer: [["San Gil 19→33", "Socorro 19→90"], 0, 21, 110],
+    safer: [["San Gil 19→33", "Socorro 19→89"], 0, 20, 109],
   },
 };
 
@@ -80,7 +81,7 @@ describe("modelo de las guías: mismo resultado que las demos originales", () =>
   }
 
   it("si ninguna carga alcanza, no es viable", () => {
-    const r = solveGuide("v2", { ...GUIDE_PRESETS.local, arrival: 95 });
+    const r = solveGuide("v2", { ...GUIDE_PRESETS.local, margin: 95 });
     expect(r.viable).toBe(false);
   });
 
@@ -91,6 +92,6 @@ describe("modelo de las guías: mismo resultado que las demos originales", () =>
     const pts = batteryCurve(energyPerKm(p), p.soc, r.stops);
     expect(pts.at(-1)![0]).toBe(GUIDE_DIST_KM);
     expect(pts.at(-1)![1]).toBeCloseTo(r.arrival, 6);
-    expect(pts).toContainEqual([98, 69]);
+    expect(pts).toContainEqual([98, 87]);
   });
 });

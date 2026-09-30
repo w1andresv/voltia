@@ -1,7 +1,7 @@
 import { chargeCurveSeries, chargeTimeMinutes } from "@/domain/charging";
 import { batteryBudget } from "@/domain/energy";
 import { departureChargeAdvice } from "@/domain/types";
-import { routeChargeCapPct, socFloors } from "@/domain/ev/core/trip-config";
+import { reserveSocPct, routeChargeCapPct } from "@/domain/ev/core/trip-config";
 import { vehicleLabel } from "@/domain/vehicles";
 import { formatKm, formatKw, formatKwh, formatKwhPer100, formatMinutes, formatPct, formatSoc } from "@/lib/format";
 import { DepletionNotice } from "./depletion-notice";
@@ -14,7 +14,6 @@ import { Slider } from "@/components/ui/slider";
 import { SLOW_TAIL_TEXT } from "@/lib/charge-notes";
 
 const START_PRESETS = [50, 70, 80, 90, 100];
-const ARRIVE_PRESETS = [10, 15, 20, 30];
 
 export function BatteryDialog() {
   const open = usePlanner((s) => s.batteryOpen);
@@ -25,7 +24,7 @@ export function BatteryDialog() {
   const weather = usePlanner((s) => s.geo?.weather ?? null);
   const plan = usePlanner((s) => s.plans.find((p) => p.id === s.selectedPlanId) ?? s.plans[0] ?? null);
 
-  const floor = socFloors(conditions).reservePct;
+  const floor = reserveSocPct(conditions);
   const cap = routeChargeCapPct();
   const budget = batteryBudget(vehicle, conditions, weather);
   const to80 = chargeTimeMinutes(vehicle.batteryKwh, 10, 80, vehicle.dcMaxKw, vehicle.dcMaxKw, vehicle.chargeCurve, undefined, {
@@ -86,26 +85,11 @@ export function BatteryDialog() {
             />
           </div>
 
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <Label>Llegada mínima</Label>
-              <span className="font-mono text-xs tabular-nums text-muted">
-                {formatPct(conditions.arrivalSoc)} · {formatKwh((conditions.arrivalSoc / 100) * vehicle.batteryKwh)}
-              </span>
-            </div>
-            <Slider
-              min={5}
-              max={50}
-              step={1}
-              value={[conditions.arrivalSoc]}
-              onValueChange={([v]) => patch({ arrivalSoc: v ?? 20 })}
-            />
-            <PresetRow
-              values={ARRIVE_PRESETS}
-              current={conditions.arrivalSoc}
-              onPick={(v) => patch({ arrivalSoc: v })}
-            />
-          </div>
+          <p className="text-xs leading-relaxed text-muted">
+            La reserva es el margen de seguridad del viaje ({formatPct(floor)} ·{" "}
+            {formatKwh((floor / 100) * vehicle.batteryKwh)}): se cumple en toda la ruta y al llegar al
+            destino. Se cambia en "Margen de seguridad".
+          </p>
         </section>
 
         {conditions.initialSoc < budget.floorPct ? (
@@ -171,8 +155,8 @@ export function BatteryDialog() {
           </section>
         ) : (
           <p className="mt-5 text-xs leading-relaxed text-muted">
-            Ajusta salida y llegada, luego planifica una ruta. El modelo recalcula autonomía, paradas y tiempos al
-            momento.
+            Ajusta la batería de salida, luego planifica una ruta. El modelo recalcula autonomía, paradas y
+            tiempos al momento.
           </p>
         )}
       </DialogContent>

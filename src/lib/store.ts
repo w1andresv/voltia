@@ -425,9 +425,17 @@ export const usePlanner = create<PlannerState>()(
         const p = (persisted ?? {}) as Partial<PlannerState> & { tripRegenV?: number };
         const storedConditions = p.conditions;
         const regenLevel = storedRegenLevel(storedConditions, p.tripRegenV);
-        const { regenPct: _legacyRegen, ...restConditions } = (storedConditions ??
-          {}) as Partial<TripConditions> & { regenPct?: unknown };
+        // `regenPct` y `arrivalSoc` ("Llegada mínima", ADR-0017) ya no existen: se descartan.
+        const {
+          regenPct: _legacyRegen,
+          arrivalSoc: _legacyArrival,
+          ...restConditions
+        } = (storedConditions ?? {}) as Partial<TripConditions> & {
+          regenPct?: unknown;
+          arrivalSoc?: unknown;
+        };
         void _legacyRegen;
+        void _legacyArrival;
         return {
           ...current,
           selectedVehicleId:

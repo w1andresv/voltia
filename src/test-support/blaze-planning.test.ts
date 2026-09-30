@@ -59,7 +59,6 @@ function request(initialSoc: number): PlanRequest {
       passengers: 1,
       luggageKg: 30,
       initialSoc,
-      arrivalSoc: 10,
       avgSpeedKmh: null,
       ac: "normal",
       temperatureC: null,

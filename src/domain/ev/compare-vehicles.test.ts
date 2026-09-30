@@ -25,7 +25,6 @@ const conditions: TripConditions = {
   passengers: 1,
   luggageKg: 0,
   initialSoc: 60,
-  arrivalSoc: 15,
   avgSpeedKmh: null,
   ac: "normal",
   temperatureC: 22,

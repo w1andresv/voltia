@@ -33,9 +33,9 @@ export interface TripConfiguration {
   cruiseSpeedKmh: number | null;
   /** Reserva: el margen de seguridad del viaje (ADR-0016). */
   reserveSocPercent: number;
-  /** Piso en todo punto de la ruta: la reserva, o 2 % con "permitir bajar del margen". */
+  /** Piso en todo punto de la ruta: la reserva, o `belowSafetyFloorPct` (5 %) con "permitir bajar del margen". */
   minimumSocPercent: number;
-  /** SOC mínimo al destino: el pedido, sin bajar de la reserva. */
+  /** SOC mínimo al destino: la reserva, también con "permitir bajar del margen" (ADR-0017). */
   destinationReserveSocPercent: number;
   maxChargeTargetSocPercent: number;
   planningEnergyMarginPercent: number;
@@ -50,7 +50,7 @@ export function toTripConfiguration(
   weather: WeatherSnapshot | null = null,
   params: ModelParameters = MODEL_PARAMETERS,
 ): TripConfiguration {
-  const floors = socFloors(conditions);
+  const reserve = reserveSocPct(conditions);
   const userTemp = conditions.temperatureC;
   const weatherTemp = weather?.temperatureC ?? null;
   return {
@@ -67,11 +67,9 @@ export function toTripConfiguration(
       windDirDeg: weather?.windDirDeg ?? null,
     },
     cruiseSpeedKmh: conditions.avgSpeedKmh,
-    reserveSocPercent: floors.reservePct,
-    minimumSocPercent: conditions.allowBelowSafety
-      ? params.planner.belowSafetyFloorPct
-      : floors.reservePct,
-    destinationReserveSocPercent: floors.arrivalTargetPct,
+    reserveSocPercent: reserve,
+    minimumSocPercent: conditions.allowBelowSafety ? params.planner.belowSafetyFloorPct : reserve,
+    destinationReserveSocPercent: reserve,
     maxChargeTargetSocPercent: routeChargeCapPct(params),
     planningEnergyMarginPercent: params.planning.energyMarginPercent,
     objective: conditions.planningMode,
@@ -85,13 +83,11 @@ export function routeChargeCapPct(params: ModelParameters = MODEL_PARAMETERS): n
 }
 
 /**
- * Pisos de batería del viaje (ADR-0016). Los usan el planificador, el panel de
- * batería y la barra del vehículo.
- *  - reservePct: el SOC no debe bajar de aquí. Es el margen de seguridad del
- *    viaje; el vehículo no tiene un mínimo propio.
- *  - arrivalTargetPct: SOC mínimo al destino (el pedido por el usuario, sin bajar de la reserva).
+ * Reserva de batería del viaje: el margen de seguridad, única fuente de verdad
+ * (ADR-0016, ADR-0017). El SOC no baja de aquí en ningún punto de la ruta ni al
+ * llegar al destino: no hay una "llegada mínima" aparte ni un mínimo del
+ * vehículo. La usan los planificadores, el panel de batería y la barra del vehículo.
  */
-export function socFloors(c: TripConditions): { reservePct: number; arrivalTargetPct: number } {
-  const reservePct = safetyPct(c);
-  return { reservePct, arrivalTargetPct: Math.max(c.arrivalSoc, reservePct) };
+export function reserveSocPct(c: TripConditions): number {
+  return safetyPct(c);
 }

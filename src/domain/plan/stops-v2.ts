@@ -5,6 +5,7 @@ import { FLAT_CURVE, chargeTimeMinutes, lerpFactor } from "../ev/engines/chargin
 import {
   planCharging,
   requiredInitialCharge,
+  type PlannedStop,
   type PlannerInput,
   type PlannerNode,
 } from "../ev/engines/charging/planner";
@@ -31,16 +32,26 @@ import {
   type StopsChoice,
 } from "./shared";
 
+/** Tiempos de carga de una estación sobre la malla de integración. */
+interface ChargeTable {
+  /** Minutos para cargar de `from` a `to`, con los minutos fijos de conexión (0 si no carga). */
+  minutes: PlannerNode["chargeMinutes"];
+  /** Minutos solo cargando, sin los de conexión. */
+  chargingMinutes: (from: number, to: number) => number;
+  /** SOC al que se llega cargando `min` minutos desde `from` (100 si no alcanza). */
+  socAfter: (from: number, min: number) => number;
+}
+
 /**
  * Minutos de carga por estación, precalculados sobre la malla de integración:
  * la programación dinámica los consulta miles de veces.
  */
-function chargeMinutesTable(
+function chargeTable(
   plug: RoutePlug,
   vehicle: Vehicle,
   capacityKwh: number,
   params: ModelParameters,
-): PlannerNode["chargeMinutes"] {
+): ChargeTable {
   const step = params.charging.integrationStepPct;
   const overhead = params.charging.connectionOverheadMin.value;
   const peak = plug.dc ? vehicle.dcMaxKw : vehicle.acMaxKw;
@@ -57,7 +68,26 @@ function chargeMinutesTable(
     const k = Math.min(n - 1, Math.floor(x));
     return cum[k]! + (cum[k + 1]! - cum[k]!) * (x - k);
   };
-  return (from, to) => (to > from ? at(to) - at(from) + overhead : 0);
+  const socAfter = (from: number, min: number): number => {
+    if (min <= 0) return from;
+    const target = at(from) + min;
+    if (target >= cum[n]!) return 100;
+    // cum crece: el primer tramo de la malla que llega al tiempo pedido.
+    let lo = 0;
+    let hi = n;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (cum[mid]! >= target) hi = mid;
+      else lo = mid;
+    }
+    const x = lo + (target - cum[lo]!) / (cum[hi]! - cum[lo]!);
+    return Math.max(from, x * step);
+  };
+  return {
+    minutes: (from, to) => (to > from ? at(to) - at(from) + overhead : 0),
+    chargingMinutes: (from, to) => (to > from ? at(to) - at(from) : 0),
+    socAfter,
+  };
 }
 
 /**
@@ -73,10 +103,8 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
   const floor = cfg.minimumSocPercent;
-  // Con "permitir bajar del margen" el destino pide lo que eligió el usuario, sin subirlo a la reserva.
-  const destReserve = conditions.allowBelowSafety
-    ? Math.max(conditions.arrivalSoc, floor)
-    : cfg.destinationReserveSocPercent;
+  // Al destino siempre se pide el margen, también con "permitir bajar del margen" (ADR-0017).
+  const destReserve = cfg.destinationReserveSocPercent;
   const ctx: EnergyCtx = {
     vehicle,
     conditions,
@@ -91,10 +119,15 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
     return sIdx > 0 && sIdx < destIdx && routeSocket(c, vehicle) != null;
   });
   const plugs = usable.map((c) => routeSocket(c, vehicle)!);
+  const tables = plugs.map((plug) => chargeTable(plug, vehicle, cap, params));
+  // Sesión mínima (ADR-0018): si se para, se carga al menos estos minutos o hasta el tope.
+  const minSession = params.planner.minChargeSessionMin.value;
+  const stretchCap = Math.min(100, params.planner.stretchChargeSocPct.value);
   const nodes: PlannerNode[] = usable.map((c, i) => {
     const sIdx = c.nearestSampleIndex ?? 0;
     const detourKm = c.detourKm ?? fromRouteKmOf(c) * 2;
     const detourKwh = detourEnergyKwh(ctx, detourKm, sIdx, samples, params);
+    const table = tables[i]!;
     return {
       sIdx,
       detourPct: kwhToSocPct(detourKwh, cap),
@@ -102,8 +135,11 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
       detourKwh,
       detourMin: c.detourMinutes ?? detourMinutesOf(detourKm, params),
       waitMin: c.availability === "occupied" ? params.planner.occupiedWaitMin.value : 0,
-      chargeMinutes: chargeMinutesTable(plugs[i]!, vehicle, cap, params),
+      chargeMinutes: table.minutes,
       fast: plugs[i]!.dc,
+      ...(minSession > 0
+        ? { minSessionSoc: (arrive: number) => table.socAfter(arrive, minSession) }
+        : {}),
     };
   });
   const input: PlannerInput = {
@@ -124,22 +160,18 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
     fastChargeBuffer: params.planner.fastChargeBuffer.value,
   };
 
-  const now = planCharging(input);
-  const pre = now.feasible ? null : requiredInitialCharge(input);
-  const result = pre?.result ?? now;
-  const planningSoc = pre?.startSoc ?? conditions.initialSoc;
-  const full = !now.feasible && !pre ? planCharging({ ...input, initialSocPct: 100 }) : null;
-
-  const planned = result.feasible ? result.stops : [];
-  const stops: ChargeStop[] = planned.map((p, i) => {
-    const charger = usable[p.node]!;
-    const node = nodes[p.node]!;
-    const plug = plugs[p.node]!;
+  /**
+   * SOC de salida que la parada `i` necesita para que la ruta sea viable: llegar
+   * a la siguiente sobre el piso (con su desvío) o al destino con el margen. Sin
+   * el extra de carga rápida ni la sesión mínima, que son conveniencia.
+   */
+  const neededDepart = (planned: PlannedStop[], i: number): number => {
+    const p = planned[i]!;
     const next = planned[i + 1];
     const nextNode = next ? nodes[next.node]! : null;
     const need = requiredStartSoc(
       samples,
-      node.sIdx,
+      nodes[p.node]!.sIdx,
       nextNode ? nextNode.sIdx : destIdx,
       cap,
       {
@@ -150,9 +182,124 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
       },
       regen,
     );
-    const minDepartSoc = Math.min(cfg.maxChargeTargetSocPercent, Math.max(need, p.arriveSoc));
+    return Math.max(need, p.arriveSoc);
+  };
+  /** Parada marginal (ADR-0018): cargar solo lo necesario toma menos que la sesión mínima. */
+  const isMarginal = (planned: PlannedStop[], i: number): boolean => {
+    const p = planned[i]!;
+    return (
+      tables[p.node]!.chargingMinutes(p.arriveSoc, neededDepart(planned, i)) < minSession - 1e-9
+    );
+  };
+
+  let now = planCharging(input);
+  let pre = now.feasible ? null : requiredInitialCharge(input);
+  let result = pre?.result ?? now;
+  // Por qué alguna parada sale por encima del tope en ruta (ADR-0018), si pasa.
+  let stretched: NonNullable<ChargeStop["aboveRouteCap"]> | null = null;
+  // Sin ningún plan con el tope normal, ni cargando antes de salir: el tope estirado
+  // es la única forma de hacer el viaje. También deja que la pasada 2 vuelva a
+  // verificar, solo con sus estaciones, un plan que ya salía por encima del tope.
+  if (!result.feasible && stretchCap > input.maxChargePct) {
+    const wide = { ...input, stretchChargePct: stretchCap };
+    const wideNow = planCharging(wide);
+    const widePre = wideNow.feasible ? null : requiredInitialCharge(wide);
+    const wideResult = widePre?.result ?? wideNow;
+    if (wideResult.feasible) {
+      now = wideNow;
+      pre = widePre;
+      result = wideResult;
+      stretched = "only-way";
+    }
+  }
+  const planningSoc = pre?.startSoc ?? conditions.initialSoc;
+  const full = !now.feasible && !pre ? planCharging({ ...input, initialSocPct: 100 }) : null;
+
+  // Tope estirado (ADR-0018): si alguna parada carga poco, se vuelve a planificar
+  // dejando salir hasta `stretchCap`; ese plan solo se acepta si tiene menos paradas.
+  // La programación dinámica ya revisa el piso en toda la ruta y la reserva al destino.
+  if (
+    !stretched &&
+    result.feasible &&
+    stretchCap > input.maxChargePct &&
+    result.stops.some((_, i) => isMarginal(result.stops, i))
+  ) {
+    const alt = planCharging({
+      ...input,
+      initialSocPct: planningSoc,
+      stretchChargePct: stretchCap,
+    });
+    if (alt.feasible && alt.stops.length < result.stops.length) {
+      result = alt;
+      stretched = "fewer-stops";
+    }
+  }
+
+  // Carga antes de salir (ADR-0018): si la primera parada es marginal, con cuántos
+  // puntos más al salir el plan no la necesita. Es una sugerencia: el SOC actual es un dato real.
+  let skipFirstStop: StopsChoice["skipFirstStop"];
+  const first = !pre && result.feasible ? result.stops[0] : undefined;
+  if (first && isMarginal(result.stops, 0)) {
+    const needPts = neededDepart(result.stops, 0) - first.arriveSoc;
+    const fromAdd = Math.max(1, Math.floor(needPts - nodes[first.node]!.detourPct));
+    for (let add = fromAdd; add <= Math.ceil(needPts) + 3; add++) {
+      const startSoc = conditions.initialSoc + add;
+      if (startSoc > 100 + tolerance) break;
+      const alt = planCharging({
+        ...input,
+        initialSocPct: Math.min(100, startSoc),
+        ...(stretched ? { stretchChargePct: stretchCap } : {}),
+      });
+      if (
+        alt.feasible &&
+        alt.stops.length < result.stops.length &&
+        !alt.stops.some((s) => s.node === first.node)
+      ) {
+        skipFirstStop = {
+          additionalPct: add,
+          startSoc: Math.min(100, startSoc),
+          chargerName: usable[first.node]!.name,
+        };
+        break;
+      }
+    }
+  }
+
+  const planned = result.feasible ? result.stops : [];
+  const bufferCfg = params.planner.fastChargeBuffer.value;
+  const bufferCap = Math.min(bufferCfg.maxSocPct, input.maxChargePct);
+  const stops: ChargeStop[] = planned.map((p, i) => {
+    const charger = usable[p.node]!;
+    const node = nodes[p.node]!;
+    const plug = plugs[p.node]!;
+    const next = planned[i + 1];
+    const nextNode = next ? nodes[next.node]! : null;
+    const minDepartSoc = Math.min(p.departSoc, neededDepart(planned, i));
+    const extraPct = Math.max(0, p.departSoc - minDepartSoc);
+    // Por qué se carga más que lo necesario: la sesión mínima o el extra de carga rápida.
+    const sessionSoc = Math.min(input.maxChargePct, node.minSessionSoc?.(p.arriveSoc) ?? 0);
+    const bufferSoc =
+      plug.dc && nextNode && bufferCfg.extraPct > 0 && p.departSoc < bufferCap - tolerance
+        ? requiredStartSoc(
+            samples,
+            node.sIdx,
+            nextNode.sIdx,
+            cap,
+            {
+              arrivalTargetPct: floor + bufferCfg.extraPct,
+              floorPct: floor + bufferCfg.extraPct,
+              extraKwh: nextNode.detourKwh,
+              tolerancePct: tolerance,
+            },
+            regen,
+          )
+        : 0;
+    const bySession = sessionSoc > minDepartSoc + tolerance && sessionSoc >= bufferSoc;
+    const sessionExtraPct = bySession ? extraPct : 0;
     // Lo que se carga de más por ser carga rápida (el resto hasta el mínimo es lo necesario).
-    const fastChargeExtraPct = plug.dc ? Math.max(0, p.departSoc - minDepartSoc) : 0;
+    const fastChargeExtraPct = plug.dc && !bySession ? extraPct : 0;
+    const aboveRouteCap =
+      stretched && p.departSoc > input.maxChargePct + tolerance ? stretched : undefined;
     const options: ChargeChoice[] = routePlugs(charger, vehicle).map((o) => {
       const minutes = chargeTimeMinutes(
         cap,
@@ -217,6 +364,8 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
         (charger.nearestKm ?? 0),
       nextLabel: next ? usable[next.node]!.name : "",
       ...(fastChargeExtraPct >= 1 ? { fastChargeExtraPct } : {}),
+      ...(sessionExtraPct >= 1 ? { sessionExtraPct } : {}),
+      ...(aboveRouteCap ? { aboveRouteCap } : {}),
     };
   });
 
@@ -263,6 +412,7 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
         : INFEASIBILITY_TEXT[verdict.reasonCode ?? "GAP_BETWEEN_STATIONS_EXCEEDS_RANGE"],
     planningSoc,
     departureCharge,
+    ...(skipFirstStop && verdict.feasible ? { skipFirstStop } : {}),
     firstChargerUnreachable,
     feasibilityStatus: verdict.status,
     infeasibilityCode: verdict.reasonCode,

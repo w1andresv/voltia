@@ -5,7 +5,7 @@
  *  - elevación: Copernicus GLO-30 cada 100 m, procesada con `applyDenseElevationProfile`
  *    (pendiente máx. 15 %, suavizado 300 m, histéresis 5 m);
  *  - estaciones de Blaze en Santana y Tunja (60 kW DC), ubicación aproximada;
- *  - sale al 100 %, llegada pedida 10 %, margen normal, estrategia más rápida, 1 pasajero;
+ *  - sale al 100 %, margen normal (15 % en ruta y al destino), estrategia más rápida, 1 pasajero;
  *  - regla de carga rápida vigente: +10 puntos solo antes de otra parada (ADR-0007).
  * Un valor por km (índice = km). Datos fijos: no se recalculan en tiempo de ejecución.
  */
@@ -19,7 +19,6 @@ export const BUC_BOG = {
     passengers: 1,
     luggageKg: 30,
     initialSoc: 100,
-    arrivalSoc: 10,
     ac: "normal",
     temperatureC: 20,
     drivingStyle: "normal",

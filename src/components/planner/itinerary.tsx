@@ -1,5 +1,7 @@
 import { Flag, MapPin, Navigation } from "lucide-react";
 import { isDcSocket } from "@/domain/charging";
+import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
+import { routeChargeCapPct } from "@/domain/ev/core/trip-config";
 import { adapterNote } from "@/lib/adapter-note";
 import type { ChargeStop, ItineraryNode, RoutePlan } from "@/domain/types";
 import { CHARGER_SOURCE_LABEL, CONNECTOR_LABEL } from "@/domain/types";
@@ -143,9 +145,22 @@ function ChargeOptions({ stop }: { stop: ChargeStop }) {
       {slowTailNoteForStop(stop.departSoc) ? (
         <div className="text-warn">{slowTailNoteForStop(stop.departSoc)}</div>
       ) : null}
-      {stop.fastChargeExtraPct ? (
+      {stop.sessionExtraPct ? (
+        <div className="text-accent">
+          {formatPct(stop.sessionExtraPct)} extra para que la parada valga la pena (al menos{" "}
+          {MODEL_PARAMETERS.planner.minChargeSessionMin.value} min cargando)
+        </div>
+      ) : stop.fastChargeExtraPct ? (
         <div className="text-accent">
           Carga rápida: {formatPct(stop.fastChargeExtraPct)} extra para aprovechar la velocidad
+        </div>
+      ) : null}
+      {stop.aboveRouteCap ? (
+        <div className="text-accent">
+          Pasa del tope de {formatPct(routeChargeCapPct())} en ruta:{" "}
+          {stop.aboveRouteCap === "only-way"
+            ? "sin eso no se completa el viaje"
+            : "así te ahorras una parada"}
         </div>
       ) : null}
       <div>

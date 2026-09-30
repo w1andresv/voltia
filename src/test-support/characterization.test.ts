@@ -30,7 +30,6 @@ function request(overrides: Partial<TripConditions> = {}): PlanRequest {
       passengers: 1,
       luggageKg: 30,
       initialSoc: 35,
-      arrivalSoc: 10,
       avgSpeedKmh: null,
       ac: "normal",
       temperatureC: null,

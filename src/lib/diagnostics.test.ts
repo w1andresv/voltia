@@ -7,7 +7,6 @@ const conditions: TripConditions = {
   passengers: 1,
   luggageKg: 30,
   initialSoc: 80,
-  arrivalSoc: 10,
   avgSpeedKmh: null,
   ac: "normal",
   temperatureC: null,
@@ -71,7 +70,7 @@ describe("diagnosticLines", () => {
       "Estaciones cerca de la ruta: 2 · listado blaze-abc",
       "Paradas: Carga Verde Socorro",
       "Vehículo: MG S5 EV Comfort",
-      "Viaje: sale con 80 % · llegada 10 % · margen low · estrategia fastest · 1 pasajero(s), 30 kg · A/C normal · temperatura del clima · estilo normal · regeneración medium",
+      "Viaje: sale con 80 % · margen low · estrategia fastest · 1 pasajero(s), 30 kg · A/C normal · temperatura del clima · estilo normal · regeneración medium",
     ]);
   });
 
