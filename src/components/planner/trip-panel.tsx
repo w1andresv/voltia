@@ -34,6 +34,9 @@ import {
   type RoutePlan,
 } from "@/domain/types";
 
+/** "Diagnóstico y caché" queda oculto por ahora; `true` lo vuelve a mostrar. */
+const SHOW_CACHE_TOOLS = false;
+
 export function TripSetup() {
   const origin = usePlanner((s) => s.origin);
   const destination = usePlanner((s) => s.destination);
@@ -259,7 +262,7 @@ export function TripSetup() {
       </div>
       <TripParams />
       <EngineNote />
-      <CacheTools onReplan={() => planMut.mutate()} />
+      {SHOW_CACHE_TOOLS ? <CacheTools onReplan={() => planMut.mutate()} /> : null}
       <div className="space-y-2 pt-1">
         {!canPlan && !planMut.isPending ? (
           <p className="text-xs text-warn">
@@ -363,11 +366,10 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
           {departureChargeAdvice(plan.departureCharge.additionalPct)}
         </p>
       ) : null}
-      {plans.length > 1 ? (
-        <section>
-          <RouteCompare plans={plans} />
-        </section>
-      ) : null}
+      <section className="space-y-3">
+        {plans.length > 1 ? <RouteCompare plans={plans} /> : null}
+        <VehicleComparePicker />
+      </section>
 
       <section className="space-y-3">
         <div className="flex items-start justify-between gap-2">
@@ -390,10 +392,6 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
           <p className="-mt-1 text-xs text-subtle">Vías: {formatRoadMix(plan.roadMix)}</p>
         ) : null}
         <PlanStats plan={plan} />
-      </section>
-
-      <section>
-        <VehicleComparePicker />
       </section>
 
       <section className="space-y-3">
