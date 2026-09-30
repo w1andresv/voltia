@@ -37,7 +37,7 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        "relative z-50 max-h-72 min-w-[8rem] overflow-hidden rounded-lg bg-surface shadow-panel",
+        "relative z-50 max-h-[min(24rem,var(--radix-select-content-available-height))] min-w-[8rem] overflow-y-auto rounded-lg border border-border bg-surface shadow-float",
         className,
       )}
       {...props}
@@ -50,23 +50,27 @@ SelectContent.displayName = "SelectContent";
 
 export const SelectItem = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+    /** Línea de ayuda bajo la opción: se ve en la lista, no en el campo cerrado. */
+    hint?: React.ReactNode;
+  }
+>(({ className, children, hint, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-pointer select-none items-center rounded-md py-2 pl-8 pr-3 text-sm outline-none",
+      "relative flex cursor-pointer select-none flex-col items-start rounded-md py-2 pl-8 pr-3 text-sm outline-none",
       "focus:bg-surface-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
       className,
     )}
     {...props}
   >
-    <span className="absolute left-2 flex size-4 items-center justify-center">
+    <span className="absolute left-2 top-2.5 flex size-4 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
         <Check className="size-3.5 text-accent" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    {hint ? <span className="mt-0.5 text-xs leading-snug text-muted">{hint}</span> : null}
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = "SelectItem";

@@ -8,17 +8,20 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { useId } from "react";
 import {
   REGEN_LEVEL_LABEL,
   extraWeightKg,
   safetyPct,
   tripMassKg,
   type ClimateControl,
+  type DrivingStyle,
   type RegenLevel,
 } from "@/domain/types";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { MARGINS, MARGIN_NAME, STYLES, usePlanPreviews } from "./use-plan-previews";
 
@@ -44,6 +47,8 @@ export function TripParams() {
   const extra = extraWeightKg(c);
   const floor = safetyPct(c);
   const previews = usePlanPreviews(["style", "margin"]);
+  const regenId = useId();
+  const styleId = useId();
 
   return (
     <div className="space-y-3">
@@ -105,72 +110,66 @@ export function TripParams() {
         </div>
       </details>
 
+      {/* Regeneración y conducción en una fila: la explicación de cada opción y lo
+          que cambiaría en esta ruta se ven al abrir la lista. */}
       <div className="rounded-xl bg-bg-elevated p-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <RotateCcw className="size-4 shrink-0 text-accent" />
-          <Label className="text-sm text-fg">Regeneración</Label>
-        </div>
-        <div className="mt-2 grid grid-cols-3 gap-1.5" role="group" aria-label="Nivel de regeneración">
-          {REGEN.map((opt) => (
-            <Button
-              key={opt.id}
-              type="button"
-              size="sm"
-              className="h-11 px-1 text-xs"
-              variant={c.regenLevel === opt.id ? "default" : "secondary"}
-              aria-pressed={c.regenLevel === opt.id}
-              onClick={() => patch({ regenLevel: opt.id })}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid min-w-0 gap-1.5">
+            <Label htmlFor={regenId} className="flex items-center gap-1.5 text-sm text-fg">
+              <RotateCcw className="size-4 shrink-0 text-accent" />
+              Regeneración
+            </Label>
+            <Select value={c.regenLevel} onValueChange={(v) => patch({ regenLevel: v as RegenLevel })}>
+              <SelectTrigger id={regenId} className="border-transparent bg-surface-2 font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="w-72 max-w-[calc(100vw-2rem)]">
+                {REGEN.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id} hint={opt.hint}>
+                    {REGEN_LEVEL_LABEL[opt.id]}
+                  </SelectItem>
+                ))}
+                <p className="px-2 pb-1.5 pt-1 text-[11px] leading-relaxed text-subtle">
+                  En bajada, la pendiente primero paga la rodadura y el aire; de lo que sobra se
+                  recupera una parte.
+                </p>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid min-w-0 gap-1.5">
+            <Label htmlFor={styleId} className="flex items-center gap-1.5 text-sm text-fg">
+              <Gauge className="size-4 shrink-0 text-accent" />
+              Conducción
+            </Label>
+            <Select
+              value={c.drivingStyle}
+              onValueChange={(v) => patch({ drivingStyle: v as DrivingStyle })}
             >
-              {REGEN_LEVEL_LABEL[opt.id]}
-            </Button>
-          ))}
+              <SelectTrigger id={styleId} className="border-transparent bg-surface-2 font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="w-72 max-w-[calc(100vw-2rem)]">
+                {STYLES.map((st) => (
+                  <SelectItem
+                    key={st.id}
+                    value={st.id}
+                    hint={
+                      st.id !== c.drivingStyle && previews?.style[st.id] ? (
+                        <span className="text-accent">{previews.style[st.id]}</span>
+                      ) : (
+                        st.hint
+                      )
+                    }
+                  >
+                    {st.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <p className="mt-2 text-xs leading-relaxed text-muted">
-          {REGEN.find((opt) => opt.id === c.regenLevel)?.hint} En bajada, la pendiente primero paga
-          la rodadura y el aire; de lo que sobra se recupera una parte.
-        </p>
-      </div>
-
-      <div className="rounded-xl bg-bg-elevated p-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Gauge className="size-4 shrink-0 text-accent" />
-          <Label className="text-sm text-fg">Conducción</Label>
-        </div>
-        <div className="mt-2 grid grid-cols-3 gap-1.5" role="group" aria-label="Estilo de conducción">
-          {STYLES.map((st) => (
-            <Button
-              key={st.id}
-              type="button"
-              size="sm"
-              className="h-11 px-1 text-xs"
-              variant={c.drivingStyle === st.id ? "default" : "secondary"}
-              aria-pressed={c.drivingStyle === st.id}
-              onClick={() => patch({ drivingStyle: st.id })}
-            >
-              {st.label}
-            </Button>
-          ))}
-        </div>
-        <ul className="mt-2 grid gap-0.5 text-xs leading-relaxed text-muted">
-          {STYLES.map((st) =>
-            st.id === c.drivingStyle ? (
-              <li key={st.id} className="text-fg">
-                {st.label}: {st.hint}
-              </li>
-            ) : (
-              <li key={st.id}>
-                {st.label}:{" "}
-                {previews?.style[st.id] ? (
-                  <span className="text-accent">{previews.style[st.id]}</span>
-                ) : (
-                  st.hint
-                )}
-              </li>
-            ),
-          )}
-        </ul>
         {c.avgSpeedKmh != null ? (
-          <p className="mt-1.5 text-xs text-subtle">
+          <p className="mt-2 text-xs text-subtle">
             Con velocidad media fija, el estilo solo cambia el consumo, no el tiempo.
           </p>
         ) : null}
