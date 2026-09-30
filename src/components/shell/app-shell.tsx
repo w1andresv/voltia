@@ -56,6 +56,7 @@ function titleOf(path: string): string {
   const guide = guideEngineOfPath(path);
   if (guide) return `Cómo funciona · ${guide}`;
   if (path.startsWith("/v/")) return "Viaje compartido";
+  if (path.startsWith("/comparar")) return "Comparar vehículos";
   return "Inicio";
 }
 

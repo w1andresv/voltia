@@ -1,189 +1,114 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CarFront, Check } from "lucide-react";
-import {
-  planOnRoute,
-  rankVehiclesOnRoute,
-  type VehicleOnRoute,
-} from "@/domain/ev/compare-vehicles";
-import type { SnapshotInputs } from "@/domain/ev/compute-plan";
-import type { RoutePlan } from "@/domain/types";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { CarFront } from "lucide-react";
 import { vehicleLabel, vehicleSub } from "@/domain/vehicles";
-import { formatMinutes, formatPct, formatSoc } from "@/lib/format";
+import { COMPARE_PATH, MAX_COMPARED, compareHref } from "@/lib/compare-link";
 import { usePlanner } from "@/lib/store";
-import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { depletionSentence } from "./depletion-notice";
 
 /**
- * Plan de cada uno de los otros vehículos de la lista en la ruta `routeId`,
- * con los mismos datos del plan en pantalla. Se calculan de a uno por vez
- * (un vehículo por tarea) para no trabar la pantalla.
+ * "Comparar con otros vehículos": el usuario elige 1 o `MAX_COMPARED`
+ * vehículos de su lista y la comparativa lado a lado se abre en /comparar,
+ * sobre la ruta elegida del plan.
  */
-function useOtherVehiclesOnRoute(routeId: string, enabled: boolean) {
-  const geo = usePlanner((s) => s.geo);
-  const origin = usePlanner((s) => s.origin);
-  const destination = usePlanner((s) => s.destination);
+export function VehicleComparePicker() {
+  const router = useRouter();
   const vehicles = usePlanner((s) => s.vehicles);
-  const selectedId = usePlanner((s) => s.selectedVehicleId);
-  // Mientras se arrastra un control de condiciones no se recalcula la lista entera.
-  const conditions = useDebouncedValue(
-    usePlanner((s) => s.conditions),
-    300,
-  );
-  const others = useMemo(() => vehicles.filter((v) => v.id !== selectedId), [vehicles, selectedId]);
-  // Cada cambio de datos es una corrida nueva; las filas de una corrida vieja no se muestran.
-  const run = useMemo(
-    () => ({ geo, origin, destination, others, conditions, routeId }),
-    [geo, origin, destination, others, conditions, routeId],
-  );
-  const [done, setDone] = useState<{ run: typeof run; rows: VehicleOnRoute[] } | null>(null);
-
-  useEffect(() => {
-    const { geo, origin, destination, others, conditions, routeId } = run;
-    if (!enabled || !geo || !origin || !destination) return;
-    let cancelled = false;
-    const rows: VehicleOnRoute[] = [];
-    const next = (i: number) => {
-      if (cancelled || i >= others.length) return;
-      const vehicle = others[i]!;
-      const plan = planOnRoute(
-        geo as SnapshotInputs,
-        { origin, destination },
-        routeId,
-        vehicle,
-        conditions,
-      );
-      rows.push({ vehicle, plan });
-      setDone({ run, rows: [...rows] });
-      timer = setTimeout(() => next(i + 1), 0);
-    };
-    let timer = setTimeout(() => next(0), 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [enabled, run]);
-
-  return {
-    rows: done?.run === run ? done.rows : [],
-    total: others.length,
-    initialSoc: conditions.initialSoc,
-  };
-}
-
-/** "+25 min vs. tu vehículo" (vacío si alguno no llega o la diferencia no se nota). */
-function deltaText(plan: RoutePlan, mine: RoutePlan): string {
-  if (!plan.feasible || !mine.feasible) return "";
-  const d = plan.totalMinutes - mine.totalMinutes;
-  if (Math.abs(d) < 1) return "Igual que tu vehículo";
-  return `${d > 0 ? "+" : "−"}${formatMinutes(Math.abs(d))} vs. tu vehículo`;
-}
-
-/**
- * "¿Qué carro me conviene para esta ruta?": los demás vehículos de la lista
- * (catálogo y propios) en la misma ruta, con las mismas electrolineras, clima
- * y condiciones. Solo calcula al abrirla.
- */
-export function VehicleCompare({ plan }: { plan: RoutePlan }) {
-  const [open, setOpen] = useState(false);
   const current = usePlanner((s) => s.selectedVehicle());
-  const setVehicleId = usePlanner((s) => s.setVehicleId);
-  const { rows, total, initialSoc } = useOtherVehiclesOnRoute(plan.id, open);
-  if (total === 0) return null;
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const others = vehicles.filter((v) => v.id !== current.id);
+  if (!others.length) return null;
 
   if (!open) {
     return (
-      <Button type="button" variant="outline" className="w-full" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={() => {
+          setOpen(true);
+          // Así la pantalla ya está en el navegador si después se pierde la señal.
+          router.prefetch(COMPARE_PATH);
+        }}
+      >
         <CarFront className="size-4" />
         Comparar con otros vehículos
       </Button>
     );
   }
 
-  const ranked = rankVehiclesOnRoute([{ vehicle: current, plan }, ...rows]);
+  const full = picked.length >= MAX_COMPARED;
+  const toggle = (id: string) =>
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
   return (
     <div className="grid gap-2">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">
-          Vehículos en esta ruta
-        </h2>
+        <h2 className="text-xs font-medium uppercase tracking-wider text-subtle">Comparar con…</h2>
         <button
           type="button"
           className="min-h-11 px-1 text-xs text-subtle hover:text-muted"
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+            setPicked([]);
+          }}
         >
-          Ocultar
+          Cancelar
         </button>
       </div>
       <p className="-mt-2 text-xs text-muted">
-        Misma ruta ({plan.label}), mismas electrolineras y clima. Todos salen con{" "}
-        {formatPct(initialSoc)} de batería.
+        Elige 1 o {MAX_COMPARED} vehículos para verlos al lado del {vehicleLabel(current)} en esta
+        ruta.
       </p>
-      <ul className="grid gap-2">
-        {ranked.map(({ vehicle, plan: p }) => {
-          const mine = vehicle.id === current.id;
-          const delta = p && !mine ? deltaText(p, plan) : "";
+      <ul className="grid gap-1.5">
+        {others.map((v) => {
+          const on = picked.includes(v.id);
+          const disabled = full && !on;
           return (
-            <li
-              key={vehicle.id}
-              className={cn(
-                "rounded-lg border px-3 py-2.5",
-                mine ? "border-accent/60 bg-accent/15" : "border-transparent bg-bg-elevated",
-              )}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{vehicleLabel(vehicle)}</div>
-                  <div className="truncate text-xs text-subtle">{vehicleSub(vehicle)}</div>
-                </div>
-                {mine ? (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 text-xs text-accent">
-                    <Check className="size-3.5" /> Tu vehículo
-                  </span>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-11 shrink-0"
-                    onClick={() => setVehicleId(vehicle.id)}
-                  >
-                    Usar este
-                  </Button>
+            <li key={v.id}>
+              <label
+                className={cn(
+                  "flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2",
+                  on ? "border-accent/60 bg-accent/15" : "border-transparent bg-bg-elevated",
+                  disabled && "cursor-not-allowed opacity-50",
                 )}
-              </div>
-              {p == null ? (
-                <div className="mt-1.5 text-xs text-muted">No se pudo calcular en esta ruta.</div>
-              ) : p.feasible ? (
-                <>
-                  <div className="mt-1.5 text-xs text-muted">
-                    {formatMinutes(p.totalMinutes)} · {p.stops.length}{" "}
-                    {p.stops.length === 1 ? "parada" : "paradas"}
-                    {p.chargeMinutes > 0 ? ` · ${formatMinutes(p.chargeMinutes)} carga` : ""} ·
-                    llega con {formatSoc(p.arrivalSoc)}
-                  </div>
-                  {delta ? <div className="mt-0.5 text-xs text-subtle">{delta}</div> : null}
-                </>
-              ) : (
-                <div className="mt-1.5 text-xs text-danger">
-                  No llega.{" "}
-                  {p.depletion
-                    ? depletionSentence(p.depletion, p.depletion.label ?? null)
-                    : "Con las electrolineras de esta ruta no alcanza el destino."}
-                </div>
-              )}
+              >
+                <input
+                  type="checkbox"
+                  className="size-4 shrink-0 accent-accent"
+                  checked={on}
+                  disabled={disabled}
+                  onChange={() => toggle(v.id)}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-fg">
+                    {vehicleLabel(v)}
+                  </span>
+                  <span className="block truncate text-xs text-subtle">
+                    {vehicleSub(v)} · {v.batteryKwh} kWh · {v.dcMaxKw} kW DC
+                  </span>
+                </span>
+              </label>
             </li>
           );
         })}
       </ul>
-      {rows.length < total ? (
-        <p className="text-xs text-subtle" aria-live="polite">
-          Calculando {rows.length + 1} de {total}…
-        </p>
+      {full ? (
+        <p className="text-xs text-subtle">Máximo {MAX_COMPARED} vehículos además del tuyo.</p>
       ) : null}
+      <Button
+        type="button"
+        className="w-full"
+        disabled={!picked.length}
+        onClick={() => router.push(compareHref(picked))}
+      >
+        Ver comparativa
+        {picked.length ? ` (${picked.length + 1} vehículos)` : ""}
+      </Button>
     </div>
   );
 }

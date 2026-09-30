@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { catalogVehicle } from "@/test-support/scenarios";
-import type { Charger, Place, RawRoute, RoutePlan, TripConditions, Vehicle } from "../types";
+import type { Charger, Place, RawRoute, TripConditions, Vehicle } from "../types";
 import { computePlansFromSnapshot, type SnapshotInputs } from "./compute-plan";
-import { planOnRoute, rankVehiclesOnRoute } from "./compare-vehicles";
+import { planOnRoute } from "./compare-vehicles";
 
 function route(id: string, distanceKm: number): RawRoute {
   const n = Math.round(distanceKm / 5) + 1;
@@ -81,38 +81,5 @@ describe("planOnRoute", () => {
     expect(withStop.stops.map((s) => s.charger.id)).toEqual(["c150"]);
     expect(noStop).toMatchObject({ feasible: true, canArriveWithoutCharge: true, stops: [] });
     expect(stranded.feasible).toBe(false);
-  });
-});
-
-describe("rankVehiclesOnRoute", () => {
-  it("primero los que llegan, del más rápido al más lento; luego los que no; al final sin plan", () => {
-    const rows = [
-      {
-        vehicle: chademoOnly,
-        plan: planOnRoute(snapshot, places, "r-fast", chademoOnly, conditions),
-      },
-      { vehicle: { ...ccs2, id: "sin-plan" }, plan: null },
-      { vehicle: ccs2, plan: planOnRoute(snapshot, places, "r-fast", ccs2, conditions) },
-      {
-        vehicle: bigBattery,
-        plan: planOnRoute(snapshot, places, "r-fast", bigBattery, conditions),
-      },
-    ];
-    expect(rankVehiclesOnRoute(rows).map((r) => r.vehicle.id)).toEqual([
-      "big",
-      ccs2.id,
-      "chademo",
-      "sin-plan",
-    ]);
-  });
-
-  it("no cambia el arreglo recibido", () => {
-    const plan = (totalMinutes: number) => ({ feasible: true, totalMinutes }) as RoutePlan;
-    const rows = [
-      { vehicle: ccs2, plan: plan(300) },
-      { vehicle: bigBattery, plan: plan(200) },
-    ];
-    rankVehiclesOnRoute(rows);
-    expect(rows.map((r) => r.vehicle.id)).toEqual([ccs2.id, "big"]);
   });
 });

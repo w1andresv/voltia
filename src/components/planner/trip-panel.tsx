@@ -25,7 +25,7 @@ import { TripParams } from "./trip-params";
 import { CacheTools } from "./cache-tools";
 import { EngineNote } from "./engine-note";
 import { VehicleBar } from "./vehicle-bar";
-import { VehicleCompare } from "./vehicle-compare";
+import { VehicleComparePicker } from "./vehicle-compare";
 import {
   CONNECTOR_LABEL,
   departureChargeAdvice,
@@ -393,7 +393,7 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
       </section>
 
       <section>
-        <VehicleCompare plan={plan} />
+        <VehicleComparePicker />
       </section>
 
       <section className="space-y-3">
