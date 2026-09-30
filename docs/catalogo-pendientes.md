@@ -4,7 +4,7 @@ Consulta hecha el 2026-09-23. `seeds/0001_vehicle_catalog.sql` solo incluye veh�
 campos requeridos (`batteryKwh`, `rangeKm`, `weightKg`, `motorKw`, `acMaxKw`, `dcMaxKw`, `connectors`)
 respaldados por una fuente. Lo demás queda aquí, con lo que sí se encontró y lo que falta.
 
-## Entraron (8)
+## Entraron (11)
 
 | id | Qué respalda la fila | Confianza |
 | --- | --- | --- |
@@ -12,6 +12,8 @@ respaldados por una fuente. Lo demás queda aquí, con lo que sí se encontró y
 | `tesla-model-3-lr-awd`, `tesla-model-y-rwd`, `tesla-model-y-lr-awd` | Batería, autonomía, peso y DC de prensa colombiana; AC de Tesla EE. UU. (11,5 kW); kW derivados de hp | Media. Tesla no publica batería útil ni AC para Colombia |
 | `volvo-ex30-sm-er` | Autonomía, potencia y DC de Volvo Colombia; batería, peso, AC y conector de un agregador internacional | Media. Confirmar con la ficha de Volvo Colombia |
 | `changan-nevo-q05-e-max`, `changan-nevo-q05-e-max-ultra` (2026-09-30) | Batería, potencia, peso por versión, AC y conector de prensa colombiana y Changan Colombia; DC 162 kW de un agregador internacional | Media-baja. **La autonomía (405 km) no es WLTP homologado**: Changan solo publica 455 km NEDC; 405 es la estimación del computador (prueba de El Carro Colombiano) y se usa como WLTP por decisión del dueño del producto. Confirmar DC en Colombia |
+| `geely-ex5-pro`, `geely-ex5-max` (2026-09-30) | Batería (60,22 kWh), WLTP 425 km, potencia, peso por versión (1.730 / 1.770 kg), AC 7 kW, DC 110 kW y conector de prensa colombiana y el concesionario Massy Motors | Media. El concesionario dice "hasta 430 km"; en Europa la Max con rines de 19" homologa 410 km (solo informativo) |
+| `geely-ex5-se` (2026-09-30) | Batería (49,52 kWh), WLTP 345 km y potencia de prensa colombiana; DC 100 kW de la misma variante en Uruguay; peso 1.630 kg de la versión china de 49,52 kWh | Media-baja. **Colombia no publica peso ni AC de la SE**: el AC (7 kW) se asume igual a Pro/Max. La prensa colombiana dice DC 110 kW, pero es la cifra de Pro/Max |
 
 ## No entraron: qué se encontró y qué falta
 
@@ -46,6 +48,7 @@ Cada cifra tiene su fuente en `seeds/0001_vehicle_catalog.sql`, en las líneas q
 | Tesla Model Y RWD y LR AWD | 0,22 | 1.920 × 1.624 | 2,65 | **0,58** (0,75) | 75 kW, asumido del Model 3 |
 | Volvo EX30 SM ER | 0,28 | 1.837 × 1.549 | 2,42 | **0,68** (0,75) | 60 kW, asumido |
 | Changan Nevo Q05 (E-MAX y E-MAX Ultra) | 0,265 | 1.855 × 1.600 | 2,52 | **0,67** (—) | 60 kW, asumido |
+| Geely EX5 (SE, Pro y Max) | 0,269 | 1.901 × 1.670 | 2,70 | **0,73** (—) | 60 kW, asumido |
 
 **Sin fuente para ningún vehículo** (quedan con los valores por defecto marcados "estimado"):
 - rodadura (Crr 0,009);
