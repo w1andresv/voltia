@@ -65,7 +65,7 @@ export function RouteProfile() {
   const d = BUC_BOG;
 
   return (
-    <figure className="m-0 grid gap-4 rounded-xl border border-border bg-surface p-4 shadow-panel md:p-5">
+    <figure className="m-0 grid gap-4 rounded-2xl border border-border bg-surface p-4 shadow-panel md:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-2">
         <h2 className="text-base font-bold tracking-tight">
           Bucaramanga → Bogotá · {formatKm(d.distanceKm)} · {d.vehicle}
