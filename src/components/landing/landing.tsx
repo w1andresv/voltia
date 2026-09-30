@@ -17,13 +17,14 @@ import { GuideLink } from "@/components/guide/guide-link";
 import { BUC_BOG } from "./bucaramanga-bogota";
 import { ElevationSpark, OfflineNotice, StationChips } from "./feature-visuals";
 import { HeroTripCard } from "./hero-trip-card";
+import { PlanTripMenu } from "./plan-trip-menu";
 import { RouteProfile } from "./route-profile";
 
 /**
  * Landing en "/": qué resuelve EV-on-way para quien viaja en eléctrico por
  * Colombia, con un viaje real de ejemplo (Bucaramanga → Bogotá, calculado con
- * el planificador). "Planificar" va a /planificar, que abre el motor que el
- * servidor tenga por defecto; los dos motores siguen a mano más abajo.
+ * el planificador). "Planificar mi viaje" abre un menú para elegir el motor
+ * (v2 o v1); los dos se explican más abajo.
  * Solo se anuncian funciones que existen en la app.
  */
 
@@ -140,21 +141,6 @@ const COMPARISON: [string, string, string][] = [
   ["Verificación", "—", "Revisa las paradas elegidas y recalcula con la ruta real"],
 ];
 
-function PrimaryCta({ className, children }: { className?: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href="/planificar"
-      className={cn(
-        "landing-gradient-bg group inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 text-sm font-bold text-[#04221c] shadow-[0_10px_30px_-10px_rgb(47_206_187/0.6)] transition hover:brightness-110",
-        className,
-      )}
-    >
-      {children}
-      <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-    </Link>
-  );
-}
-
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
     <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">
@@ -237,7 +223,7 @@ export function Landing() {
               className="landing-rise flex flex-wrap items-center gap-3"
               style={{ "--landing-delay": "0.24s" } as React.CSSProperties}
             >
-              <PrimaryCta className="w-full sm:w-auto">Planificar mi viaje</PrimaryCta>
+              <PlanTripMenu className="w-full sm:w-auto" />
               <a
                 href="#ejemplo"
                 className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full border border-border-strong px-5 text-sm font-semibold text-fg transition hover:bg-surface-2 sm:w-auto"
@@ -475,7 +461,7 @@ export function Landing() {
             <p className="max-w-[48ch] text-muted md:text-lg">
               Elige el carro, marca el destino y sal sabiendo dónde vas a cargar.
             </p>
-            <PrimaryCta className="mt-2">Planificar mi viaje</PrimaryCta>
+            <PlanTripMenu className="mt-2" />
           </div>
         </section>
 
