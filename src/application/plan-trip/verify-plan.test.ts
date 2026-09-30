@@ -48,7 +48,6 @@ const conditions: TripConditions = {
   passengers: 1,
   luggageKg: 0,
   initialSoc: 60,
-  arrivalSoc: 15,
   avgSpeedKmh: null,
   ac: "normal",
   temperatureC: 22,
@@ -135,16 +134,34 @@ describe("verifyPlan (pasada 2)", () => {
     const soc90 = { ...conditions, initialSoc: 90 };
     const { plan, out, calls } = await verify(
       [charger(100), charger(150), charger(200)],
-      [380, 380],
+      [460, 460],
       soc90,
     );
-    expect(plan.stops.map((s) => s.charger.id)).toEqual(["c200"]);
+    expect(plan.stops.map((s) => s.charger.id)).toEqual(["c150"]);
     expect(calls).toHaveLength(2);
-    expect(calls[0]!.waypoints).toEqual([origin, at(200), destination]);
-    expect(calls[1]!.waypoints).toEqual([origin, at(150), at(200), destination]);
+    expect(calls[0]!.waypoints).toEqual([origin, at(150), destination]);
+    expect(calls[1]!.waypoints).toEqual([origin, at(100), at(200), destination]);
     expect(out.verification).toEqual({ status: "changed", iterations: 2, baseDistanceKm: 300 });
     expect(out.feasible).toBe(true);
-    expect(out.stops.map((s) => s.charger.id)).toEqual(["c150", "c200"]);
+    expect(out.stops.map((s) => s.charger.id)).toEqual(["c100", "c200"]);
+  });
+
+  it("si con la ruta real la misma parada solo alcanza pasando del 80 %, la verifica así (ADR-0018)", async () => {
+    const soc90 = { ...conditions, initialSoc: 90 };
+    const { plan, out, calls } = await verify(
+      [charger(100), charger(150), charger(200)],
+      [380],
+      soc90,
+    );
+    expect(plan.stops.map((s) => s.charger.id)).toEqual(["c150"]);
+    expect(calls).toHaveLength(1);
+    expect(out.verification).toEqual({ status: "verified", iterations: 1, baseDistanceKm: 300 });
+    expect(out.feasible).toBe(true);
+    const stop = out.stops[0]!;
+    expect(stop.charger.id).toBe("c150");
+    expect(stop.departSoc).toBeGreaterThan(80);
+    expect(stop.departSoc).toBeLessThanOrEqual(90);
+    expect(stop.aboveRouteCap).toBe("only-way");
   });
 
   it("si con la ruta real ni todas las estaciones alcanzan, el resultado es no viable", async () => {
@@ -165,7 +182,8 @@ describe("verifyPlan (pasada 2)", () => {
     const input = inputs([charger(100), charger(150), charger(200)]);
     const soc90 = { ...conditions, initialSoc: 90 };
     const [plan] = computePlans(input, vehicle, soc90, "v2").plans;
-    const { provider, calls } = routing([380]);
+    // 460 km: ni pasando del 80 % alcanza la misma parada, así que habría que cambiarla.
+    const { provider, calls } = routing([460]);
     const out = await verifyPlan(
       { routing: provider, withElevation: async (r) => r, maxIterations: 1 },
       { plan: plan!, inputs: input, userWaypoints: [], vehicle, conditions: soc90, engine: "v2" },

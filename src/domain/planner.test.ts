@@ -37,7 +37,6 @@ function conditions(overrides: Partial<TripConditions> = {}): TripConditions {
     passengers: 1,
     luggageKg: 0,
     initialSoc: 90,
-    arrivalSoc: 20,
     avgSpeedKmh: 90,
     ac: "normal",
     temperatureC: 20,
@@ -99,7 +98,7 @@ describe("buildPlan — cargador por debajo del margen", () => {
     const plan = buildPlan({
       raw: straightRoute(distance),
       vehicle: vehicle({ batteryKwh: 60, rangeKm: 400 }),
-      conditions: conditions({ initialSoc: 40, arrivalSoc: 20, safetyMode: "normal" }),
+      conditions: conditions({ initialSoc: 40, safetyMode: "normal" }),
       chargers: [chargerAt(120)],
       weather: null,
       origin: ORIGIN,
@@ -120,7 +119,7 @@ describe("buildPlan — carga lenta cuando hace falta", () => {
     const plan = buildPlan({
       raw: straightRoute(distance),
       vehicle: vehicle({ dcMaxKw: 120, acMaxKw: 7 }),
-      conditions: conditions({ initialSoc: 90, arrivalSoc: 20 }),
+      conditions: conditions({ initialSoc: 90 }),
       chargers: [100, 200, 300, 400, 500, 600].map((km) =>
         chargerAt(km, { sockets: [{ connector: "type2", powerKw: 22, count: 1 }] }),
       ),
@@ -147,7 +146,7 @@ describe("buildPlan — carga lenta cuando hace falta", () => {
     const plan = buildPlan({
       raw: straightRoute(distance),
       vehicle: vehicle({ batteryKwh: 60, rangeKm: 400, dcMaxKw: 120, acMaxKw: 11 }),
-      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      conditions: conditions({ initialSoc: 35, safetyMode: "normal" }),
       chargers: [
         chargerAt(80, { sockets: [{ connector: "type2", powerKw: 11, count: 1 }] }),
         chargerAt(340, { sockets: [{ connector: "ccs2", powerKw: 150, count: 1 }] }),
@@ -166,7 +165,7 @@ describe("buildPlan — carga lenta cuando hace falta", () => {
     const plan = buildPlan({
       raw: straightRoute(distance),
       vehicle: vehicle({ dcMaxKw: 120, acMaxKw: 7 }),
-      conditions: conditions({ initialSoc: 90, arrivalSoc: 20 }),
+      conditions: conditions({ initialSoc: 90 }),
       chargers: [100, 200, 300, 400, 500, 600].map((km) =>
         chargerAt(km, {
           sockets: [
@@ -202,7 +201,7 @@ describe("buildPlan — adaptadores definidos", () => {
           { from: "ccs1", to: "ccs2" },
         ],
       }),
-      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      conditions: conditions({ initialSoc: 35, safetyMode: "normal" }),
       chargers: [
         chargerAt(100, {
           sockets: [
@@ -237,7 +236,7 @@ describe("buildPlan — adaptadores definidos", () => {
     const plan = buildPlan({
       raw: straightRoute(distance),
       vehicle: vehicle({ connectors: ["ccs2", "type2"], acMaxKw: 11 }),
-      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      conditions: conditions({ initialSoc: 35, safetyMode: "normal" }),
       chargers: [
         chargerAt(100, {
           sockets: [
@@ -265,7 +264,7 @@ describe("buildPlan — adaptadores definidos", () => {
         dcMaxKw: 120,
         acMaxKw: 11,
       }),
-      conditions: conditions({ initialSoc: 35, arrivalSoc: 20 }),
+      conditions: conditions({ initialSoc: 35 }),
       chargers: [
         chargerAt(100, {
           sockets: [
@@ -289,7 +288,7 @@ describe("buildPlan — viaje corto sin paradas", () => {
     const plan = buildPlan({
       raw: straightRoute(100),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 90, arrivalSoc: 20 }),
+      conditions: conditions({ initialSoc: 90 }),
       chargers: [],
       weather: null,
       origin: ORIGIN,
@@ -308,7 +307,7 @@ describe("buildPlan — viaje largo con paradas", () => {
     const plan = buildPlan({
       raw: straightRoute(distance),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 90, arrivalSoc: 20 }),
+      conditions: conditions({ initialSoc: 90 }),
       chargers,
       weather: null,
       origin: ORIGIN,
@@ -317,7 +316,7 @@ describe("buildPlan — viaje largo con paradas", () => {
     expect(plan.feasible).toBe(true);
     expect(plan.stops.length).toBeGreaterThanOrEqual(1);
     expect(plan.stops.length).toBeLessThanOrEqual(3);
-    expect(plan.arrivalSoc).toBeGreaterThanOrEqual(conditions().arrivalSoc - 1);
+    expect(plan.arrivalSoc).toBeGreaterThanOrEqual(safetyPct(conditions()) - 1);
   });
 
   it("sin cargadores verificados en el camino, sale el aviso NO_VERIFIED_STOP_REASON", () => {
@@ -325,7 +324,7 @@ describe("buildPlan — viaje largo con paradas", () => {
     const plan = buildPlan({
       raw: straightRoute(distance),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 90, arrivalSoc: 20 }),
+      conditions: conditions({ initialSoc: 90 }),
       chargers: [],
       weather: null,
       origin: ORIGIN,
@@ -343,7 +342,7 @@ describe("buildPlan — viaje largo con paradas", () => {
     const plan = buildPlan({
       raw: straightRoute(distance),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 90, arrivalSoc: 20 }),
+      conditions: conditions({ initialSoc: 90 }),
       chargers,
       weather: null,
       origin: ORIGIN,
@@ -448,7 +447,7 @@ describe("estilo de conducción: energía y tiempo", () => {
     buildPlan({
       raw: straightRoute(100),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 90, arrivalSoc: 20, drivingStyle, avgSpeedKmh }),
+      conditions: conditions({ initialSoc: 90, drivingStyle, avgSpeedKmh }),
       chargers: [],
       weather: null,
       origin: ORIGIN,
@@ -497,7 +496,6 @@ function departureConditions(initialSoc: number): TripConditions {
     temperatureC: 20,
     drivingStyle: "normal",
     avgSpeedKmh: 70,
-    arrivalSoc: 10,
     safetyMode: "low",
   });
 }
@@ -715,7 +713,7 @@ describe("rankPlans: 'Más eficiente' también respeta la jerarquía vial", () =
 
 describe("buildPlan — la reserva es el margen del viaje, sin mínimo del vehículo (ADR-0016)", () => {
   const distance = 400;
-  const cond = conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 });
+  const cond = conditions({ initialSoc: 50, safetyMode: "low" });
   const destination: Place = { label: "Destino", lat: 4 + distance / 111, lon: -74 };
   // Cargador donde el vehículo llega con 10–15 %: entre el margen "bajo" y el "normal".
   const soc = simulateSoc(annotateEnergy(straightRoute(distance).samples, { vehicle: vehicle(), conditions: cond, weather: null }), {
@@ -765,7 +763,7 @@ describe("buildPlan — carga previa con SOC inicial decimal (C5)", () => {
     buildPlan({
       raw: straightRoute(distance),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc, arrivalSoc: 10, safetyMode: "low" }),
+      conditions: conditions({ initialSoc, safetyMode: "low" }),
       chargers: [chargerAt(chargerKm)],
       weather: null,
       origin: ORIGIN,
@@ -800,7 +798,7 @@ describe("buildPlan — el desvío al cargador se descuenta de la curva de SOC (
   const plan = buildPlan({
     raw: straightRoute(distance),
     vehicle: vehicle(),
-    conditions: conditions({ initialSoc: 80, arrivalSoc: 10, safetyMode: "low" }),
+    conditions: conditions({ initialSoc: 80, safetyMode: "low" }),
     chargers: [chargerAt(150, { lon: -74 + 0.09 })],
     weather: null,
     origin: ORIGIN,
@@ -847,7 +845,6 @@ describe("buildPlan — el piso de SOC se respeta en todo el tramo, no solo al l
   };
   const cond = conditions({
     initialSoc: 31,
-    arrivalSoc: 10,
     safetyMode: "low",
     regenLevel: "high",
     avgSpeedKmh: null,
@@ -959,7 +956,7 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     const elev = (km: number) => (km <= 40 ? 500 + (1500 * km) / 40 : 2000 - (1500 * (km - 40)) / 20);
     const base = straightRoute(distance, 1);
     const raw = { ...base, samples: base.samples.map((s) => ({ ...s, elevM: elev(s.km), speedKmh: 60 })) };
-    const cond = conditions({ initialSoc: 31, arrivalSoc: 10, safetyMode: "low", regenLevel: "high", avgSpeedKmh: null });
+    const cond = conditions({ initialSoc: 31, safetyMode: "low", regenLevel: "high", avgSpeedKmh: null });
     const none = buildPlan({ raw, vehicle: vehicle(), conditions: cond, chargers: [], weather: null, origin: ORIGIN, destination: dest(distance), engine: "v2" });
     // Sin cargadores, v2 busca el SOC inicial con el que el tramo es seguro (§5.8.6).
     expect(none.feasibilityStatus).toBe("INFEASIBLE_WITH_CURRENT_SOC");
@@ -975,7 +972,7 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     const p = buildPlan({
       raw: straightRoute(300),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 80, arrivalSoc: 10, safetyMode: "low" }),
+      conditions: conditions({ initialSoc: 80, safetyMode: "low" }),
       chargers: [chargerAt(150, { lon: -74 + 0.09 })],
       weather: null,
       origin: ORIGIN,
@@ -989,16 +986,25 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     expect(p.arrivalSoc).toBeGreaterThanOrEqual(10 - 1e-6);
   });
 
-  const oneStop = (chargers: Charger[]) =>
+  /** Sin la sesión mínima (ADR-0018), para probar solo la regla de carga rápida. */
+  const NO_SESSION: ModelParameters = {
+    ...MODEL_PARAMETERS,
+    planner: {
+      ...MODEL_PARAMETERS.planner,
+      minChargeSessionMin: { ...MODEL_PARAMETERS.planner.minChargeSessionMin, value: 0 },
+    },
+  };
+  const oneStop = (chargers: Charger[], params: ModelParameters = NO_SESSION) =>
     buildPlan({
       raw: straightRoute(300),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 80, arrivalSoc: 10, safetyMode: "low" }),
+      conditions: conditions({ initialSoc: 80, safetyMode: "low" }),
       chargers,
       weather: null,
       origin: ORIGIN,
       destination: dest(300),
       engine: "v2",
+      params,
     });
 
   it("en carga lenta (AC) carga lo mínimo para llegar con la reserva", () => {
@@ -1020,11 +1026,23 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     expect(p.arrivalSoc).toBeLessThan(11.5);
   });
 
+  it("con la sesión mínima (ADR-0018), esa última parada carga al menos 10 min y lo atribuye a la sesión", () => {
+    const p = oneStop([chargerAt(150)], MODEL_PARAMETERS);
+    const stop = p.stops[0]!;
+    const overhead = MODEL_PARAMETERS.charging.connectionOverheadMin.value;
+    expect(stop.chargeMinutes - overhead).toBeGreaterThanOrEqual(
+      MODEL_PARAMETERS.planner.minChargeSessionMin.value - 0.5,
+    );
+    expect(stop.sessionExtraPct).toBeGreaterThan(0);
+    expect(stop.fastChargeExtraPct).toBeUndefined();
+    expect(p.arrivalSoc).toBeGreaterThan(11.5);
+  });
+
   it("con margen del viaje 15 %, no llega a ninguna estación con menos", () => {
     const p = buildPlan({
       raw: straightRoute(400),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 50, safetyMode: "normal", arrivalSoc: 10 }),
+      conditions: conditions({ initialSoc: 50, safetyMode: "normal" }),
       chargers: [100, 150, 200, 250, 300].map((km) => chargerAt(km)),
       weather: null,
       origin: ORIGIN,
@@ -1041,7 +1059,7 @@ describe("buildPlan con el planificador v2 (F7)", () => {
       buildPlan({
         raw: straightRoute(400),
         vehicle: vehicle(),
-        conditions: conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 }),
+        conditions: conditions({ initialSoc: 50, safetyMode: "low" }),
         chargers: [100, 150, 200, 250, 300].map((km) => chargerAt(km)),
         weather: null,
         origin: ORIGIN,
@@ -1066,7 +1084,7 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     const args = {
       raw: straightRoute(400),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 50, safetyMode: "low", arrivalSoc: 10 }),
+      conditions: conditions({ initialSoc: 50, safetyMode: "low" }),
       chargers: [100, 150, 200, 250, 300].map((km) => chargerAt(km)),
       weather: null,
       origin: ORIGIN,
@@ -1098,7 +1116,7 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     const p = buildPlan({
       raw: straightRoute(300),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 10, arrivalSoc: 10, safetyMode: "low" }),
+      conditions: conditions({ initialSoc: 10, safetyMode: "low" }),
       chargers: [chargerAt(160)],
       weather: null,
       origin: ORIGIN,
@@ -1136,7 +1154,7 @@ describe("buildPlan con el planificador v2 (F7)", () => {
       buildPlan({
         raw: straightRoute(250),
         vehicle: vehicle({ adapters }),
-        conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+        conditions: conditions({ initialSoc: 35, safetyMode: "normal" }),
         chargers: [chargerAt(100, { sockets })],
         weather: null,
         origin: ORIGIN,
@@ -1156,7 +1174,7 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     const p = buildPlan({
       raw: straightRoute(300),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 80, arrivalSoc: 10, safetyMode: "low" }),
+      conditions: conditions({ initialSoc: 80, safetyMode: "low" }),
       chargers: [chargerAt(150, { availability: "offline" }), chargerAt(160)],
       weather: null,
       origin: ORIGIN,
@@ -1176,7 +1194,7 @@ describe("buildPlan — parada con carga rápida que requiere adaptador", () => 
     buildPlan({
       raw: straightRoute(250),
       vehicle: vehicle({ adapters, acMaxKw: 11 }),
-      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      conditions: conditions({ initialSoc: 35, safetyMode: "normal" }),
       chargers: [chargerAt(100, { sockets })],
       weather: null,
       origin: ORIGIN,
@@ -1207,7 +1225,7 @@ describe("buildPlan — parada con carga rápida que requiere adaptador", () => 
     const p = buildPlan({
       raw: straightRoute(250),
       vehicle: vehicle(),
-      conditions: conditions({ initialSoc: 35, arrivalSoc: 20, safetyMode: "normal" }),
+      conditions: conditions({ initialSoc: 35, safetyMode: "normal" }),
       chargers: [chargerAt(100)],
       weather: null,
       origin: ORIGIN,

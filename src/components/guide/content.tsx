@@ -122,7 +122,7 @@ export const GUIDE_V2: GuideContent = {
     "Pasada 2 con la ruta real",
   ],
   simulatorIntro:
-    "Simulación simplificada que sigue las reglas de v2 (piso de batería, reserva al llegar, tope de carga, +10 % en carga rápida cuando hay otra parada después, carga antes de salir). El consumo es un modelo de juguete sobre el perfil de altura aproximado; los números reales salen del terreno de Mapbox y de la física completa. Las estaciones son de ejemplo.",
+    "Simulación simplificada que sigue las reglas de v2 (el margen como piso en toda la ruta y reserva al llegar, tope de carga, +10 % en carga rápida cuando hay otra parada después, al menos 10 min cargando en cada parada, pasar del tope hasta 90 % solo si ahorra una parada, carga antes de salir). El consumo es un modelo de juguete sobre el perfil de altura aproximado; los números reales salen del terreno de Mapbox y de la física completa. Las estaciones son de ejemplo.",
   participants: [
     { id: "U", label: "Usuario", actor: "user" },
     { id: "B", label: "Navegador", actor: "browser" },
@@ -235,7 +235,7 @@ export const GUIDE_V2: GuideContent = {
                   conectores CCS2 y Tipo 2, Cd·A 0,70
                 </>,
                 <>
-                  <Code>conditions</Code>: batería al salir, llegada, margen, estrategia, pasajeros,
+                  <Code>conditions</Code>: batería al salir, margen, estrategia, pasajeros,
                   equipaje, A/C, temperatura, estilo, regeneración
                 </>,
                 <>
@@ -438,8 +438,8 @@ export const GUIDE_V2: GuideContent = {
               ),
               items: [
                 "Estaciones utilizables en orden de km, con desvío y tabla de minutos de carga (curva del vehículo, +5 min por parada).",
-                "Piso = margen de seguridad del viaje; reserva al llegar; tope de carga en ruta (80 %, igual para todos los vehículos).",
-                "Estrategia; malla de SOC de 1 punto; regla de carga rápida (+10 hacia otra parada, hasta 90 %).",
+                "Piso y reserva al llegar = margen de seguridad del viaje; tope de carga en ruta (80 %, igual para todos los vehículos).",
+                "Estrategia; malla de SOC de 1 punto; regla de carga rápida (+10 hacia otra parada, hasta 90 %); sesión mínima de 10 min por parada.",
               ],
             },
             {
@@ -451,6 +451,8 @@ export const GUIDE_V2: GuideContent = {
               items: [
                 "Estado = (estación, SOC con que sales). Desde cada estado recorre la batería por la ruta; no acepta ningún punto bajo el piso.",
                 "Al salir de una estación rápida hacia otra parada, se llega a ella 10 puntos sobre el piso, salvo que salgas con el tope. Hacia el destino solo se pide la reserva.",
+                "Si para, carga al menos 10 min (o hasta el tope): una parada para cargar 1 % no vale la pena.",
+                "Si queda una parada que carga poco, vuelve a planificar dejando pasar del 80 % hasta 90 %, y solo acepta ese plan si tiene menos paradas.",
                 "Compara con criterio por estrategia: más rápida = minutos; menos paradas = paradas; más segura = SOC mínimo.",
                 "Si no hay plan, busca (binaria) cuánto cargar antes de salir; si ni al 100 % alcanza, informa el motivo y el km donde se agota la batería.",
               ],
@@ -723,7 +725,7 @@ export const GUIDE_V1: GuideContent = {
                   conectores CCS2 y Tipo 2, consumo manual opcional
                 </>,
                 <>
-                  <Code>conditions</Code>: batería al salir, llegada, margen, estrategia, pasajeros,
+                  <Code>conditions</Code>: batería al salir, margen, estrategia, pasajeros,
                   equipaje, A/C, temperatura, estilo, regeneración
                 </>,
                 <>
@@ -859,7 +861,7 @@ export const GUIDE_V1: GuideContent = {
             {
               title: "Entrada",
               items: [
-                "Muestras con energía, estaciones ubicadas sobre la ruta (km, desvío), piso = margen de seguridad del viaje, llegada pedida, tope en ruta (80 %).",
+                "Muestras con energía, estaciones ubicadas sobre la ruta (km, desvío), piso y reserva al destino = margen de seguridad del viaje, tope en ruta (80 %).",
               ],
             },
             {

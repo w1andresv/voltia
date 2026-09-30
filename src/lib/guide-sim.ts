@@ -75,10 +75,8 @@ export type GuideParams = {
   passengers: number;
   /** Consumo en plano, kWh/100 km. */
   consumption: number;
-  /** Margen de seguridad, %. */
+  /** Margen de seguridad, %: piso en toda la ruta y reserva al destino (ADR-0017). */
   margin: number;
-  /** Batería pedida al llegar, %. */
-  arrival: number;
   /** Tope de carga en ruta, %. */
   cap: number;
   strategy: GuideStrategy;
@@ -93,7 +91,6 @@ export const GUIDE_PRESETS = {
     passengers: 1,
     consumption: 23,
     margin: 20,
-    arrival: 20,
     cap: 80,
     strategy: "fastest",
     sanGil: false,
@@ -104,7 +101,6 @@ export const GUIDE_PRESETS = {
     passengers: 2,
     consumption: 23,
     margin: 20,
-    arrival: 10,
     cap: 90,
     strategy: "fastest",
     sanGil: false,
@@ -115,7 +111,6 @@ export const GUIDE_PRESETS = {
     passengers: 1,
     consumption: 16,
     margin: 15,
-    arrival: 15,
     cap: 80,
     strategy: "fastest",
     sanGil: false,
@@ -197,7 +192,7 @@ export type GuidePlan = {
 
 export type GuideResult = ({ viable: true } & GuidePlan) | { viable: false };
 
-/** Piso de batería: el margen de seguridad del viaje (ADR-0016). */
+/** Piso de batería y reserva al destino: el margen de seguridad del viaje (ADR-0016, ADR-0017). */
 export const floorOf = (p: Pick<GuideParams, "margin">) => p.margin;
 
 const detourPct = (p: GuideParams, km: number) => pctOf(km * 2 * (p.consumption / 100));
@@ -214,7 +209,7 @@ function planV1(p: GuideParams, start: number): Omit<GuidePlan, "preCharge"> | n
   const e = energyPerKm(p);
   const stations = guideStations(p.sanGil);
   const floor = floorOf(p);
-  const reserve = Math.max(p.arrival, floor);
+  const reserve = floor;
   const score = (st: GuideStation, arrive: number) => {
     let s =
       st.detourKm * (p.strategy === "fastest" ? 3.2 : 5.5) +
@@ -280,13 +275,38 @@ type Label = {
   prevSoc: number;
 };
 
+/** v2: si para, carga al menos estos minutos (sin los 5 de conexión), o hasta el tope (ADR-0018). */
+export const GUIDE_MIN_SESSION_MIN = 10;
+/** v2: tope estirado; se puede salir hasta aquí solo si el plan tiene menos paradas (ADR-0018). */
+export const GUIDE_STRETCH_CAP = 90;
+
+/** v2: ¿alguna parada carga solo lo necesario en menos tiempo que la sesión mínima? */
+function hasMarginalStop(p: GuideParams, r: Omit<GuidePlan, "preCharge">): boolean {
+  const e = energyPerKm(p);
+  const floor = floorOf(p);
+  return r.stops.some((s, i) => {
+    const next = r.stops[i + 1];
+    const needed = next
+      ? need(e, s.station.km, next.station.km, floor, floor) + detourPct(p, next.station.detourKm)
+      : need(e, s.station.km, GUIDE_DIST_KM, floor, floor);
+    return (
+      chargeMinutes(s.station, s.arrive, Math.max(needed, s.arrive)) - 5 < GUIDE_MIN_SESSION_MIN
+    );
+  });
+}
+
 /** v2: programación dinámica sobre (estación, SOC de salida entero). */
-function planV2(p: GuideParams, start: number): Omit<GuidePlan, "preCharge"> | null {
+function planV2(
+  p: GuideParams,
+  start: number,
+  stretch = false,
+): Omit<GuidePlan, "preCharge"> | null {
   const e = energyPerKm(p);
   const stations = guideStations(p.sanGil);
   const floor = floorOf(p);
-  const reserve = Math.max(p.arrival, floor);
+  const reserve = floor;
   const capBuffered = Math.min(90, p.cap);
+  const top = stretch ? Math.max(p.cap, GUIDE_STRETCH_CAP) : p.cap;
   const labels = stations.map(() => new Map<number, Label>());
   type Final = {
     stops: number;
@@ -343,7 +363,12 @@ function planV2(p: GuideParams, start: number): Omit<GuidePlan, "preCharge"> | n
       const arrive = w.end - detourPct(p, st.detourKm);
       const low = Math.min(w.low, arrive);
       if (low < floor + margin) continue;
-      for (let k = Math.floor(arrive) + 1; k <= p.cap; k++) {
+      // Sesión mínima: al menos GUIDE_MIN_SESSION_MIN cargando, o hasta el tope.
+      let firstK = Math.floor(arrive) + 1;
+      while (firstK < p.cap && chargeMinutes(st, arrive, firstK) - 5 < GUIDE_MIN_SESSION_MIN) {
+        firstK++;
+      }
+      for (let k = firstK; k <= top; k++) {
         const c: Label = {
           stops: lab.stops + 1,
           minutes: lab.minutes + chargeMinutes(st, arrive, k) + detourMinutes(st),
@@ -379,7 +404,12 @@ function planV2(p: GuideParams, start: number): Omit<GuidePlan, "preCharge"> | n
 export function solveGuide(engine: GuideEngine, p: GuideParams): GuideResult {
   const plan = engine === "v1" ? planV1 : planV2;
   for (let add = 0; p.soc + add <= 100; add++) {
-    const r = plan(p, p.soc + add);
+    let r = plan(p, p.soc + add);
+    // v2: si una parada carga poco, se prueba pasar del tope (hasta 90 %) solo para ahorrarla.
+    if (r && engine === "v2" && p.cap < GUIDE_STRETCH_CAP && hasMarginalStop(p, r)) {
+      const alt = planV2(p, p.soc + add, true);
+      if (alt && alt.stops.length < r.stops.length) r = alt;
+    }
     if (r) return { viable: true, ...r, preCharge: add };
   }
   return { viable: false };

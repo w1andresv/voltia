@@ -49,7 +49,6 @@ function conditions(overrides: Partial<TripConditions> = {}): TripConditions {
     passengers: 1,
     luggageKg: 0,
     initialSoc: 90,
-    arrivalSoc: 20,
     avgSpeedKmh: null,
     ac: "normal",
     temperatureC: 20,
@@ -314,12 +313,10 @@ describe("mixedCycleKwhPer100", () => {
 });
 
 describe("batteryBudget", () => {
-  it("el piso de SOC es el mayor entre el margen de seguridad y el SOC de llegada", () => {
+  it("el piso de SOC es el margen de seguridad del viaje (ADR-0017)", () => {
     const v = vehicle();
-    // safetyPct("normal") = 15, arrivalSoc = 25 -> floor = 25
-    expect(batteryBudget(v, conditions({ safetyMode: "normal", arrivalSoc: 25 }), null).floorPct).toBe(25);
-    // safetyPct("low") = 10, arrivalSoc = 5 -> floor = 10
-    expect(batteryBudget(v, conditions({ safetyMode: "low", arrivalSoc: 5 }), null).floorPct).toBe(10);
+    expect(batteryBudget(v, conditions({ safetyMode: "normal" }), null).floorPct).toBe(15);
+    expect(batteryBudget(v, conditions({ safetyMode: "low" }), null).floorPct).toBe(10);
   });
 
   it("la autonomía usable es 0 si el SOC inicial ya está en el piso", () => {

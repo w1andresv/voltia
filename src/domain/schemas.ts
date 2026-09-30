@@ -82,7 +82,6 @@ export const TripConditionsSchema = z.object({
   passengers: z.number().min(0).max(8),
   luggageKg: z.number().min(0).max(400),
   initialSoc: z.number().min(1).max(100),
-  arrivalSoc: z.number().min(0).max(80),
   avgSpeedKmh: z.number().nullable(),
   ac: ClimateControlSchema,
   temperatureC: z.number().nullable(),

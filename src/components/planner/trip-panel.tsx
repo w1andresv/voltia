@@ -7,6 +7,8 @@ import { planTripFn, reversePlaceFn } from "@/server/actions/plan";
 import { ChargerFacts } from "./charger-facts";
 import { DEMO_TRIPS, usePlanner } from "@/lib/store";
 import { isDcSocket } from "@/domain/charging";
+import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
+import { routeChargeCapPct } from "@/domain/ev/core/trip-config";
 import { adapterNote } from "@/lib/adapter-note";
 import { formatKm, formatKw, formatKwh, formatMinutes, formatPct } from "@/lib/format";
 import { DepletionNotice } from "./depletion-notice";
@@ -36,6 +38,9 @@ import {
 
 /** "Diagnóstico y caché" queda oculto por ahora; `true` lo vuelve a mostrar. */
 const SHOW_CACHE_TOOLS = false;
+
+/** Sesión mínima de carga del planificador v2 (ADR-0018). */
+const MIN_SESSION_MIN = MODEL_PARAMETERS.planner.minChargeSessionMin.value;
 
 export function TripSetup() {
   const origin = usePlanner((s) => s.origin);
@@ -553,9 +558,18 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
               {st.nextLabel ? ` hasta ${st.nextLabel}` : " hasta el destino"} y todavía conservar el
               margen de {formatPct(plan.safetyPct)}. Sales al {formatPct(st.departSoc)}: es lo que
               el plan pide cargar,{" "}
-              {st.fastChargeExtraPct
-                ? `el mínimo más ${formatPct(st.fastChargeExtraPct)} extra porque es carga rápida: aprovechas la velocidad y evitas paradas largas después`
-                : "el mínimo más un poco de reserva"}
+              {st.sessionExtraPct
+                ? `el mínimo más ${formatPct(st.sessionExtraPct)} para que la parada valga la pena: al menos ${MIN_SESSION_MIN} min cargando, porque parquear, bajarte, abrir la app y conectar ya toman su tiempo`
+                : st.fastChargeExtraPct
+                  ? `el mínimo más ${formatPct(st.fastChargeExtraPct)} extra porque es carga rápida: aprovechas la velocidad y evitas paradas largas después`
+                  : "el mínimo más un poco de reserva"}
+              {st.aboveRouteCap
+                ? `. Pasa del tope de ${formatPct(routeChargeCapPct())} en ruta porque ${
+                    st.aboveRouteCap === "only-way"
+                      ? "sin eso no se completa el viaje"
+                      : "así te ahorras una parada"
+                  }`
+                : ""}
               . De {formatPct(st.arriveSoc)} a{" "}
               {formatPct(st.departSoc)} son {formatKwh(st.energyAddedKwh)} y{" "}
               {formatMinutes(st.chargeMinutes)}. Esos kWh equivalen a unos{" "}
@@ -578,6 +592,12 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
                       : " · no cubre el tramo siguiente"}
                   </span>
                 ))}
+              </span>
+            ) : null}
+            {i === 0 && plan.skipFirstStop ? (
+              <span className="mt-2 block rounded-md bg-accent/10 px-2 py-1.5 text-xs leading-relaxed text-accent">
+                Si sales con {formatPct(plan.skipFirstStop.startSoc)} (
+                {formatPct(plan.skipFirstStop.additionalPct)} más), no necesitas parar aquí.
               </span>
             ) : null}
           </li>

@@ -3,7 +3,7 @@ import type { TripConditions, Vehicle } from "../../types";
 import { DEFAULT_CURVE } from "../../charging";
 import { MODEL_PARAMETERS } from "./params";
 import { isEstimated, sourced } from "./provenance";
-import { socFloors, toTripConfiguration } from "./trip-config";
+import { reserveSocPct, toTripConfiguration } from "./trip-config";
 import {
   G_MS2,
   hoursToMinutes,
@@ -43,7 +43,6 @@ function conditions(overrides: Partial<TripConditions> = {}): TripConditions {
     passengers: 1,
     luggageKg: 30,
     initialSoc: 80,
-    arrivalSoc: 10,
     avgSpeedKmh: null,
     ac: "normal",
     temperatureC: null,
@@ -95,9 +94,11 @@ describe("ModelParameters", () => {
       minProgressKm: 4,
       detourSpeedKmh: 50,
       socTolerancePct: 1e-4,
-      belowSafetyFloorPct: 2,
+      belowSafetyFloorPct: 5,
       socGridPct: 1,
     });
+    expect(MODEL_PARAMETERS.planner.minChargeSessionMin.value).toBe(10);
+    expect(MODEL_PARAMETERS.planner.stretchChargeSocPct.value).toBe(90);
     expect(MODEL_PARAMETERS.planning.energyMarginPercent).toBe(0);
     expect(MODEL_PARAMETERS.vehicle.bodyTypePhysics.source).toBe("estimated");
     expect(MODEL_PARAMETERS.vehicle.bodyTypePhysics.value.suv_compact).toEqual({
@@ -107,16 +108,11 @@ describe("ModelParameters", () => {
   });
 });
 
-describe("socFloors", () => {
-  it("la reserva es solo el margen de seguridad del viaje (ADR-0016)", () => {
-    expect(socFloors(conditions()).reservePct).toBe(10);
-    expect(socFloors(conditions({ safetyMode: "conservative" })).reservePct).toBe(20);
-    expect(socFloors(conditions({ safetyMode: "custom", customSafetyPct: 7 })).reservePct).toBe(7);
-  });
-
-  it("el objetivo al destino no baja de la reserva", () => {
-    expect(socFloors(conditions({ arrivalSoc: 5 })).arrivalTargetPct).toBe(10);
-    expect(socFloors(conditions({ arrivalSoc: 30 })).arrivalTargetPct).toBe(30);
+describe("reserveSocPct", () => {
+  it("la reserva es solo el margen de seguridad del viaje (ADR-0016, ADR-0017)", () => {
+    expect(reserveSocPct(conditions())).toBe(10);
+    expect(reserveSocPct(conditions({ safetyMode: "conservative" }))).toBe(20);
+    expect(reserveSocPct(conditions({ safetyMode: "custom", customSafetyPct: 7 }))).toBe(7);
   });
 });
 
@@ -142,17 +138,22 @@ describe("toTripConfiguration", () => {
     });
   });
 
-  it("los pisos coinciden con socFloors", () => {
-    for (const c of [conditions(), conditions({ safetyMode: "conservative", arrivalSoc: 25 })]) {
-      const floors = socFloors(c);
+  it("la reserva en ruta y al destino es el margen (ADR-0017)", () => {
+    for (const c of [conditions(), conditions({ safetyMode: "conservative" })]) {
       const cfg = toTripConfiguration(vehicle(), c);
-      expect(cfg.reserveSocPercent).toBe(floors.reservePct);
-      expect(cfg.destinationReserveSocPercent).toBe(floors.arrivalTargetPct);
+      expect(cfg.reserveSocPercent).toBe(reserveSocPct(c));
+      expect(cfg.destinationReserveSocPercent).toBe(reserveSocPct(c));
     }
   });
 
-  it("con 'permitir bajar del margen' el piso en ruta es 2 %", () => {
-    expect(toTripConfiguration(vehicle(), conditions({ allowBelowSafety: true })).minimumSocPercent).toBe(2);
+  it("con 'permitir bajar del margen' el destino sigue pidiendo el margen", () => {
+    const cfg = toTripConfiguration(vehicle(), conditions({ allowBelowSafety: true, safetyMode: "normal" }));
+    expect(cfg.minimumSocPercent).toBe(5);
+    expect(cfg.destinationReserveSocPercent).toBe(15);
+  });
+
+  it("con 'permitir bajar del margen' el piso en ruta es 5 %", () => {
+    expect(toTripConfiguration(vehicle(), conditions({ allowBelowSafety: true })).minimumSocPercent).toBe(5);
   });
 
   it("temperatura: la del usuario manda sobre la del clima", () => {

@@ -168,6 +168,18 @@ export interface ChargeStop {
    * (`ModelParameters.planner.fastChargeBuffer`). Ausente si no aplica.
    */
   fastChargeExtraPct?: number;
+  /**
+   * Planificador v2 (ADR-0018): puntos que se cargan sobre el mínimo para que la
+   * parada valga la pena: al menos `ModelParameters.planner.minChargeSessionMin`
+   * minutos cargando. Ausente si no aplica.
+   */
+  sessionExtraPct?: number;
+  /**
+   * Planificador v2 (ADR-0018): sale por encima del tope en ruta (sin pasar de
+   * `ModelParameters.planner.stretchChargeSocPct`). "fewer-stops": así el plan
+   * tiene menos paradas; "only-way": sin eso no hay plan viable.
+   */
+  aboveRouteCap?: "fewer-stops" | "only-way";
   chargeMinutes: number;
   energyAddedKwh: number;
   bestSocket: ChargerSocket;
@@ -321,6 +333,12 @@ export interface RoutePlan {
    * Solo cuando esa recarga cabe en el 100 %.
    */
   departureCharge?: DepartureCharge;
+  /**
+   * Planificador v2 (ADR-0018): la primera parada carga menos de lo que vale una
+   * parada; saliendo con `startSoc` (`additionalPct` puntos más) el plan no la
+   * necesita. Es una sugerencia: el plan sigue siendo válido con el SOC actual.
+   */
+  skipFirstStop?: { additionalPct: number; startSoc: number; chargerName: string };
   /** Ni saliendo al 100 % se alcanza la primera electrolinera verificada. */
   firstChargerUnreachable?: boolean;
   /** Solo si el SOC llega a 0 por la vía (plan inviable): dónde se agota la batería. */
@@ -479,7 +497,6 @@ export const DEFAULT_CONDITIONS: TripConditions = {
   passengers: 0,
   luggageKg: 20,
   initialSoc: 82,
-  arrivalSoc: 20,
   avgSpeedKmh: null,
   ac: "normal",
   temperatureC: null,
@@ -509,7 +526,7 @@ export const INFEASIBILITY_TEXT: Record<InfeasibilityReason, string> = {
   NO_COMPATIBLE_STATIONS_IN_CORRIDOR:
     "No hay electrolineras verificadas y compatibles con el vehículo cerca de la ruta.",
   DESTINATION_RESERVE_UNREACHABLE:
-    "Se llega al último tramo, pero no con la reserva pedida al destino. Baja la reserva o busca una ruta con más cargadores.",
+    "Se llega al último tramo, pero no con el margen de seguridad al destino. Baja el margen o busca una ruta con más cargadores.",
   PLAN_VALIDATION_FAILED: "El plan calculado no pasó la verificación final. Intenta de nuevo o cambia las condiciones.",
 };
 

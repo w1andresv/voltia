@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { catalogVehicle } from "@/test-support/scenarios";
+import { MODEL_PARAMETERS, type ModelParameters } from "./ev/core/params";
 import { buildPlan } from "./planner";
 import type { Charger, RawRoute, TripConditions } from "./types";
 
@@ -104,7 +105,6 @@ const conditions: TripConditions = {
   passengers: 1,
   luggageKg: 30,
   initialSoc: 100,
-  arrivalSoc: 10,
   avgSpeedKmh: null,
   ac: "normal",
   temperatureC: 20,
@@ -121,7 +121,7 @@ const STATIONS = [
   blaze("blz_tunja", "EDS Tunja", 288, 0.02), // ~2 km de la vía
 ];
 
-function plan(chargers: Charger[]) {
+function plan(chargers: Charger[], params?: ModelParameters) {
   return buildPlan({
     raw: route(),
     vehicle: catalogVehicle("mg-s5-ev-comfort"),
@@ -132,6 +132,7 @@ function plan(chargers: Charger[]) {
     destination: { label: "Bogotá", lat: 4.711, lon: -74.072 },
     engine: "v2",
     energyEngine: "v2",
+    ...(params ? { params } : {}),
   });
 }
 
@@ -156,22 +157,34 @@ describe("Bucaramanga → Bogotá, MG S5 EV al 100 %, motor v2 con estaciones de
     expect(plan(STATIONS).depletion).toBeUndefined();
   });
 
-  it("para en Santana y cerca de Tunja, y llega sobre la reserva sin bajar del piso", () => {
+  it("para solo en Santana: sale sobre el 80 % y se ahorra la parada corta en Tunja (ADR-0018)", () => {
     const p = plan(STATIONS);
     expect(p.feasible).toBe(true);
-    expect(p.stops.map((s) => s.charger.id)).toEqual(["blz_santana", "blz_tunja"]);
+    expect(p.stops.map((s) => s.charger.id)).toEqual(["blz_santana"]);
+    const santana = p.stops[0]!;
+    expect(santana.departSoc).toBeGreaterThan(80);
+    expect(santana.departSoc).toBeLessThanOrEqual(90);
+    expect(santana.aboveRouteCap).toBe("fewer-stops");
     expect(p.arrivalSoc).toBeGreaterThanOrEqual(p.safetyPct - 0.5);
     expect(p.minSoc).toBeGreaterThan(0);
   });
 
-  it("carga rápida: llega a Tunja con 10 de margen sobre el piso y a Bogotá solo con la reserva", () => {
-    const p = plan(STATIONS);
+  it("con el tope normal (sin estirar) para en Santana y cerca de Tunja, con el extra de carga rápida", () => {
+    const p = plan(STATIONS, {
+      ...MODEL_PARAMETERS,
+      planner: {
+        ...MODEL_PARAMETERS.planner,
+        stretchChargeSocPct: { ...MODEL_PARAMETERS.planner.stretchChargeSocPct, value: 80 },
+      },
+    });
+    expect(p.stops.map((s) => s.charger.id)).toEqual(["blz_santana", "blz_tunja"]);
     const [santana, tunja] = p.stops;
+    // Carga rápida: a Tunja se llega con 10 de margen sobre el piso.
     expect(tunja!.arriveSoc).toBeGreaterThanOrEqual(p.safetyPct + 10 - 0.5);
-    // En la última parada no se carga de más: el extra no sirve para llegar al destino.
+    expect(santana!.fastChargeExtraPct).toBeGreaterThan(0);
+    // En la última parada no hay extra de carga rápida; lo que carga de más es la sesión mínima de 10 min.
     expect(tunja!.fastChargeExtraPct).toBeUndefined();
-    expect(santana!.departSoc).toBeGreaterThan(0);
+    expect(tunja!.sessionExtraPct).toBeGreaterThan(0);
     expect(p.arrivalSoc).toBeGreaterThanOrEqual(p.safetyPct - 0.5);
-    expect(p.arrivalSoc).toBeLessThan(p.safetyPct + 3);
   });
 });

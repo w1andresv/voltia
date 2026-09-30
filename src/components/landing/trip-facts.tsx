@@ -68,7 +68,6 @@ export function TripFacts() {
     ["Temperatura", `${c.temperatureC} °C`],
     ["Regeneración", REGEN[c.regenLevel]],
     ["Batería al salir", formatPct(c.initialSoc)],
-    ["Llegada pedida", formatPct(c.arrivalSoc)],
     ["Margen de seguridad", `${MARGIN[c.safetyMode]} (${MARGIN_PCT[c.safetyMode]} %)`],
     ["Carga máxima en ruta", formatPct(routeChargeCapPct())],
     ["Estrategia", STRATEGY[c.planningMode]],

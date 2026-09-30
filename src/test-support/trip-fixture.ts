@@ -26,7 +26,6 @@ export const tripRequest: PlanRequestShape = {
     passengers: 1,
     luggageKg: 0,
     initialSoc: 80,
-    arrivalSoc: 10,
     avgSpeedKmh: null,
     ac: "normal",
     temperatureC: 22,

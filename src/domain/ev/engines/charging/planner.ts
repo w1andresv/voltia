@@ -30,6 +30,12 @@ export interface PlannerNode {
   chargeMinutes: (fromSoc: number, toSoc: number) => number;
   /** Carga rápida (DC): al salir de aquí aplica `PlannerInput.fastChargeBuffer`. */
   fast?: boolean;
+  /**
+   * Sesión mínima (ADR-0018): SOC al que se llega en esta estación cargando el
+   * tiempo mínimo desde `arriveSoc`. Si se para aquí, se sale con al menos ese
+   * SOC (o con el tope en ruta, si queda más arriba). Sin él, basta un punto.
+   */
+  minSessionSoc?: (arriveSoc: number) => number;
 }
 
 export interface PlannerInput {
@@ -41,6 +47,13 @@ export interface PlannerInput {
   destinationReservePct: number;
   /** Tope de carga en ruta. */
   maxChargePct: number;
+  /**
+   * Tope estirado (ADR-0018): si viene, se puede salir de una estación hasta este
+   * SOC, por encima de `maxChargePct`. Quien llama acepta ese plan solo si tiene
+   * menos paradas. La sesión mínima y el extra de carga rápida siguen midiéndose
+   * contra `maxChargePct`.
+   */
+  stretchChargePct?: number;
   /** Estaciones compatibles, ordenadas por `sIdx`. */
   nodes: PlannerNode[];
   objective: PlanningMode;
@@ -130,7 +143,8 @@ export function planCharging(input: PlannerInput): PlannerResult {
   const floor = input.floorPct - input.tolerancePct;
   const reserve = input.destinationReservePct - input.tolerancePct;
   const grid = input.gridPct;
-  const levels = Math.floor(input.maxChargePct / grid + EPS);
+  const softLevels = Math.floor(input.maxChargePct / grid + EPS);
+  const levels = Math.max(softLevels, Math.floor((input.stretchChargePct ?? 0) / grid + EPS));
   const byIdx = new Map<number, number[]>();
   nodes.forEach((n, i) => {
     const list = byIdx.get(n.sIdx) ?? [];
@@ -159,7 +173,11 @@ export function planCharging(input: PlannerInput): PlannerResult {
     const low = Math.min(lowest, arrive);
     if (low < floor + margin) return;
     reachable.add(j);
-    const firstK = Math.floor(arrive / grid + EPS) + 1;
+    let firstK = Math.floor(arrive / grid + EPS) + 1;
+    // Sesión mínima: si se para, se carga al menos ese tiempo, o hasta el tope en ruta.
+    if (node.minSessionSoc) {
+      firstK = Math.max(firstK, Math.min(softLevels, Math.ceil(node.minSessionSoc(arrive) / grid - EPS)));
+    }
     // Un solo candidato que cambia solo en los minutos: se copia únicamente si gana.
     cand.stops = base.stops + 1;
     cand.detourKm = base.detourKm + node.detourKm;

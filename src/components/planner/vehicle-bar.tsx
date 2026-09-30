@@ -1,5 +1,5 @@
 import { CarFront, ChevronDown } from "lucide-react";
-import { routeChargeCapPct, socFloors } from "@/domain/ev/core/trip-config";
+import { reserveSocPct, routeChargeCapPct } from "@/domain/ev/core/trip-config";
 import { vehicleLabel, vehicleSub } from "@/domain/vehicles";
 import { formatPct } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
@@ -11,7 +11,7 @@ export function VehicleBar() {
   const soc = conditions.initialSoc;
   const openVehicle = usePlanner((s) => s.setVehicleModalOpen);
   const openBattery = usePlanner((s) => s.setBatteryOpen);
-  const floor = socFloors(conditions).arrivalTargetPct;
+  const floor = reserveSocPct(conditions);
 
   return (
     <div className="flex items-stretch gap-2">

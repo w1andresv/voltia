@@ -2,7 +2,7 @@ import type { BodyType, RegenLevel, RouteSample, TripConditions, Vehicle, Weathe
 import type { EnergySample } from "./ev/contracts/energy";
 import { tripMassKg } from "./types";
 import { MODEL_PARAMETERS } from "./ev/core/params";
-import { socFloors } from "./ev/core/trip-config";
+import { reserveSocPct } from "./ev/core/trip-config";
 import { G_MS2, J_PER_KWH as J_PER_KWH_UNIT } from "./ev/core/units";
 import { bearingDeg } from "./geo";
 import {
@@ -375,7 +375,7 @@ export function batteryBudget(
   wltpKm: number;
   wltpKwhPer100: number | null;
 } {
-  const floorPct = socFloors(conditions).arrivalTargetPct;
+  const floorPct = reserveSocPct(conditions);
   const usablePct = Math.max(0, conditions.initialSoc - floorPct);
   const packedKwh = (conditions.initialSoc / 100) * vehicle.batteryKwh;
   const usableKwh = (usablePct / 100) * vehicle.batteryKwh;

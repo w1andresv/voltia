@@ -68,7 +68,7 @@ export function diagnosticLines(d: DiagnosticsInput): string[] {
   const c = d.conditions;
   lines.push(
     `Vehículo: ${d.vehicle.brand} ${d.vehicle.model} ${d.vehicle.version}`,
-    `Viaje: sale con ${c.initialSoc} % · llegada ${c.arrivalSoc} % · margen ${c.safetyMode}` +
+    `Viaje: sale con ${c.initialSoc} % · margen ${c.safetyMode}` +
       (c.safetyMode === "custom" ? ` ${c.customSafetyPct} %` : "") +
       ` · estrategia ${c.planningMode} · ${c.passengers} pasajero(s), ${c.luggageKg} kg · A/C ${c.ac}` +
       ` · ${c.temperatureC == null ? "temperatura del clima" : `${c.temperatureC} °C`}` +

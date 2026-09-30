@@ -3,6 +3,7 @@
 - Estado: aceptada
 - Fecha: 2026-09-30
 - Reemplaza a: [0003](./0003-reserva-incluye-minimo-del-vehiculo.md)
+- Actualizada por: [0017](./0017-sin-llegada-minima.md) (el objetivo al destino también es el margen; `socFloors` pasa a `reserveSocPct`)
 
 ## Contexto
 El SOC de seguridad se configuraba en dos lugares: el "Margen de seguridad" del viaje y, en la ficha del vehículo, "SOC mín. viaje" (`minSocRecommended`) y "SOC máx. en ruta" (`maxSocTravel`). La reserva era `max(margen, minSocRecommended)` (ADR-0003), así que con el MG S5 (mínimo 15 %) el margen "Bajo" (10 %) no tenía efecto, y el usuario no veía por qué. El tope de carga en ruta dependía de un campo del vehículo que casi nadie tocaba (80 % en todo el catálogo).

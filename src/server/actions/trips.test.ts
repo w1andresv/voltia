@@ -68,7 +68,6 @@ const REQUEST: PlanRequestShape = {
     passengers: 1,
     luggageKg: 0,
     initialSoc: 90,
-    arrivalSoc: 20,
     avgSpeedKmh: null,
     ac: "normal",
     temperatureC: 20,
