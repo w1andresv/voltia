@@ -2,7 +2,7 @@
 -- Rerunnable: `npm run db:seed` puede correrse tantas veces como haga falta; cada fila
 -- hace upsert por id y nunca pisa un vehículo de usuario (where owner_id is null).
 --
--- Fecha de consulta de las fuentes: 2026-09-23, salvo las filas que indican otra (Changan Nevo Q05: 2026-09-30).
+-- Fecha de consulta de las fuentes: 2026-09-23, salvo las filas que indican otra (Changan Nevo Q05 y Geely EX5: 2026-09-30).
 -- Etiqueta de cada fuente:
 --   [CO]       página o ficha de un sitio colombiano (fabricante, distribuidor o prensa local).
 --   [INT]      dato internacional de la MISMA variante, cuando la fuente colombiana no lo publica.
@@ -160,6 +160,67 @@ on conflict (id) do update
 --   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5 (SUV compacto LFP de potencia parecida).
 insert into public.voltia_vehicles as v (id, owner_id, payload)
 values ('changan-nevo-q05-e-max-ultra', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"changan-nevo-q05-e-max-ultra","brand":"Changan","model":"Nevo Q05","year":2026,"version":"E-MAX Ultra","batteryKwh":51.9,"rangeKm":405,"weightKg":1550,"motorKw":120,"acMaxKw":6.6,"dcMaxKw":162,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.67,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+on conflict (id) do update
+  set payload = excluded.payload, updated_at = now()
+  where v.owner_id is null;
+
+-- Geely EX5 SE (2026) - consultado 2026-09-30
+--   fuente [CO] https://autosdeprimera.com/autos-de-primera/novedades/geely-ex5-se-preventa-colombia/  -> EX5 SE, 49,52 kWh LFP, 345 km WLTP / 410 km NEDC, 215 hp y 320 Nm, Tipo 2 / CCS2
+--   fuente [CO] https://noticias.autocosmos.com.co/2026/07/03/geely-ex5-special-edition-inicia-preventa-en-colombia-desde-929-millones  -> "Special Edition": 160 kW (215 hp), 49,52 kWh, 345 km WLTP, tracción delantera; preventa desde el 1 de julio de 2026
+--   fuente [CO] https://canaltrece.com.co/noticias/geely-ex5-se-llega-a-colombia-precio-y-caracteristicas-de-la-nueva-suv/  -> DC "hasta 110 kW (30-80 % en 20 min)", pero repite el texto de Pro/Max (ver nota)
+--   fuente [INT] https://www.autoblog.com.uy/2026/09/lanzamiento-geely-ex5-urban.html  -> misma variante (49,52 kWh, 345 km WLTP, 160 kW; "Urban" en Uruguay): DC máx 100 kW, AC 11 kW, CCS2
+--   fuente [INT] https://www.autocango.com/carspecs-detail/Geely-Galaxy-E5-8QE8R9  -> Galaxy E5 de 49,52 kWh (el mismo carro en China): 1.615-1.630 kg
+--   nota: dcMaxKw 100 del dato de Uruguay para la misma batería; el "110 kW" de la prensa colombiana es la cifra de Pro/Max
+--         (60,22 kWh). Se usa el menor: planifica paradas un poco más largas en vez de más cortas de lo real.
+--   nota: weightKg 1.630: Colombia no publica el peso de la SE; se usa el mayor del rango de la versión china de 49,52 kWh.
+--   nota: acMaxKw 7 [ASUMIDO]: Colombia publica 7 kW para Pro/Max (Uruguay y Europa traen 11 kW); para la SE no se publica
+--         y se asume el mismo cargador a bordo de la versión colombiana.
+--   nota: batteryKwh = 49,52 según la marca; no se publica capacidad útil vs. bruta. year = 2026, año de la preventa.
+--   nota: las páginas se consultaron a través de un buscador (el entorno no permitía abrirlas): confirmar con la ficha.
+--   física [INT] https://global.geely.com/en/news/2024/geely-auto-unveils-ex5  -> Cd 0,269 (el mismo valor para todas las versiones de la Galaxy E5 en data.carnewschina.com)
+--   física [CO] https://geely.massymotors.co/vehiculo/geely-ex5/  -> 4.615 x 1.901 x 1.670 mm
+--   física [DERIVADO] dragAreaM2 = 0,269 x (0,85 x 1,901 x 1,670 = 2,70 m²) = 0,73
+--   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5 y el Changan Nevo Q05 (SUV compacto LFP de potencia parecida).
+insert into public.voltia_vehicles as v (id, owner_id, payload)
+values ('geely-ex5-se', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"geely-ex5-se","brand":"Geely","model":"EX5","year":2026,"version":"SE","batteryKwh":49.52,"rangeKm":345,"weightKg":1630,"motorKw":160,"acMaxKw":7,"dcMaxKw":100,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.73,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+on conflict (id) do update
+  set payload = excluded.payload, updated_at = now()
+  where v.owner_id is null;
+
+-- Geely EX5 Pro (2026) - consultado 2026-09-30
+--   fuente [CO] https://www.elcarrocolombiano.com/lanzamientos/geely-ex5-colombia-precios-datos-suv-electrica-mas-completa-por-su-precio/  -> Pro y Max: 60,22 kWh LFP, 490 km NEDC / 425 km WLTP, 215 hp y 320 Nm, Pro 1.730 kg (225/55 R18) / Max 1.770 kg (235/50 R19 Goodyear), AC hasta 7 kW (10-100 % en 6,1 h), DC hasta 110 kW (30-80 % en 20 min), Tipo 2 / CCS2
+--   fuente [CO] https://geely.massymotors.co/vehiculo/geely-ex5/  -> concesionario: 160 kW (215 hp), 320 Nm, 60,22 kWh, hasta 495 km NEDC / 430 km WLTP, rines 18" (Pro) / 19" (Max)
+--   fuente [CO] https://www.portafolio.co/negocios/vehiculo/nueva-suv-electrica-llega-a-colombia-este-es-el-precio-de-lanzamiento-y-las-caracteristicas-de-la-geely-ex5-se-497330  -> versiones a la venta: SE, Pro y Max
+--   nota: rangeKm 425 de El Carro Colombiano; el concesionario dice "hasta 430". Es solo informativo (el consumo sale del
+--         modelo físico), así que no cambia los planes.
+--   nota: batteryKwh = 60,22 según la marca; no se publica capacidad útil vs. bruta. year = 2026 (EX5 2026 en Colombia).
+--   nota: las páginas se consultaron a través de un buscador (el entorno no permitía abrirlas): confirmar con la ficha.
+--   física [INT] https://global.geely.com/en/news/2024/geely-auto-unveils-ex5  -> Cd 0,269 (el mismo valor para todas las versiones de la Galaxy E5 en data.carnewschina.com)
+--   física [CO] https://geely.massymotors.co/vehiculo/geely-ex5/  -> 4.615 x 1.901 x 1.670 mm
+--   física [DERIVADO] dragAreaM2 = 0,269 x (0,85 x 1,901 x 1,670 = 2,70 m²) = 0,73
+--   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5 y el Changan Nevo Q05 (SUV compacto LFP de potencia parecida).
+insert into public.voltia_vehicles as v (id, owner_id, payload)
+values ('geely-ex5-pro', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"geely-ex5-pro","brand":"Geely","model":"EX5","year":2026,"version":"Pro","batteryKwh":60.22,"rangeKm":425,"weightKg":1730,"motorKw":160,"acMaxKw":7,"dcMaxKw":110,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.73,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
+on conflict (id) do update
+  set payload = excluded.payload, updated_at = now()
+  where v.owner_id is null;
+
+-- Geely EX5 Max (2026) - consultado 2026-09-30
+--   fuente [CO] https://www.elcarrocolombiano.com/lanzamientos/geely-ex5-colombia-precios-datos-suv-electrica-mas-completa-por-su-precio/  -> Pro y Max: 60,22 kWh LFP, 490 km NEDC / 425 km WLTP, 215 hp y 320 Nm, Pro 1.730 kg (225/55 R18) / Max 1.770 kg (235/50 R19 Goodyear), AC hasta 7 kW (10-100 % en 6,1 h), DC hasta 110 kW (30-80 % en 20 min), Tipo 2 / CCS2
+--   fuente [CO] https://geely.massymotors.co/vehiculo/geely-ex5/  -> concesionario: 160 kW (215 hp), 320 Nm, 60,22 kWh, hasta 495 km NEDC / 430 km WLTP, rines 18" (Pro) / 19" (Max)
+--   fuente [CO] https://www.portafolio.co/negocios/vehiculo/nueva-suv-electrica-llega-a-colombia-este-es-el-precio-de-lanzamiento-y-las-caracteristicas-de-la-geely-ex5-se-497330  -> versiones a la venta: SE, Pro y Max
+--   nota: rangeKm 425 de El Carro Colombiano; el concesionario dice "hasta 430". Es solo informativo (el consumo sale del
+--         modelo físico), así que no cambia los planes.
+--   nota: batteryKwh = 60,22 según la marca; no se publica capacidad útil vs. bruta. year = 2026 (EX5 2026 en Colombia).
+--   fuente [INT] https://www.diariomotor.com/noticia/geely-ex5-precios/  -> Europa: 430 km WLTP, 410 km con rines de 19" y llantas Goodyear (las mismas 235/50 R19 de la Max colombiana)
+--   nota: con los rines de 19" la cifra homologada en Europa es 410 km; se deja 425 porque es la que publica Colombia.
+--   nota: las páginas se consultaron a través de un buscador (el entorno no permitía abrirlas): confirmar con la ficha.
+--   física [INT] https://global.geely.com/en/news/2024/geely-auto-unveils-ex5  -> Cd 0,269 (el mismo valor para todas las versiones de la Galaxy E5 en data.carnewschina.com)
+--   física [CO] https://geely.massymotors.co/vehiculo/geely-ex5/  -> 4.615 x 1.901 x 1.670 mm
+--   física [DERIVADO] dragAreaM2 = 0,269 x (0,85 x 1,901 x 1,670 = 2,70 m²) = 0,73
+--   física [ASUMIDO] maxRegenPowerKw 60: sin dato publicado; igual que el MG S5 y el Changan Nevo Q05 (SUV compacto LFP de potencia parecida).
+insert into public.voltia_vehicles as v (id, owner_id, payload)
+values ('geely-ex5-max', null, '{"chargeCurve":[{"soc":0,"powerFactor":0.55},{"soc":8,"powerFactor":0.9},{"soc":15,"powerFactor":1},{"soc":40,"powerFactor":1},{"soc":55,"powerFactor":0.86},{"soc":70,"powerFactor":0.64},{"soc":80,"powerFactor":0.42},{"soc":90,"powerFactor":0.22},{"soc":100,"powerFactor":0.08}],"consumptionKwhPer100km":null,"consumptionManual":false,"id":"geely-ex5-max","brand":"Geely","model":"EX5","year":2026,"version":"Max","batteryKwh":60.22,"rangeKm":425,"weightKg":1770,"motorKw":160,"acMaxKw":7,"dcMaxKw":110,"connectors":["ccs2","type2"],"bodyType":"suv_compact","dragAreaM2":0.73,"rollingResistance":0.009,"maxRegenPowerKw":60}'::jsonb)
 on conflict (id) do update
   set payload = excluded.payload, updated_at = now()
   where v.owner_id is null;
