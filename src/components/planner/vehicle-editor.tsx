@@ -1,15 +1,22 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Pencil, RotateCcw, Search, Trash2 } from "lucide-react";
 import { VERIFIED_DC_ADAPTERS } from "@/domain/charging";
 import { CONNECTOR_LABEL, type ConnectorType, type Vehicle } from "@/domain/types";
 import { mixedCycleKwhPer100, wltpKwhPer100 } from "@/domain/energy";
-import { emptyCustomVehicle, vehicleLabel } from "@/domain/vehicles";
+import { emptyCustomVehicle, vehicleLabel, vehicleMatches } from "@/domain/vehicles";
 import { differsFromCatalog } from "@/domain/user/catalog-rules";
 import { useVehicles } from "@/components/user/user-context";
 import { formatKwhPer100 } from "@/lib/format";
 import { usePlanner } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  skipKeyboardOnTouch,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -26,21 +33,40 @@ export function VehicleEditor() {
 
   const selected = vehicles.find((v) => v.id === selectedId) ?? vehicles[0]!;
   const [draft, setDraft] = useState<Vehicle | null>(null);
+  const [query, setQuery] = useState("");
   const editing = draft;
   const isNew = Boolean(editing && !vehicles.some((v) => v.id === editing.id));
 
+  // El vehículo actual va primero, aparte; el resto, agrupado por marca.
+  const showCurrent = vehicleMatches(selected, query);
   const grouped = useMemo(() => {
     const map = new Map<string, Vehicle[]>();
     for (const v of vehicles) {
+      if (v.id === selected.id || !vehicleMatches(v, query)) continue;
       const list = map.get(v.brand) ?? [];
       list.push(v);
       map.set(v.brand, list);
     }
     return [...map.entries()];
-  }, [vehicles]);
+  }, [vehicles, selected.id, query]);
 
   function closeForm() {
     setDraft(null);
+  }
+
+  function row(v: Vehicle) {
+    return (
+      <VehicleRow
+        key={v.id}
+        vehicle={v}
+        active={v.id === selected.id}
+        modified={isVehicleModified(v)}
+        custom={Boolean(v.isCustom) && !isCatalogId(v.id)}
+        onSelect={() => setVehicleId(v.id)}
+        onEdit={() => setDraft({ ...v })}
+        onRemove={() => void removeVehicle(v.id).catch(() => undefined)}
+      />
+    );
   }
 
   return (
@@ -48,10 +74,13 @@ export function VehicleEditor() {
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) closeForm();
+        if (!next) {
+          closeForm();
+          setQuery("");
+        }
       }}
     >
-      <DialogContent>
+      <DialogContent onOpenAutoFocus={skipKeyboardOnTouch}>
         <DialogHeader>
           <DialogTitle>
             {editing ? (isNew ? "Nuevo vehículo" : "Editar vehículo") : "Vehículo"}
@@ -95,82 +124,39 @@ export function VehicleEditor() {
           />
         ) : (
           <>
+            <div className="relative mb-3">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar marca, modelo o versión"
+                aria-label="Buscar vehículo"
+                className="pl-9"
+              />
+            </div>
+
+            {showCurrent ? (
+              <div className="mb-4">
+                <div className="mb-1 text-xs font-medium uppercase tracking-wider text-accent">
+                  Vehículo actual
+                </div>
+                {row(selected)}
+              </div>
+            ) : null}
+
             <div className="max-h-72 space-y-4 overflow-y-auto pr-1">
               {grouped.map(([brand, list]) => (
                 <div key={brand}>
                   <div className="mb-1 text-xs font-medium uppercase tracking-wider text-subtle">{brand}</div>
-                  <div className="space-y-1">
-                    {list.map((v) => {
-                      const modified = isVehicleModified(v);
-                      const custom = Boolean(v.isCustom) && !isCatalogId(v.id);
-                      return (
-                        <div
-                          key={v.id}
-                          className={`flex items-stretch rounded-md ${
-                            v.id === selectedId ? "bg-accent/15" : "hover:bg-surface-2"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setVehicleId(v.id)}
-                            className="min-w-0 flex-1 px-3 py-3 text-left text-sm"
-                          >
-                            <span className="flex items-center gap-2">
-                              <span className="truncate font-medium text-fg">{vehicleLabel(v)}</span>
-                              {custom ? (
-                                <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">
-                                  Tuyo
-                                </span>
-                              ) : modified ? (
-                                <span className="shrink-0 rounded-full bg-accent/20 px-2 py-0.5 text-xs text-accent">
-                                  Editado
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="mt-0.5 block text-xs text-muted">
-                              {v.version} · {v.batteryKwh} kWh · WLTP {v.rangeKm} km
-                            </span>
-                          </button>
-                          <div className="flex items-center pr-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Editar ${vehicleLabel(v)}`}
-                              onClick={() => setDraft({ ...v })}
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                            {modified ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`Restaurar ${vehicleLabel(v)}`}
-                                onClick={() => void removeVehicle(v.id).catch(() => undefined)}
-                              >
-                                <RotateCcw className="size-4" />
-                              </Button>
-                            ) : null}
-                            {custom ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                className="text-danger hover:text-danger"
-                                aria-label={`Quitar ${vehicleLabel(v)}`}
-                                onClick={() => void removeVehicle(v.id).catch(() => undefined)}
-                              >
-                                <Trash2 className="size-4" />
-                              </Button>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <div className="space-y-1">{list.map(row)}</div>
                 </div>
               ))}
+              {!showCurrent && !grouped.length ? (
+                <p className="py-6 text-center text-sm text-muted">
+                  Ningún vehículo coincide con «{query.trim()}».
+                </p>
+              ) : null}
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
@@ -200,6 +186,70 @@ export function VehicleEditor() {
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function VehicleRow({
+  vehicle: v,
+  active,
+  modified,
+  custom,
+  onSelect,
+  onEdit,
+  onRemove,
+}: {
+  vehicle: Vehicle;
+  active: boolean;
+  modified: boolean;
+  custom: boolean;
+  onSelect: () => void;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className={`flex items-stretch rounded-md ${active ? "bg-accent/15" : "hover:bg-surface-2"}`}>
+      <button type="button" onClick={onSelect} className="min-w-0 flex-1 px-3 py-3 text-left text-sm">
+        <span className="flex items-center gap-2">
+          <span className="truncate font-medium text-fg">{vehicleLabel(v)}</span>
+          {custom ? (
+            <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">Tuyo</span>
+          ) : modified ? (
+            <span className="shrink-0 rounded-full bg-accent/20 px-2 py-0.5 text-xs text-accent">Editado</span>
+          ) : null}
+        </span>
+        <span className="mt-0.5 block text-xs text-muted">
+          {v.version} · {v.batteryKwh} kWh · WLTP {v.rangeKm} km
+        </span>
+      </button>
+      <div className="flex items-center pr-1">
+        <Button type="button" variant="ghost" size="icon-sm" aria-label={`Editar ${vehicleLabel(v)}`} onClick={onEdit}>
+          <Pencil className="size-4" />
+        </Button>
+        {modified ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Restaurar ${vehicleLabel(v)}`}
+            onClick={onRemove}
+          >
+            <RotateCcw className="size-4" />
+          </Button>
+        ) : null}
+        {custom ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="text-danger hover:text-danger"
+            aria-label={`Quitar ${vehicleLabel(v)}`}
+            onClick={onRemove}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

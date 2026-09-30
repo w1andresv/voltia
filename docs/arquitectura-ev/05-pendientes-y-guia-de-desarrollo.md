@@ -219,6 +219,8 @@ Confirmar el cupo mensual de Directions, Matrix (§5.2) y teselas raster (terren
 Desde 2026-09-27 el motor lo define la URL y está abierto a todos, invitados incluidos (`ENGINE_PREVIEW_EMAILS=*`): `/v1` planifica con el motor actual y `/v2` con el planificador nuevo y la energía física. Ya no hay selector en el planificador; se pasa de uno a otro desde el landing (`/`). Las guías `/v1/como-funciona` y `/v2/como-funciona` son solo para la cuenta del dueño (`src/lib/guide-access.ts`); para los demás responden 404 y sus enlaces no aparecen. Si ya había una ruta calculada, abrir el otro motor la recalcula. El navegador recuerda el último motor para el menú "Planificar ruta". Para volver a limitarlo: `ENGINE_PREVIEW_EMAILS` con una lista de correos en Vercel. **Si en Vercel quedó `ENGINE_PREVIEW_EMAILS=w1andresv@gmail.com`, hay que borrarla o poner `*`**, porque el valor del entorno manda sobre el valor por defecto.
 
 ### O10 · Comparar entornos (localhost contra Vercel): "Diagnóstico y caché"
+**Oculto desde 2026-09-30:** no se muestra en el planificador. Para volver a mostrarlo, `SHOW_CACHE_TOOLS = true` en `src/components/planner/trip-panel.tsx`.
+
 En el planificador, debajo del motor de la página, "Diagnóstico y caché" muestra:
 - la versión del código (commit, rama, entorno);
 - la configuración del servidor (motores por defecto, elevación, y si hay clave de Blaze y de Mapbox);

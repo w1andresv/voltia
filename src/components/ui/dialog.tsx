@@ -53,3 +53,11 @@ export function DialogTitle({ className, ...props }: React.HTMLAttributes<HTMLHe
 export function DialogDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return <p className={cn("text-sm text-muted", className)} {...props} />;
 }
+
+/**
+ * Para `onOpenAutoFocus` de un diálogo con buscador: en pantallas táctiles no
+ * enfoca el campo al abrir, así el teclado no tapa la lista antes de verla.
+ */
+export function skipKeyboardOnTouch(event: Event) {
+  if (window.matchMedia("(pointer: coarse)").matches) event.preventDefault();
+}

@@ -41,6 +41,23 @@ export function vehicleSub(vehicle: Vehicle): string {
   return `${vehicle.year} · ${vehicle.version}`;
 }
 
+/** Minúsculas y sin tildes: "Eléctrico" y "electrico" se buscan igual. */
+function fold(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/**
+ * ¿El vehículo coincide con la búsqueda? Cada palabra tiene que aparecer en la
+ * marca, el modelo, la versión o el año ("tesla long" encuentra los Long
+ * Range de Tesla). Una búsqueda vacía coincide con todos.
+ */
+export function vehicleMatches(vehicle: Vehicle, query: string): boolean {
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const text = fold(`${vehicle.brand} ${vehicle.model} ${vehicle.version} ${vehicle.year}`);
+  return words.every((w) => text.includes(w));
+}
+
 export function catalogById(id: string): Vehicle | undefined {
   return VEHICLE_CATALOG.find((v) => v.id === id);
 }
