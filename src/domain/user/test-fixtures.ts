@@ -19,8 +19,6 @@ export function makeVehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     dcMaxKw: 120,
     chargeCurve: DEFAULT_CURVE,
     connectors: ["ccs2", "type2"],
-    minSocRecommended: 15,
-    maxSocTravel: 80,
     ...overrides,
   };
 }

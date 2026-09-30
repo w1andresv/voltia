@@ -22,8 +22,6 @@ export const VEHICLE_CATALOG: Vehicle[] = [
     dcMaxKw: 120,
     chargeCurve: DEFAULT_CURVE,
     connectors: ["ccs2", "type2"],
-    minSocRecommended: 15,
-    maxSocTravel: 80,
     consumptionKwhPer100km: null,
     consumptionManual: false,
     bodyType: "suv_compact",
@@ -65,8 +63,6 @@ export function isVehicleModified(vehicle: Vehicle): boolean {
     vehicle.motorKw !== factory.motorKw ||
     vehicle.acMaxKw !== factory.acMaxKw ||
     vehicle.dcMaxKw !== factory.dcMaxKw ||
-    vehicle.minSocRecommended !== factory.minSocRecommended ||
-    vehicle.maxSocTravel !== factory.maxSocTravel ||
     vehicle.connectors.join() !== factory.connectors.join() ||
     Boolean(vehicle.consumptionManual) !== Boolean(factory.consumptionManual) ||
     (vehicle.consumptionKwhPer100km ?? null) !== (factory.consumptionKwhPer100km ?? null)
@@ -88,8 +84,6 @@ export function emptyCustomVehicle(): Vehicle {
     dcMaxKw: 120,
     chargeCurve: DEFAULT_CURVE,
     connectors: ["ccs2", "type2"],
-    minSocRecommended: 15,
-    maxSocTravel: 80,
     isCustom: true,
     consumptionKwhPer100km: null,
     consumptionManual: false,

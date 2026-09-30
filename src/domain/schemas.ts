@@ -49,8 +49,6 @@ export const VehicleSchema = z.object({
   chargeCurve: z.array(ChargeCurvePointSchema),
   connectors: z.array(ConnectorTypeSchema),
   adapters: z.array(ChargeAdapterSchema).optional(),
-  minSocRecommended: z.number(),
-  maxSocTravel: z.number(),
   isCustom: z.boolean().optional(),
   bodyType: BodyTypeSchema.optional(),
   /** Cd × área frontal (m²). Si falta, sale de la tabla por carrocería. */

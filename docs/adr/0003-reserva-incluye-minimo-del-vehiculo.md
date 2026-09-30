@@ -1,6 +1,6 @@
 # 0003. La reserva de SOC incluye el mínimo recomendado del vehículo
 
-- Estado: aceptada
+- Estado: reemplazada por [0016](./0016-margen-solo-en-el-viaje.md)
 - Fecha: 2026-09-26
 - Fase: F0 (corrige C8)
 

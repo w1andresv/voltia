@@ -232,7 +232,7 @@ export const GUIDE_V2: GuideContent = {
                 </>,
                 <>
                   <Code>vehicle</Code>: batería 47,1 kWh, DC 120 kW, AC 7 kW, curva de carga,
-                  conectores CCS2 y Tipo 2, Cd·A 0,70, tope en ruta 80 %, mínimo 15 %
+                  conectores CCS2 y Tipo 2, Cd·A 0,70
                 </>,
                 <>
                   <Code>conditions</Code>: batería al salir, llegada, margen, estrategia, pasajeros,
@@ -438,7 +438,7 @@ export const GUIDE_V2: GuideContent = {
               ),
               items: [
                 "Estaciones utilizables en orden de km, con desvío y tabla de minutos de carga (curva del vehículo, +5 min por parada).",
-                "Piso = máx(mínimo del vehículo, margen); reserva al llegar; tope de carga (80 %).",
+                "Piso = margen de seguridad del viaje; reserva al llegar; tope de carga en ruta (80 %, igual para todos los vehículos).",
                 "Estrategia; malla de SOC de 1 punto; regla de carga rápida (+10 hacia otra parada, hasta 90 %).",
               ],
             },
@@ -720,7 +720,7 @@ export const GUIDE_V1: GuideContent = {
                 </>,
                 <>
                   <Code>vehicle</Code>: batería 47,1 kWh, DC 120 kW, AC 7 kW, curva de carga,
-                  conectores CCS2 y Tipo 2, tope en ruta 80 %, mínimo 15 %, consumo manual opcional
+                  conectores CCS2 y Tipo 2, consumo manual opcional
                 </>,
                 <>
                   <Code>conditions</Code>: batería al salir, llegada, margen, estrategia, pasajeros,
@@ -859,7 +859,7 @@ export const GUIDE_V1: GuideContent = {
             {
               title: "Entrada",
               items: [
-                "Muestras con energía, estaciones ubicadas sobre la ruta (km, desvío), piso = máx(mínimo del vehículo, margen), llegada pedida, tope en ruta.",
+                "Muestras con energía, estaciones ubicadas sobre la ruta (km, desvío), piso = margen de seguridad del viaje, llegada pedida, tope en ruta (80 %).",
               ],
             },
             {

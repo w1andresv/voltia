@@ -34,13 +34,10 @@ const BYD_CURVE: ChargeCurvePoint[] = [
 ];
 
 function v(
-  partial: Omit<Vehicle, "chargeCurve" | "minSocRecommended" | "maxSocTravel" | "consumptionKwhPer100km"> &
-    Partial<Vehicle>,
+  partial: Omit<Vehicle, "chargeCurve" | "consumptionKwhPer100km"> & Partial<Vehicle>,
 ): Vehicle {
   return {
     chargeCurve: DEFAULT_CURVE,
-    minSocRecommended: 15,
-    maxSocTravel: 80,
     ...partial,
     consumptionKwhPer100km: null,
     consumptionManual: false,

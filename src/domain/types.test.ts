@@ -19,8 +19,6 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     dcMaxKw: 120,
     chargeCurve: DEFAULT_CURVE,
     connectors: ["ccs2", "type2"],
-    minSocRecommended: 10,
-    maxSocTravel: 90,
     ...overrides,
   };
 }

@@ -32,8 +32,6 @@ const vehicle = {
   dcMaxKw: 120,
   chargeCurve: [],
   connectors: ["ccs2"],
-  minSocRecommended: 10,
-  maxSocTravel: 90,
   bodyType: "sedan",
 } as Vehicle;
 

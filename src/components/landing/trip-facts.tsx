@@ -1,3 +1,4 @@
+import { routeChargeCapPct } from "@/domain/ev/core/trip-config";
 import { catalogById } from "@/domain/vehicles";
 import { DRIVER_KG, PERSON_KG } from "@/domain/types";
 import { formatKm, formatKw, formatKwh, formatPct } from "@/lib/format";
@@ -57,8 +58,6 @@ export function TripFacts() {
       `${(v.dragAreaM2 ?? 0).toLocaleString("es-CO", { minimumFractionDigits: 2 })} m²`,
     ],
     ["Regeneración máxima", v.maxRegenPowerKw ? formatKw(v.maxRegenPowerKw) : "—"],
-    ["Carga máxima en ruta", formatPct(v.maxSocTravel)],
-    ["Mínimo recomendado", formatPct(v.minSocRecommended)],
   ];
   const trip: [string, string][] = [
     ["Ocupantes", `Conductor + ${c.passengers} ${c.passengers === 1 ? "pasajero" : "pasajeros"}`],
@@ -71,6 +70,7 @@ export function TripFacts() {
     ["Batería al salir", formatPct(c.initialSoc)],
     ["Llegada pedida", formatPct(c.arrivalSoc)],
     ["Margen de seguridad", `${MARGIN[c.safetyMode]} (${MARGIN_PCT[c.safetyMode]} %)`],
+    ["Carga máxima en ruta", formatPct(routeChargeCapPct())],
     ["Estrategia", STRATEGY[c.planningMode]],
   ];
 

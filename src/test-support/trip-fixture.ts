@@ -21,8 +21,6 @@ export const tripRequest: PlanRequestShape = {
     dcMaxKw: 120,
     chargeCurve: DEFAULT_CURVE,
     connectors: ["ccs2"],
-    minSocRecommended: 10,
-    maxSocTravel: 90,
   },
   conditions: {
     passengers: 1,

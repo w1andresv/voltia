@@ -25,7 +25,6 @@ export const GUIDE_TOWNS: readonly (readonly [km: number, name: string, elevatio
 
 export const GUIDE_DIST_KM = 213;
 const CAPACITY_KWH = 47.1;
-export const VEHICLE_MIN_SOC = 15;
 const DC_MAX_KW = 120;
 const AC_MAX_KW = 7;
 
@@ -198,7 +197,8 @@ export type GuidePlan = {
 
 export type GuideResult = ({ viable: true } & GuidePlan) | { viable: false };
 
-export const floorOf = (p: Pick<GuideParams, "margin">) => Math.max(VEHICLE_MIN_SOC, p.margin);
+/** Piso de batería: el margen de seguridad del viaje (ADR-0016). */
+export const floorOf = (p: Pick<GuideParams, "margin">) => p.margin;
 
 const detourPct = (p: GuideParams, km: number) => pctOf(km * 2 * (p.consumption / 100));
 const detourMinutes = (st: GuideStation) => ((st.detourKm * 2) / 50) * 60;

@@ -70,7 +70,7 @@ describe("diagnosticLines", () => {
       "Plan en pantalla: planificador v2 · energía v2 · estaciones blaze · elevación mapbox-terrain/mesh · rutas mapbox (hace 5 min)",
       "Estaciones cerca de la ruta: 2 · listado blaze-abc",
       "Paradas: Carga Verde Socorro",
-      "Vehículo: MG S5 EV Comfort · tope en ruta 80 % · mínimo 15 %",
+      "Vehículo: MG S5 EV Comfort",
       "Viaje: sale con 80 % · llegada 10 % · margen low · estrategia fastest · 1 pasajero(s), 30 kg · A/C normal · temperatura del clima · estilo normal · regeneración medium",
     ]);
   });

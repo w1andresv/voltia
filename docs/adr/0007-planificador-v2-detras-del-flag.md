@@ -33,7 +33,7 @@ Desde 2026-09-27 no hay selector: el motor lo define la URL del planificador (`/
 ## Extra en carga rápida (2026-09-27, decisión del dueño del producto)
 - **Regla:** en una estación de carga rápida (DC), el planificador v2 carga **10 puntos más de lo que pide el tramo siguiente**.
   - Así se aprovecha la velocidad y se evitan paradas largas en carga lenta.
-  - El extra no pasa del 90 %, porque del 90 al 100 % la carga se vuelve lenta, ni de la carga máxima de viaje del vehículo (`maxSocTravel`, 80 % por defecto, editable hasta 100 %).
+  - El extra no pasa del 90 %, porque del 90 al 100 % la carga se vuelve lenta, ni del tope de carga en ruta (80 %; hasta 2026-09-30 era `maxSocTravel` de cada vehículo, ver ADR 0016).
   - Si lo necesario ya pasa del 90 %, se carga solo lo necesario.
 - **Implementación:** restricción de la programación dinámica (`planCharging`, `PlannerInput.fastChargeBuffer`, `PlannerNode.fast`). El tramo que sale de una estación rápida debe terminar con 10 puntos de más sobre el piso y la reserva, salvo que se salga con el tope (90 % o la carga máxima).
   - Un plan viable sin la regla sigue siéndolo: salir con el tope siempre cumple.

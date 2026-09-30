@@ -1,5 +1,5 @@
 import type { ModelParameters } from "../ev/core/params";
-import { socFloors } from "../ev/core/trip-config";
+import { routeChargeCapPct, socFloors } from "../ev/core/trip-config";
 import type { EnergySample } from "../ev/contracts/energy";
 import type { RegenAcceptance } from "../ev/contracts/soc";
 import { chargeTimeMinutes, FLAT_CURVE } from "../ev/engines/charging/curve";
@@ -152,10 +152,10 @@ function pickStops(args: {
 }): { stops: ChargeStop[]; feasible: boolean; reason?: string } {
   const { samples, vehicle, conditions, weather, params } = args;
   const tolerance = params.planner.socTolerancePct;
-  const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(vehicle, conditions);
+  const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(conditions);
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
-  const maxTravel = Math.min(100, vehicle.maxSocTravel);
+  const maxTravel = routeChargeCapPct(params);
   const ctx: EnergyCtx = {
     vehicle,
     conditions,
@@ -600,7 +600,7 @@ function assessFirstCharger(args: {
 
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
-  const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(vehicle, conditions);
+  const { reservePct: safety, arrivalTargetPct: arrivalTarget } = socFloors(conditions);
   const energyCtx: EnergyCtx = {
     vehicle,
     conditions,

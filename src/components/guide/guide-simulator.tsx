@@ -14,7 +14,6 @@ import {
   guideStations,
   pctOf,
   solveGuide,
-  VEHICLE_MIN_SOC,
   walk,
   type GuideEngine,
   type GuideParams,
@@ -279,8 +278,8 @@ function reasons(
   const names = r.stops.map((s) => s.station.name).join(" → ");
   const lines: ReactNode[] = [
     <>
-      Piso de batería = máx(mínimo del vehículo {VEHICLE_MIN_SOC} %, margen {p.margin} %) ={" "}
-      <b>{floor} %</b>: no se acepta llegar a ninguna estación ni pasar por ningún punto por debajo.
+      Piso de batería = margen de seguridad del viaje = <b>{floor} %</b>: no se acepta llegar a
+      ninguna estación ni pasar por ningún punto por debajo.
     </>,
     <>
       Saliendo con {p.soc} % llegarías a Socorro con ≈ <b>{f0(socorro)} %</b> (tras el desvío) →{" "}

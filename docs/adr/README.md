@@ -6,7 +6,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 |---|---|---|
 | [0001](./0001-rama-de-integracion-engine-v2.md) | Rama de integración `engine-v2` con un commit por fase | Aceptada |
 | [0002](./0002-cda-crr-por-carroceria.md) | Cd·A y Crr por carrocería como valores por defecto (MVP) | Aceptada |
-| [0003](./0003-reserva-incluye-minimo-del-vehiculo.md) | La reserva de SOC incluye el mínimo recomendado del vehículo | Aceptada |
+| [0003](./0003-reserva-incluye-minimo-del-vehiculo.md) | La reserva de SOC incluye el mínimo recomendado del vehículo | Reemplazada por 0016 |
 | [0004](./0004-se-conserva-el-viento.md) | Se conserva el modelo de viento aunque la especificación lo deja fuera de v1 | Aceptada |
 | [0005](./0005-puertos-transitorios-en-f1.md) | Puertos transitorios en F1 (rutas y elevación todavía muestreadas) | Cumplida en F2a |
 | [0006](./0006-f2-en-dos-partes.md) | F2 en dos partes: estructura ahora, malla de elevación y snapshot después | Aceptada |
@@ -19,6 +19,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0013](./0013-desvios-medidos-con-la-matriz.md) | Desvíos medidos con la matriz de Mapbox, detrás de DETOUR_SOURCE | Aceptada |
 | [0014](./0014-calibracion-con-soc-de-llegada.md) | Calibración con el SOC de llegada ("¿Con cuánto llegaste?") | Aceptada |
 | [0015](./0015-routeplan-contrato-definitivo.md) | `RoutePlan` ampliado como contrato definitivo del plan | Aceptada |
+| [0016](./0016-margen-solo-en-el-viaje.md) | El margen de SOC se define solo en el viaje; el vehículo no tiene mínimo ni tope | Aceptada |
 
 ## Plantilla
 
