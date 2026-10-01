@@ -39,8 +39,9 @@ const PHOTON_STEP: FlowStep = {
           title: "Algoritmo",
           items: [
             <>
-              <Code>searchPlacesFn</Code> y <Code>reversePlaceFn</Code> (server actions) con límite
-              de consultas por IP.
+              <Code>GET /api/places?q=</Code> mientras escribes (se cancela la búsqueda vieja y se
+              guarda en caché unos minutos) y <Code>reversePlaceFn</Code> (server action) al tocar
+              el mapa.
             </>,
             <>
               El resultado es un <Code>Place</Code>: <Code>{"{ label, lat, lon, context }"}</Code>.
@@ -95,7 +96,7 @@ const WEATHER_LINE = {
 
 const COMMON_START: SequenceItem[] = [
   { from: "U", to: "B", text: "Escribe o toca origen y destino" },
-  { from: "B", to: "S", text: "searchPlacesFn / reversePlaceFn" },
+  { from: "B", to: "S", text: "GET /api/places / reversePlaceFn" },
   { from: "S", to: "P", text: "/api?q= … /reverse?lat=&lon=" },
 ];
 

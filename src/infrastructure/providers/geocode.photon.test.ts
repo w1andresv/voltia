@@ -58,6 +58,51 @@ describe("searchPlaces", () => {
     expect(urls.some((u) => u.includes("lang=default"))).toBe(true);
   });
 
+  it("después de un rechazo por idioma, va directo a lang=default", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      urls.push(url);
+      if (url.includes("photon") && url.includes("lang=es"))
+        return json({ message: "Language is not supported" }, 400);
+      if (url.includes("photon"))
+        return json({
+          features: [
+            {
+              geometry: { coordinates: [-73.05, 6.99] },
+              properties: { name: "Piedecuesta", state: "Santander", country: "Colombia" },
+            },
+          ],
+        });
+      return json({ results: [] });
+    });
+    const { searchPlaces } = await import("./geocode.photon");
+    await searchPlaces("piedecuesta-a");
+    urls.length = 0;
+    await searchPlaces("piedecuesta-b");
+    const photon = urls.filter((u) => u.includes("photon"));
+    expect(photon).toHaveLength(1);
+    expect(photon[0]).toContain("lang=default");
+  });
+
+  it("no espera al proveedor lento: con resultados de otro, le da un margen corto", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", (url: string) => {
+        if (url.includes("photon")) return new Promise<Response>(() => {});
+        return Promise.resolve(json(OPEN_METEO));
+      });
+      const { searchPlaces, SEARCH_GRACE_MS } = await import("./geocode.photon");
+      let out: { label: string }[] | null = null;
+      void searchPlaces("piedecuesta-slow").then((r) => (out = r));
+      await vi.advanceTimersByTimeAsync(SEARCH_GRACE_MS - 50);
+      expect(out).toBeNull();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(out!.map((p) => p.label)).toEqual(["Piedecuesta, Santander", "Piedecuesta, Casanare"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("si Photon cae, usa Open-Meteo", async () => {
     vi.stubGlobal("fetch", async (url: string) => {
       if (url.includes("photon")) throw new TypeError("fetch failed");
@@ -74,6 +119,29 @@ describe("searchPlaces", () => {
     });
     const { searchPlaces } = await import("./geocode.photon");
     await expect(searchPlaces("piedecuesta-down")).rejects.toThrow(/proveedor/);
+  });
+});
+
+describe("settleWithGrace", () => {
+  it("espera a todos si ninguno trae resultados, y marca 'pending' al que no alcanza", async () => {
+    vi.useFakeTimers();
+    try {
+      const { settleWithGrace } = await import("./geocode.photon");
+      const never = new Promise<number[]>(() => {});
+      let done: unknown = null;
+      void settleWithGrace([Promise.resolve([]), never], 100).then((r) => (done = r));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(done).toBeNull();
+
+      const out = settleWithGrace(
+        [Promise.resolve([1]), never, Promise.reject(new Error("x"))],
+        100,
+      );
+      await vi.advanceTimersByTimeAsync(100);
+      expect((await out).map((r) => r.status)).toEqual(["fulfilled", "pending", "rejected"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

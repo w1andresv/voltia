@@ -41,6 +41,15 @@ function photonRank(p: PhotonFeature["properties"]): number {
   return 1;
 }
 
+/** Límite de cada proveedor al buscar mientras se escribe: después de esto ya no sirve. */
+export const SEARCH_TIMEOUT_MS = 4000;
+
+/**
+ * Tras el primer proveedor con resultados, cuánto más se espera a los demás. Los
+ * que no alcanzan siguen en segundo plano y quedan en caché para la siguiente letra.
+ */
+export const SEARCH_GRACE_MS = 400;
+
 /** Colombia: sesgo por defecto de Photon (sin él, "Vélez" devuelve primero España). */
 const COLOMBIA_BIAS = { lat: 5.6, lon: -74.3 };
 
@@ -75,15 +84,22 @@ function errorText(error: unknown): string {
 /**
  * Photon solo traduce a los idiomas cargados en la instancia pública (default, en, de, fr);
  * según la versión, `lang=es` devuelve HTTP 400. Se intenta "es" y, si falla con 4xx,
- * se repite con "default" (nombre local de OSM: en Colombia ya viene en español).
+ * se repite con "default" (nombre local de OSM: en Colombia ya viene en español). Si
+ * el rechazo dice que es por el idioma, el proceso deja de pedir "es": si no, cada
+ * búsqueda serían dos llamadas seguidas a Photon.
  */
+let photonSpanish = true;
+
 async function searchPhoton(q: string, bias?: { lat: number; lon: number }): Promise<Ranked[]> {
-  try {
-    return await searchPhotonLang(q, "es", bias);
-  } catch (error) {
-    if (!(error instanceof Error) || !/HTTP 4\d\d/.test(error.message)) throw error;
-    return searchPhotonLang(q, "default", bias);
+  if (photonSpanish) {
+    try {
+      return await searchPhotonLang(q, "es", bias);
+    } catch (error) {
+      if (!(error instanceof Error) || !/HTTP 4\d\d/.test(error.message)) throw error;
+      if (/language/i.test(error.message)) photonSpanish = false;
+    }
   }
+  return searchPhotonLang(q, "default", bias);
 }
 
 async function searchPhotonLang(
@@ -98,7 +114,7 @@ async function searchPhotonLang(
   if (!bias) params.set("zoom", "6");
   const url = `https://photon.komoot.io/api/?${params.toString()}`;
   const data = await fetchJson<PhotonResponse>(url, {
-    timeoutMs: 5000,
+    timeoutMs: SEARCH_TIMEOUT_MS,
     cacheTtlMs: 120_000,
     headers: { "user-agent": "EV-on-way/1.0 (EV trip planner)" },
   });
@@ -153,7 +169,7 @@ async function searchOpenMeteo(q: string): Promise<Ranked[]> {
   const data = await fetchJson<OpenMeteoGeo>(
     `https://geocoding-api.open-meteo.com/v1/search?${params}`,
     {
-      timeoutMs: 8000,
+      timeoutMs: SEARCH_TIMEOUT_MS,
       cacheTtlMs: 120_000,
     },
   );
@@ -164,11 +180,52 @@ async function searchOpenMeteo(q: string): Promise<Ranked[]> {
   });
 }
 
+type Outcome<T> = PromiseSettledResult<T> | { status: "pending" };
+
+/**
+ * Como `Promise.allSettled`, pero sin esperar al más lento: cuando una tarea
+ * termina con resultados, las demás tienen `graceMs` para terminar; las que no,
+ * quedan "pending" (y siguen corriendo).
+ */
+export function settleWithGrace<T>(
+  tasks: Promise<T[]>[],
+  graceMs: number,
+): Promise<Outcome<T[]>[]> {
+  return new Promise((resolve) => {
+    const out: Outcome<T[]>[] = tasks.map(() => ({ status: "pending" }));
+    let left = tasks.length;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      clearTimeout(timer);
+      resolve(out.slice());
+    };
+    if (left === 0) finish();
+    tasks.forEach((task, i) => {
+      task
+        .then(
+          (value) => {
+            out[i] = { status: "fulfilled", value };
+            if (value.length > 0 && !timer) timer = setTimeout(finish, graceMs);
+          },
+          (reason: unknown) => {
+            out[i] = { status: "rejected", reason };
+          },
+        )
+        .finally(() => {
+          left -= 1;
+          if (left === 0) finish();
+        });
+    });
+  });
+}
+
 /**
  * Búsqueda de lugares. Con token de Mapbox, su geocodificador va primero: es el
  * mismo que usa al trazar la ruta, así origen y destino coinciden con lo que
  * muestra Mapbox. Photon y Open-Meteo completan (y son el respaldo sin token).
- * Los tres se consultan en paralelo; solo falla si fallan todos.
+ * Los tres se consultan en paralelo; solo falla si fallan todos. No se espera
+ * al más lento: llegados los primeros resultados, los demás tienen
+ * `SEARCH_GRACE_MS` (Photon público a veces tarda segundos).
  */
 export async function searchPlaces(
   query: string,
@@ -177,15 +234,18 @@ export async function searchPlaces(
   const q = query.trim();
   if (q.length < 2) return [];
   const token = mapboxServerToken();
-  const [mapbox, photon, openMeteo] = await Promise.allSettled([
-    token ? searchMapbox(q, token, bias) : Promise.reject(new Error("sin token")),
-    searchPhoton(q, bias),
-    searchOpenMeteo(q),
-  ]);
+  const [mapbox, photon, openMeteo] = await settleWithGrace<Ranked>(
+    [
+      token ? searchMapbox(q, token, bias) : Promise.reject(new Error("sin token")),
+      searchPhoton(q, bias),
+      searchOpenMeteo(q),
+    ],
+    SEARCH_GRACE_MS,
+  );
   const attempts = [
-    ["mapbox", mapbox],
-    ["photon", photon],
-    ["open-meteo", openMeteo],
+    ["mapbox", mapbox!],
+    ["photon", photon!],
+    ["open-meteo", openMeteo!],
   ] as const;
   for (const [name, r] of attempts) {
     if (r.status === "rejected" && (name !== "mapbox" || token)) {
@@ -197,12 +257,12 @@ export async function searchPlaces(
     // en vez de un engañoso "Sin resultados".
     throw new Error("No se pudo consultar ningún proveedor de búsqueda de lugares.");
   }
-  const ok = <T>(r: PromiseSettledResult<T[]>): T[] => (r.status === "fulfilled" ? r.value : []);
-  const photonPlaces = ok(photon);
+  const ok = <T>(r: Outcome<T[]>): T[] => (r.status === "fulfilled" ? r.value : []);
+  const photonPlaces = ok(photon!);
   return mergePlaces([
-    ok(mapbox),
+    ok(mapbox!),
     photonPlaces.filter((p) => !p.boundary),
-    ok(openMeteo),
+    ok(openMeteo!),
     photonPlaces.filter((p) => p.boundary),
   ]).slice(0, 8);
 }

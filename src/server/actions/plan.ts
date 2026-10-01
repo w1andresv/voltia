@@ -6,17 +6,6 @@ import { checkRateLimit, getClientIp } from "@/infrastructure/rate-limit";
 
 const PlanSchema = PlanRequestSchema;
 
-export async function searchPlacesFn(input: {
-  data: { q: string; lat?: number; lon?: number };
-}): Promise<Place[]> {
-  const data = input.data;
-  const { createGeocoder } = await import("@/application/container");
-  return createGeocoder().search(
-    data.q,
-    data.lat != null && data.lon != null ? { lat: data.lat, lon: data.lon } : undefined,
-  );
-}
-
 export async function reversePlaceFn(input: {
   data: { lat: number; lon: number };
 }): Promise<Place> {

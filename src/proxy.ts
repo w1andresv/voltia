@@ -42,5 +42,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // Sin /api/places: la búsqueda de lugares no usa la sesión, y getUser() le sumaría
+  // una llamada a Supabase a cada letra que se escribe en origen y destino.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/places|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };
