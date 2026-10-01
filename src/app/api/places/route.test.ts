@@ -37,10 +37,10 @@ describe("GET /api/places", () => {
     expect(search.mock.calls.map((c) => c[1])).toEqual([undefined, undefined]);
   });
 
-  it("si fallan todos los proveedores responde 502 (la UI ofrece reintentar)", async () => {
+  it("si Mapbox falla responde 502 (la UI ofrece reintentar)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     search.mockImplementation(async () => {
-      throw new Error("No se pudo consultar ningún proveedor");
+      throw new Error("HTTP 503 https://api.mapbox.com/…");
     });
     const res = await get("q=bogota");
     expect(res.status).toBe(502);

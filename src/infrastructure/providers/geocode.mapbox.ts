@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Place } from "@/domain/types";
 import { fetchJson } from "./http";
+import { mapboxServerToken } from "./routing.mapbox";
 
 /**
  * Búsqueda de lugares con Mapbox Geocoding v6. Es el mismo geocodificador que
@@ -68,4 +69,22 @@ export async function searchMapbox(
     const context = p.place_formatted || undefined;
     return { label: context ? `${name}, ${context}` : name, lat, lon, context };
   });
+}
+
+/**
+ * Búsqueda de lugares de los campos de origen y destino: solo Mapbox, el mismo
+ * geocodificador que traza la ruta. Sin token no hay búsqueda: se lanza el
+ * error para que la UI diga "no se pudo buscar" y no un engañoso "sin resultados".
+ */
+export async function searchPlaces(
+  query: string,
+  bias?: { lat: number; lon: number },
+): Promise<Place[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const token = mapboxServerToken();
+  if (!token) {
+    throw new Error("Falta el token de Mapbox (MAPBOX_ACCESS_TOKEN) para buscar lugares.");
+  }
+  return searchMapbox(q, token, bias);
 }

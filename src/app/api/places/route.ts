@@ -2,7 +2,7 @@ import { createGeocoder } from "@/application/container";
 
 export const dynamic = "force-dynamic";
 
-/** Más que esto no es un lugar: se corta para no mandarlo a los proveedores. */
+/** Más que esto no es un lugar: se corta para no mandarlo a Mapbox. */
 const MAX_QUERY = 120;
 
 function coord(value: string | null, limit: number): number | null {
@@ -32,9 +32,6 @@ export async function GET(request: Request) {
     return Response.json(places, { headers: { "cache-control": "private, max-age=300" } });
   } catch (error) {
     console.error("[places]", error instanceof Error ? error.message : error);
-    return Response.json(
-      { error: "No se pudo consultar ningún proveedor de búsqueda de lugares." },
-      { status: 502 },
-    );
+    return Response.json({ error: "No se pudo buscar lugares en Mapbox." }, { status: 502 });
   }
 }
