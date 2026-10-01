@@ -83,8 +83,21 @@ export interface ModelParameters {
     detourSpeedKmh: number;
     /** Margen para comparar SOC calculados (redondeo de punto flotante). */
     socTolerancePct: number;
-    /** Piso de SOC en ruta con "permitir bajar del margen" (al destino se sigue pidiendo el margen, ADR-0017). */
+    /**
+     * Piso de SOC en ruta con "permitir bajar del margen" (ADR-0017). También es
+     * lo más bajo a que llega el margen flexible del v2 (ADR-0019).
+     */
     belowSafetyFloorPct: number;
+    /**
+     * Planificador v2 (ADR-0019): el margen de seguridad no es estricto. El plan
+     * puede bajar hasta `belowPct` puntos de él, en ruta y al destino, nunca por
+     * debajo de `belowSafetyFloorPct`. Ese plan se usa solo si es claramente
+     * mejor que el que respeta el margen: hace posible el viaje, evita la carga
+     * antes de salir, tiene menos paradas o, con las mismas, ahorra al menos
+     * `minSavingMin`. Al buscarlo, cada punto bajo el margen en el punto más bajo
+     * de un tramo cuesta `penaltyMinPerPct` minutos (así baja lo menos posible).
+     */
+    marginFlex: SourcedValue<{ belowPct: number; penaltyMinPerPct: number; minSavingMin: number }>;
     /**
      * Tope de carga en ruta: ninguna parada carga por encima de este SOC. Antes
      * era `maxSocTravel` de cada vehículo; desde 2026-09-30 es uno solo (ADR-0016).
@@ -221,6 +234,10 @@ export const MODEL_PARAMETERS: ModelParameters = {
     socTolerancePct: 1e-4,
     // Decisión del dueño del producto (2026-09-30, ADR-0017): era 2 %.
     belowSafetyFloorPct: 5,
+    marginFlex: sourced({ belowPct: 3, penaltyMinPerPct: 4, minSavingMin: 10 }, "configurable", {
+      notes:
+        "Decisión del dueño del producto (2026-10-01, ADR-0019): el margen puede variar unos puntos siempre que no se quede sin batería. Se baja del margen para evitar una parada o la carga previa, o para ahorrar al menos 10 min; no por un par de minutos de carga.",
+    }),
     maxChargeTargetSocPct: sourced(80, "configurable", {
       notes:
         "Decisión del dueño del producto (2026-09-30): el vehículo ya no define mínimo ni tope; la reserva es el margen del viaje y el tope es este (ADR-0016).",

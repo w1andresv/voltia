@@ -377,7 +377,11 @@ export function TripResults({ plan }: { plan: RoutePlan }) {
         ) : plan.stops.length ? (
           <p className="text-xs leading-relaxed text-muted">
             {plan.feasible
-              ? "Paradas en electrolineras reales y verificadas sobre la ruta o con un desvío razonable. El SOC de llegada respeta tu margen de seguridad."
+              ? `Paradas en electrolineras reales y verificadas sobre la ruta o con un desvío razonable. ${
+                  plan.belowMargin
+                    ? "El margen de seguridad es flexible: el plan baja unos puntos de él, sin pasar del piso."
+                    : "El SOC de llegada respeta tu margen de seguridad."
+                }`
               : "Recarga en el punto que sí alcanza. Con los cargadores de esta ruta no se cubre el margen al llegar."}
           </p>
         ) : !plan.feasible ? (
@@ -454,8 +458,9 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
   if (plan.canArriveWithoutCharge) {
     return (
       <p className="rounded-lg bg-ok/10 px-3 py-2.5 text-sm leading-relaxed text-ok">
-        Puedes llegar sin recargar. Reserva {formatPct(plan.safetyPct)} y llegas con{" "}
-        {formatPct(plan.arrivalSoc)}.
+        {plan.belowMargin
+          ? `Puedes llegar sin recargar: llegas con ${formatPct(plan.arrivalSoc)}, un poco bajo tu margen de ${formatPct(plan.safetyPct)} (el margen es flexible).`
+          : `Puedes llegar sin recargar. Reserva ${formatPct(plan.safetyPct)} y llegas con ${formatPct(plan.arrivalSoc)}.`}
       </p>
     );
   }
@@ -522,8 +527,11 @@ function ChargeAdvice({ plan }: { plan: RoutePlan }) {
                 : ""}
               . Mínimo {formatPct(st.minDepartSoc)}: lo menos con lo que puedes salir para cubrir
               los {formatKm(st.kmToNext)} siguientes
-              {st.nextLabel ? ` hasta ${st.nextLabel}` : " hasta el destino"} y todavía conservar el
-              margen de {formatPct(plan.safetyPct)}. Sales al {formatPct(st.departSoc)}: es lo que
+              {st.nextLabel ? ` hasta ${st.nextLabel}` : " hasta el destino"}
+              {st.belowMarginNext
+                ? ` bajando solo unos puntos del margen de ${formatPct(plan.safetyPct)}, que es flexible`
+                : ` y todavía conservar el margen de ${formatPct(plan.safetyPct)}`}
+              . Sales al {formatPct(st.departSoc)}: es lo que
               el plan pide cargar,{" "}
               {st.sessionExtraPct
                 ? `el mínimo más ${formatPct(st.sessionExtraPct)} para que la parada valga la pena: al menos ${MIN_SESSION_MIN} min cargando, porque parquear, bajarte, abrir la app y conectar ya toman su tiempo`

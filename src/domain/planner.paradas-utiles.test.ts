@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CURVE } from "./charging";
 import { MODEL_PARAMETERS, type ModelParameters } from "./ev/core/params";
+import { flexibleReserveSocPct } from "./ev/core/trip-config";
 import { buildPlan } from "./planner";
 import type { Charger, Place, RawRoute, RoutePlan, TripConditions, Vehicle } from "./types";
 
@@ -105,11 +106,26 @@ const ac = (km: number): Charger => ({
 const ORIGIN: Place = { label: "Origen", lat: 4, lon: -74 };
 const dest = (km: number): Place => ({ label: "Destino", lat: 4 + km / 111, lon: -74 });
 
-/** Parámetros sin las reglas de ADR-0018: el planificador v2 de antes, como control. */
-const CONTROL: ModelParameters = {
+/**
+ * Margen estricto (sin el margen flexible de ADR-0019): así las reglas de
+ * ADR-0018 se prueban solas. El margen flexible tiene su bloque al final.
+ */
+const STRICT: ModelParameters = {
   ...MODEL_PARAMETERS,
   planner: {
     ...MODEL_PARAMETERS.planner,
+    marginFlex: {
+      ...MODEL_PARAMETERS.planner.marginFlex,
+      value: { ...MODEL_PARAMETERS.planner.marginFlex.value, belowPct: 0 },
+    },
+  },
+};
+
+/** Parámetros sin las reglas de ADR-0018: el planificador v2 de antes, como control. */
+const CONTROL: ModelParameters = {
+  ...STRICT,
+  planner: {
+    ...STRICT.planner,
     minChargeSessionMin: { ...MODEL_PARAMETERS.planner.minChargeSessionMin, value: 0 },
     stretchChargeSocPct: { ...MODEL_PARAMETERS.planner.stretchChargeSocPct, value: CAP },
   },
@@ -130,7 +146,7 @@ function plan(
     origin: ORIGIN,
     destination: dest(d),
     engine: "v2",
-    ...(opts.params ? { params: opts.params } : {}),
+    params: opts.params ?? STRICT,
   });
 }
 
@@ -286,9 +302,9 @@ describe("v2 · invariantes con las reglas nuevas (ADR-0018)", () => {
       const noStretch = plan(d, mk(d), cond, {
         hilly,
         params: {
-          ...MODEL_PARAMETERS,
+          ...STRICT,
           planner: {
-            ...MODEL_PARAMETERS.planner,
+            ...STRICT.planner,
             stretchChargeSocPct: CONTROL.planner.stretchChargeSocPct,
           },
         },
@@ -300,12 +316,13 @@ describe("v2 · invariantes con las reglas nuevas (ADR-0018)", () => {
 });
 
 describe("margen de seguridad como única reserva (ADR-0017)", () => {
-  it("con 'permitir bajar del margen', en ruta puede bajar hasta 5 % pero al destino llega con el margen", () => {
+  it("con 'permitir bajar del margen', en ruta puede bajar hasta 5 %; al destino v1 llega con el margen y v2 con el margen flexible", () => {
     for (const engine of ["legacy", "v2"] as const) {
+      const cond = conditions({ initialSoc: 70, safetyMode: "normal", allowBelowSafety: true });
       const p = buildPlan({
         raw: route(300, true),
         vehicle,
-        conditions: conditions({ initialSoc: 70, safetyMode: "normal", allowBelowSafety: true }),
+        conditions: cond,
         chargers: [dc(150)],
         weather: null,
         origin: ORIGIN,
@@ -313,18 +330,20 @@ describe("margen de seguridad como única reserva (ADR-0017)", () => {
         engine,
       });
       expect(p.feasible).toBe(true);
-      expect(p.arrivalSoc).toBeGreaterThanOrEqual(15 - 1e-3);
+      const atDestination = engine === "v2" ? flexibleReserveSocPct(cond) : 15;
+      expect(p.arrivalSoc).toBeGreaterThanOrEqual(atDestination - 1e-3);
       expect(p.minSoc).toBeGreaterThanOrEqual(5 - 1e-3);
     }
   });
 
-  it("v1 y v2 llegan al destino con el margen, sin una 'llegada mínima' aparte", () => {
+  it("v1 llega al destino con el margen y v2 con el margen flexible, sin una 'llegada mínima' aparte", () => {
     for (const engine of ["legacy", "v2"] as const) {
       for (const safetyMode of ["low", "normal", "conservative"] as const) {
+        const cond = conditions({ initialSoc: 90, safetyMode });
         const p = buildPlan({
           raw: route(400),
           vehicle,
-          conditions: conditions({ initialSoc: 90, safetyMode }),
+          conditions: cond,
           chargers: [dc(120), dc(240), dc(330)],
           weather: null,
           origin: ORIGIN,
@@ -332,8 +351,129 @@ describe("margen de seguridad como única reserva (ADR-0017)", () => {
           engine,
         });
         expect(p.feasible).toBe(true);
-        expect(p.arrivalSoc).toBeGreaterThanOrEqual(p.safetyPct - 1e-3);
+        const atDestination = engine === "v2" ? flexibleReserveSocPct(cond) : p.safetyPct;
+        expect(p.arrivalSoc).toBeGreaterThanOrEqual(atDestination - 1e-3);
       }
+    }
+  });
+});
+
+describe("v2 · margen flexible (ADR-0019)", () => {
+  const FLEX = MODEL_PARAMETERS.planner.marginFlex.value.belowPct;
+  const flexPlan = (d: number, chargers: Charger[], cond: Partial<TripConditions>, hilly = false) =>
+    plan(d, chargers, cond, { hilly, params: MODEL_PARAMETERS });
+  /** El mismo viaje con margen estricto y con margen flexible, para cada SOC de salida. */
+  const sweep = (d: number, chargers: Charger[], cond: Partial<TripConditions>) =>
+    Array.from({ length: 41 }, (_, i) => 60 + i).map((initialSoc) => ({
+      initialSoc,
+      strict: plan(d, chargers, { ...cond, initialSoc }),
+      flex: flexPlan(d, chargers, { ...cond, initialSoc }),
+    }));
+
+  it("baja unos puntos del margen si así se ahorra una parada, y lo dice", () => {
+    const saved = sweep(300, [dc(150)], { safetyMode: "normal" }).find(
+      (c) => c.strict.stops.length === 1 && c.flex.stops.length === 0,
+    );
+    expect(saved).toBeDefined();
+    const { strict, flex } = saved!;
+    expect(flex.feasible).toBe(true);
+    expect(flex.canArriveWithoutCharge).toBe(true);
+    expect(flex.arrivalSoc).toBeLessThan(15);
+    expect(flex.arrivalSoc).toBeGreaterThanOrEqual(15 - FLEX - 1e-3);
+    expect(flex.totalMinutes).toBeLessThan(strict.totalMinutes);
+    expect(flex.belowMargin).toMatchObject({ floorPct: 15 - FLEX });
+    expect(flex.belowMargin!.points).toBeCloseTo(15 - flex.belowMargin!.lowestSoc, 6);
+    expect(flex.belowMargin!.points).toBeLessThanOrEqual(FLEX + 1e-3);
+  });
+
+  it("no baja del margen para ahorrar solo unos minutos de carga", () => {
+    // 500 km con una sola estación a mitad de camino: la parada es obligatoria, y
+    // cargar 3 puntos más toma un par de minutos, menos que el costo de bajar del margen.
+    // Saliendo con poco, los dos planes piden cargar antes de salir: bajar del margen
+    // solo pediría unos puntos menos de esa carga, y tampoco vale la pena.
+    for (const initialSoc of [55, 65, 75, 90, 95, 100]) {
+      const cond = { initialSoc, safetyMode: "normal" as const };
+      const strict = plan(500, [dc(250)], cond);
+      const flex = flexPlan(500, [dc(250)], cond);
+      expect(strict.feasible).toBe(true);
+      expect(flex.stops.length).toBe(strict.stops.length);
+      expect(flex.arrivalSoc).toBeGreaterThanOrEqual(15 - 1e-3);
+      expect(flex.belowMargin).toBeUndefined();
+    }
+  });
+
+  it("nunca baja del piso flexible: si ni así alcanza, para a cargar", () => {
+    for (const { flex } of sweep(300, [dc(150)], { safetyMode: "normal" })) {
+      expect(flex.feasible).toBe(true);
+      expect(flex.minSoc).toBeGreaterThanOrEqual(15 - FLEX - 1e-3);
+      expect(flex.arrivalSoc).toBeGreaterThanOrEqual(15 - FLEX - 1e-3);
+    }
+    // Saliendo con poco, sin cargar se llegaría bajo el piso: tiene que parar.
+    const low = flexPlan(300, [dc(150)], { initialSoc: 60, safetyMode: "normal" });
+    expect(low.stops.length).toBeGreaterThan(0);
+  });
+
+  it("en 'más segura' no baja del margen si hay un plan que lo respete", () => {
+    for (const { strict, flex } of sweep(300, [dc(150)], {
+      safetyMode: "normal",
+      planningMode: "safer",
+    })) {
+      if (!strict.feasible) continue;
+      expect(flex.minSoc).toBeGreaterThanOrEqual(15 - 1e-3);
+      expect(flex.belowMargin).toBeUndefined();
+    }
+  });
+
+  const layouts: [string, (d: number) => Charger[]][] = [
+    [
+      "DC cada 70 km",
+      (d) => Array.from({ length: Math.floor(d / 70) }, (_, i) => dc((i + 1) * 70)),
+    ],
+    [
+      "DC 50 kW cada 90 km",
+      (d) => Array.from({ length: Math.floor(d / 90) }, (_, i) => dc((i + 1) * 90, 50)),
+    ],
+    ["mixto AC/DC", () => [ac(60), dc(130, 60), ac(190), dc(250), dc(330, 50), ac(400), dc(470)]],
+  ];
+  const cases: [string, number, boolean, Charger[], Partial<TripConditions>][] = [];
+  for (const hilly of [false, true]) {
+    for (const d of [300, 500]) {
+      for (const [name, mk] of layouts) {
+        for (const initialSoc of [35, 60, 90]) {
+          for (const planningMode of ["fastest", "fewer_stops", "safer"] as const) {
+            cases.push([
+              `${hilly ? "montaña" : "plano"} ${d} km · ${name} · ${initialSoc} % · ${planningMode}`,
+              d,
+              hilly,
+              mk(d).filter((c) => (c.lat - 4) * 111 < d - 5),
+              { initialSoc, planningMode, safetyMode: "normal" },
+            ]);
+          }
+        }
+      }
+    }
+  }
+
+  it.each(cases)("%s", (_label, d, hilly, chargers, cond) => {
+    const strict = plan(d, chargers, cond, { hilly });
+    const flex = flexPlan(d, chargers, cond, hilly);
+    // Lo que era viable lo sigue siendo, y nunca baja del piso flexible.
+    if (strict.feasible) expect(flex.feasible).toBe(true);
+    if (!flex.feasible) return;
+    expect(flex.minSoc).toBeGreaterThanOrEqual(15 - FLEX - 1e-3);
+    expect(flex.arrivalSoc).toBeGreaterThanOrEqual(15 - FLEX - 1e-3);
+    // Si baja del margen, lo dice.
+    const lowest = Math.min(flex.minSoc, flex.arrivalSoc);
+    if (lowest < 15 - 0.05) expect(flex.belowMargin).toBeDefined();
+    else expect(flex.belowMargin).toBeUndefined();
+    if (!strict.feasible || strict.departureCharge || flex.departureCharge) return;
+    // Bajar del margen solo se hace si mejora el plan según la estrategia.
+    if (cond.planningMode === "fastest") {
+      expect(flex.totalMinutes).toBeLessThanOrEqual(strict.totalMinutes + 0.5);
+    } else if (cond.planningMode === "fewer_stops") {
+      expect(flex.stops.length).toBeLessThanOrEqual(strict.stops.length);
+    } else {
+      expect(flex.minSoc).toBeGreaterThanOrEqual(Math.min(strict.minSoc, 15) - 1e-3);
     }
   });
 });

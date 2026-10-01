@@ -957,15 +957,34 @@ describe("buildPlan con el planificador v2 (F7)", () => {
     const base = straightRoute(distance, 1);
     const raw = { ...base, samples: base.samples.map((s) => ({ ...s, elevM: elev(s.km), speedKmh: 60 })) };
     const cond = conditions({ initialSoc: 31, safetyMode: "low", regenLevel: "high", avgSpeedKmh: null });
-    const none = buildPlan({ raw, vehicle: vehicle(), conditions: cond, chargers: [], weather: null, origin: ORIGIN, destination: dest(distance), engine: "v2" });
+    // Margen estricto (sin ADR-0019): el margen de 10 % no se cruza en ningún punto.
+    const strict: ModelParameters = {
+      ...MODEL_PARAMETERS,
+      planner: {
+        ...MODEL_PARAMETERS.planner,
+        marginFlex: { ...MODEL_PARAMETERS.planner.marginFlex, value: { ...MODEL_PARAMETERS.planner.marginFlex.value, belowPct: 0 } },
+      },
+    };
+    const at = (chargers: Charger[], params?: ModelParameters) =>
+      buildPlan({ raw, vehicle: vehicle(), conditions: cond, chargers, weather: null, origin: ORIGIN, destination: dest(distance), engine: "v2", ...(params ? { params } : {}) });
+    const none = at([], strict);
     // Sin cargadores, v2 busca el SOC inicial con el que el tramo es seguro (§5.8.6).
     expect(none.feasibilityStatus).toBe("INFEASIBLE_WITH_CURRENT_SOC");
     expect(none.departureCharge?.additionalPct).toBeGreaterThan(0);
     expect(none.minSoc).toBeGreaterThanOrEqual(10 - 1e-6);
-    const one = buildPlan({ raw, vehicle: vehicle(), conditions: cond, chargers: [chargerAt(5)], weather: null, origin: ORIGIN, destination: dest(distance), engine: "v2" });
+    const one = at([chargerAt(5)], strict);
     expect(one.feasible).toBe(true);
     expect(one.stops).toHaveLength(1);
     expect(one.minSoc).toBeGreaterThanOrEqual(10 - 1e-6);
+    // Margen flexible (ADR-0019): bajar unos puntos del 10 % evita la carga previa y
+    // la parada; nunca baja del piso flexible (7 %), y el plan lo dice.
+    for (const flex of [at([]), at([chargerAt(5)])]) {
+      expect(flex.feasibilityStatus).toBe("FEASIBLE_NO_CHARGING");
+      expect(flex.departureCharge).toBeUndefined();
+      expect(flex.stops).toHaveLength(0);
+      expect(flex.minSoc).toBeGreaterThanOrEqual(7 - 1e-6);
+      expect(flex.belowMargin).toMatchObject({ floorPct: 7 });
+    }
   });
 
   it("C2: la curva tras la parada sale con el SOC de salida del plan, desvío incluido", () => {
