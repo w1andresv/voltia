@@ -6,6 +6,7 @@
  * commit y el mensaje explica el cambio.
  */
 import { createHash } from "node:crypto";
+import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PlanRequest, PlanResponse, TripConditions, Vehicle } from "@/domain/types";
 import { catalogVehicle } from "./scenarios";
@@ -185,7 +186,7 @@ describe("caracterización del pipeline con proveedores sintéticos", () => {
     expect(stored).not.toBeNull();
     expect(stored).toMatchObject({
       schemaVersion: 1,
-      modelVersion: "0.1.0-legacy",
+      modelVersion: MODEL_PARAMETERS.modelVersion,
       createdAt: "2026-09-01T12:00:00.000Z",
     });
     const again = computePlans(

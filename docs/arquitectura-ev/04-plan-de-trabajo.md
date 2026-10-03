@@ -236,6 +236,11 @@ Dividida en dos (ADR-0006).
 | F8 | ✅ Hecha salvo `legacy-adapter` (pasa a F9), la verificación al guardar y el paso a `v2` | ver `git log --grep "^F8:"` |
 | F9 | Pendiente | — |
 | FB | Diseño listo (ADR-0008, propuesta); bloqueado por la documentación de Blaze | — |
+| M1 | ✅ Hecha: rendimiento del planificador (ADR-0020), rama `engine-v2-improvements`. Falta el Web Worker | ver `git log --grep "^M1:"` |
+| M2 | ✅ Hecha detrás de `ENERGY_ENGINE=v2` (peajes, vía mojada, margen de energía; ADR-0021 a 0023). Peajes sin verificar con datos reales | ver `git log --grep "^M2:"` |
+| M3 | ✅ Hecha detrás de `ENERGY_ENGINE=v2` (clima por tramo y eficiencia según la potencia; ADR-0024 y 0025). Clima por tramo sin verificar con la API real | ver `git log --grep "^M3:"` |
+| M4 | M4.1 ✅ (estado por cargador, bug 1), M4.2 ✅ (pérdidas de carga, ADR-0026). M4.3 bloqueada (Blaze no reporta gabinetes) y M4.4 pendiente (curvas reales, datos) | ver `git log --grep "^M4"` |
+| M5 | ✅ Hecha en el planificador v2 (ADR-0027); efecto modesto en rutas reales | ver `git log --grep "^M5:"` |
 
 ## 7. Mensaje para abrir la sesión de una fase
 

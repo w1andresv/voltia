@@ -2,7 +2,7 @@
 
 Este documento lista, paso por paso, todo lo que falta para terminar el motor de rutas EV v2 y llevarlo a `main`. Para cada pendiente dice cómo hacerlo, qué archivos toca, qué tests hacen falta y cuándo se da por cerrado. También incluye lo que hay que tener instalado, configurado y decidido antes de empezar.
 
-- **Estado al escribirlo:** 2026-09-26, rama `engine-v2`, commit `d8605e2`, 601 tests en verde, CI en verde.
+- **Estado al escribirlo:** 2026-09-26, rama `engine-v2`, commit `d8605e2`, 601 tests en verde, CI en verde. Las mejoras M1–M5 (sección 1.1) están en la rama `engine-v2-improvements`.
 - **Documentos relacionados:**
   - [`02-plan-arquitectura-modular.md`](./02-plan-arquitectura-modular.md): el plan, el qué;
   - [`prompt_ev_route_engine_v2.md`](./prompt_ev_route_engine_v2.md): la especificación;
@@ -58,6 +58,29 @@ Este documento lista, paso por paso, todo lo que falta para terminar el motor de
 - los viajes guardados con su snapshot.
 
 ---
+
+### 1.1 Mejoras M1–M5 (rama `engine-v2-improvements`, 2026-10-03)
+
+Salen del informe de mejoras del motor v2 y de su plan de implementación. Un commit por fase (`M1:` a `M5:`), un ADR por decisión (0020 a 0027) y `modelVersion` en `0.6.0`. Todo lo que cambia números va detrás de `ENERGY_ENGINE=v2` o del planificador v2; `legacy` no cambia. Verificación: typecheck, lint, 1.200+ pruebas, y la caracterización del v2 regenerada con su antes y después en cada commit.
+
+| Fase | Qué es | Estado | Falta |
+|---|---|---|---|
+| M1 | Rendimiento: llegadas separadas de los niveles de salida (mismo resultado, probado contra una copia congelada), memoria del perfil de energía, plazo de la pasada 2, sombra después de responder, LRU, rutas 6 h, tiempos por fase (ADR-0020) | ✅ | **Web Worker** del navegador (el store recalcula de forma síncrona; no se pudo verificar en un navegador real). `unstable_cache` → `"use cache"` al tocar esa capa. Medir con los registros nuevos cuántas estaciones tiene un corredor real |
+| M2 | Peajes como paradas, vía mojada (`roadSurface`), margen de energía (ADR-0021 a 0023) | ✅ | **Verificar con datos reales** que Mapbox trae `toll_booth` en Colombia (`npm run diagnose:route` con token). Calibrar 30 s por caseta y los factores de la lluvia |
+| M3 | Clima por tramo y por hora de paso; eficiencia del tren motriz según la potencia (ADR-0024, 0025) | ✅ | **Contrastar con una consulta real** de Open-Meteo (`forecast_hours`, varios puntos, `timezone=GMT`). Calibrar la curva de eficiencia |
+| M4 | M4.1 estado por cargador de Blaze (bug 1); M4.2 pérdidas de carga y una sola función de tiempo (ADR-0026) | M4.1 ✅, M4.2 ✅ | M4.3 potencia compartida: preguntar a Blaze si reporta gabinetes. M4.4 curvas de carga reales de los 11 vehículos: datos con fuente (ver `docs/catalogo-pendientes.md`) |
+| M5 | Estaciones contra la geometría fina de la ruta en el planificador v2 (ADR-0027) | ✅ | Efecto modesto con la geometría reducida; una mejora mayor exige guardar la geometría completa |
+
+**Decisiones del dueño del producto que quedaron con un valor de partida** (todas son parámetros de `ModelParameters`, `estimated`, y se cambian sin tocar código):
+
+| Decisión | Valor puesto | Dónde |
+|---|---|---|
+| Segundos detenido en una caseta de peaje | 30 | `speed.tollStopSeconds`, ADR-0021 |
+| Vía mojada automática por el pronóstico (en vez de seca hasta que el usuario elija) | `auto` | `roadSurface`, ADR-0022 |
+| Margen de energía: conectado, en 0 | 0 % | `planning.energyMarginPercent`, ADR-0023 |
+| Eficiencia de carga | AC 0,88 · DC 0,95 | `charging.efficiency`, ADR-0026 |
+
+**Reglas del v2 que cambian al activar estas mejoras** (para la sombra de energía y el informe real): la energía v2 sube en tráfico lento y en ciudad (curva de eficiencia), baja ~0,5 % en carretera; sube con lluvia y con peajes; la carga es más lenta en AC (+13,6 %) y en DC limitada por la estación (+5,3 %). Hay que correr `REAL=1 npm run report` en las tres rutas (dos de montaña, una de llano) y guardar el antes y después en `docs/arquitectura-ev/mediciones/`.
 
 ## 2. Requisitos para desarrollar
 

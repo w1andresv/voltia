@@ -223,7 +223,8 @@ export interface ModelParameters {
 }
 
 export const MODEL_PARAMETERS: ModelParameters = {
-  modelVersion: "0.1.0-legacy",
+  // 0.6.0: M1–M5 (ADR-0020 a 0027). Antes "0.1.0-legacy": ADR-0016 a 0019 cambiaron resultados sin versionar.
+  modelVersion: "0.6.0",
   vehicle: {
     bodyTypePhysics: sourced(
       {
