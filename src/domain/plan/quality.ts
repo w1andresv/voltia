@@ -33,6 +33,16 @@ export function planAssumptions(args: {
         ...(wet.reference ? { reference: wet.reference } : {}),
       });
     }
+    if (energyV2.weatherAlongPoints) {
+      out.push({
+        parameter: "energy.weatherAlongRoute",
+        value: {
+          points: energyV2.weatherAlongPoints,
+          hours: params.weather.alongRoute.hours,
+        },
+        source: "external_source",
+      });
+    }
     if (energyV2.tollStops) {
       const toll = params.speed.tollStopSeconds;
       out.push({

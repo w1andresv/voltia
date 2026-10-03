@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
+import { computePlansFromSnapshot } from "@/domain/ev/compute-plan";
+import { parsePlanningSnapshot } from "@/domain/ev/contracts/snapshot";
 import type { StationDataset } from "@/domain/stations/model";
 import type { ProviderRoute } from "@/domain/ev/contracts/route";
 import type { RoutingProvider } from "@/domain/ports/routing";
@@ -403,6 +405,95 @@ describe("rendimiento y observabilidad (M1, ADR-0020)", () => {
     expect(plan.verification?.status).toBe("failed");
     expect(out.response.geo.verifiedRoutes).toBeUndefined();
     expect(out.timings.verify).toBeDefined();
+    vi.restoreAllMocks();
+  });
+});
+
+describe("clima por tramo (M3.1, ADR-0024)", () => {
+  const AT = "2026-10-03T14:20:00.000Z";
+  const series = (lat: number, lon: number) => ({
+    lat,
+    lon,
+    elevationM: 1000,
+    startIso: "2026-10-03T14:00:00.000Z",
+    temperatureC: Array.from({ length: 24 }, () => 18),
+    windKmh: Array.from({ length: 24 }, () => 12),
+    windDirDeg: Array.from({ length: 24 }, () => 200),
+    precipitationMm: Array.from({ length: 24 }, (_, h) => (h >= 1 ? 2 : 0)),
+  });
+  const withAlong = (calls: { points: number; hours: number }[] = []): PlanningDeps["weather"] => ({
+    id: "fake",
+    current: async () => ({ temperatureC: 20, windKmh: 5, windDirDeg: 0 }),
+    along: async (points, hours) => {
+      calls.push({ points: points.length, hours });
+      return points.map((p) => series(p.lat, p.lon));
+    },
+  });
+
+  it("con la energía v2 pide el pronóstico por hora a lo largo de cada ruta y lo guarda en el snapshot", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const calls: { points: number; hours: number }[] = [];
+    const out = await new EVRoutePlanningService(
+      deps({ weather: withAlong(calls), energyMode: "v2", clock: () => new Date(AT) }),
+    ).plan(request);
+    const along = out.response.geo.weatherAlong?.["route-0"];
+    expect(calls).toEqual([{ points: 4, hours: 24 }]); // 130 km: origen, ~50, ~100 y destino
+    expect(along?.departIso).toBe(AT);
+    expect(along?.points.map((p) => Math.round(p.km))).toEqual([0, 43, 87, 130]);
+    expect(along?.points.every((p) => p.temperatureC.length === 24)).toBe(true);
+    // El snapshot lo valida y la huella lo cuenta.
+    expect(parsePlanningSnapshot(JSON.parse(JSON.stringify(out.response.geo)))?.weatherAlong).toBeDefined();
+    // El plan lo usa: está en sus supuestos y la lluvia de la 2.ª hora moja el tramo final.
+    const plan = out.response.plans[0]!;
+    expect(plan.assumptions?.some((a) => a.parameter === "energy.weatherAlongRoute")).toBe(true);
+    vi.restoreAllMocks();
+  });
+
+  it("con la energía anterior no lo pide ni lo guarda", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const calls: { points: number; hours: number }[] = [];
+    const out = await new EVRoutePlanningService(deps({ weather: withAlong(calls) })).plan(request);
+    expect(calls).toEqual([]);
+    expect(out.response.geo.weatherAlong).toBeUndefined();
+    vi.restoreAllMocks();
+  });
+
+  it("si el proveedor no responde, el plan sale con el clima de un punto, sin avisos de más", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const before = await new EVRoutePlanningService(
+      deps({ energyMode: "v2", clock: () => new Date(AT) }),
+    ).plan(request);
+    const failing: PlanningDeps["weather"] = {
+      id: "fake",
+      current: async () => ({ temperatureC: 20, windKmh: 5, windDirDeg: 0 }),
+      along: async () => null,
+    };
+    const out = await new EVRoutePlanningService(
+      deps({ weather: failing, energyMode: "v2", clock: () => new Date(AT) }),
+    ).plan(request);
+    expect(out.response.geo.weatherAlong).toBeUndefined();
+    expect(out.response.geo.warnings).toEqual(before.response.geo.warnings);
+    expect(out.response.plans[0]!.energyKwh).toBe(before.response.plans[0]!.energyKwh);
+    vi.restoreAllMocks();
+  });
+
+  it("el navegador recalcula con el snapshot lo mismo que respondió el servidor", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const out = await new EVRoutePlanningService(
+      deps({ weather: withAlong(), energyMode: "v2", engineMode: "v2", clock: () => new Date(AT) }),
+    ).plan({ ...request, conditions: { ...request.conditions, temperatureC: null } });
+    const geo = JSON.parse(JSON.stringify(out.response.geo)) as typeof out.response.geo;
+    const { plans } = computePlansFromSnapshot(
+      geo,
+      { origin: request.origin, destination: request.destination },
+      request.vehicle as never,
+      { ...request.conditions, temperatureC: null },
+    );
+    const server = out.response.plans[0]!;
+    const client = plans[0]!;
+    expect(client.energyKwh).toBeCloseTo(server.energyKwh, 9);
+    expect(client.totalMinutes).toBeCloseTo(server.totalMinutes, 9);
+    expect(client.stops.map((s) => s.charger.id)).toEqual(server.stops.map((s) => s.charger.id));
     vi.restoreAllMocks();
   });
 });

@@ -2,6 +2,7 @@ import { annotateEnergy, energyMode, STYLE_SPEED_FACTOR } from "./energy";
 import { MODEL_PARAMETERS, type ModelParameters } from "./ev/core/params";
 import { reserveSocPct, toTripConfiguration } from "./ev/core/trip-config";
 import type { MeasuredDetour } from "./ev/contracts/detour";
+import type { WeatherAlongRoute } from "./ev/contracts/weather";
 import { detourEnergyV2, energyProfileForRouteCached, type EnergyEngine } from "./ev/energy-v2";
 import { batteryDepletion } from "./ev/engines/soc/depletion";
 import { simulateSoc } from "./ev/engines/soc/simulate";
@@ -69,6 +70,8 @@ export function buildPlan(args: {
   elevationUnavailable?: boolean;
   /** Acumulador opcional de lo que hizo el planificador v2 (banco y registros, ADR-0020). */
   stats?: PlannerRunStats;
+  /** Clima por hora en varios puntos de esta ruta (M3.1, solo con la energía v2). */
+  weatherAlong?: WeatherAlongRoute;
 }): RoutePlan {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
   const params = args.params ?? MODEL_PARAMETERS;
@@ -88,7 +91,7 @@ export function buildPlan(args: {
   // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
   const energyV2 =
     args.energyEngine === "v2"
-      ? energyProfileForRouteCached(raw, vehicle, conditions, weather, params)
+      ? energyProfileForRouteCached(raw, vehicle, conditions, weather, params, args.weatherAlong)
       : null;
   const energySamples = energyV2 ? energyV2.samples : annotateEnergy(samplesPre, ctx);
   // Con la energía v2, el desvío usa el consumo local del perfil y el costo de parar (§5.8.1).

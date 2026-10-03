@@ -20,6 +20,7 @@ import type {
 import type { EnergyEngine } from "./energy-v2";
 import type { ModelParameters } from "./core/params";
 import type { PlanningSnapshot } from "./contracts/snapshot";
+import type { WeatherAlongRoute } from "./contracts/weather";
 import type { PlannerRunStats } from "../plan/shared";
 import { detoursForRoute, type MeasuredDetour } from "./contracts/detour";
 
@@ -43,6 +44,8 @@ export interface PlanInputs {
   params?: ModelParameters;
   /** Acumulador opcional de lo que hizo el planificador v2 (registros, ADR-0020). */
   stats?: PlannerRunStats;
+  /** Clima por hora en varios puntos de cada ruta, por id de ruta (M3.1). */
+  weatherAlong?: Record<string, WeatherAlongRoute>;
 }
 
 export interface ComputedPlans {
@@ -74,6 +77,7 @@ export function buildPlans(
       params: inputs.params,
       elevationUnavailable: inputs.dataQuality?.elevation === "unavailable",
       stats: inputs.stats,
+      weatherAlong: inputs.weatherAlong?.[raw.id],
     }),
     ...(inputs.snapshotId ? { snapshotId: inputs.snapshotId } : {}),
   }));
@@ -116,7 +120,14 @@ export function rankVerifiedFirst(
 /** Lo que hace falta de un snapshot para recalcular sus planes (también el `geo` del navegador). */
 export type SnapshotInputs = Pick<
   PlanningSnapshot,
-  "routes" | "chargers" | "weather" | "detours" | "energyEngine" | "verifiedRoutes" | "dataQuality"
+  | "routes"
+  | "chargers"
+  | "weather"
+  | "weatherAlong"
+  | "detours"
+  | "energyEngine"
+  | "verifiedRoutes"
+  | "dataQuality"
 > & { plannerEngine?: PlannerEngine; snapshotId?: string };
 
 /**
@@ -141,6 +152,7 @@ export function computePlansFromSnapshot(
     routes: snapshot.routes,
     chargers: snapshot.chargers,
     weather: snapshot.weather,
+    ...(snapshot.weatherAlong ? { weatherAlong: snapshot.weatherAlong } : {}),
     origin: places.origin,
     destination: places.destination,
     detours: snapshot.detours,
@@ -169,6 +181,7 @@ export function computePlansFromSnapshot(
       energyEngine: energy,
       params,
       elevationUnavailable: inputs.dataQuality?.elevation === "unavailable",
+      weatherAlong: snapshot.weatherAlong?.[raw.id],
     });
     if (!verified.feasible) {
       const plan = pass1();

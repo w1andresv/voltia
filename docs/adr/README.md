@@ -27,6 +27,8 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0021](./0021-peajes-como-paradas.md) | Peajes como paradas en el perfil de velocidad | Aceptada (30 s por confirmar) |
 | [0022](./0022-via-mojada.md) | Vía mojada: más rodadura y más auxiliares | Aceptada (automática por defecto, por confirmar) |
 | [0023](./0023-margen-de-energia.md) | Margen de energía: conectar `planning.energyMarginPercent` | Aceptada |
+| [0024](./0024-clima-por-tramo.md) | Clima por tramo y por hora de paso | Aceptada |
+| [0025](./0025-eficiencia-segun-la-potencia.md) | Eficiencia del tren motriz según la potencia | Aceptada |
 
 ## Plantilla
 

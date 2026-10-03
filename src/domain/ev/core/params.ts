@@ -177,6 +177,14 @@ export interface ModelParameters {
     /** Velocidad a la que se supone medido el consumo manual del usuario, km/h. */
     manualReferenceSpeedKmh: number;
     /**
+     * Eficiencia del tren motriz según la potencia en la rueda (M3.2, ADR-0025): pares
+     * [P / P_ref, factor]. P_ref es la potencia de crucero del vehículo en llano a
+     * `manualReferenceSpeedKmh`; ahí el factor es 1, así `drivetrainEfficiency` sigue siendo
+     * la eficiencia de crucero y el ajuste al consumo manual no se mueve. La eficiencia en
+     * cada tramo es `drivetrainEfficiency × factor(P / P_ref)`. Vacío = eficiencia constante.
+     */
+    drivetrainEfficiencyCurve: SourcedValue<[number, number][]>;
+    /**
      * Vía mojada (M2.2, ADR-0022): con lluvia de al menos `minPrecipMm` (mm en la hora del
      * pronóstico) o si el usuario la elige, la resistencia a la rodadura sube por `crrFactor`
      * y los limpiaparabrisas y el desempañador suman `auxKw` a los auxiliares.
@@ -188,6 +196,13 @@ export interface ModelParameters {
      * factor interpolado. Es el `EfficiencyModel` de la especificación §5.4.
      */
     temperatureFactor: SourcedValue<[number, number][]>;
+  };
+  weather: {
+    /**
+     * Clima por tramo (M3.1, ADR-0024): un punto cada `spacingKm` de ruta (como mucho
+     * `maxPoints`, con el origen y el destino) y pronóstico por hora de `hours` horas.
+     */
+    alongRoute: { spacingKm: number; maxPoints: number; hours: number };
   };
   chart: {
     /** Ventana de la gráfica de consumo según el largo de la ruta (especificación §5.10). */
@@ -336,6 +351,25 @@ export const MODEL_PARAMETERS: ModelParameters = {
       { notes: "Calibrar con viajes reales (TripObservation)." },
     ),
     manualReferenceSpeedKmh: 70,
+    drivetrainEfficiencyCurve: sourced(
+      [
+        [0, 0.78],
+        [0.15, 0.85],
+        [0.35, 0.93],
+        [0.6, 0.98],
+        [1, 1],
+        [2, 1.01],
+        [4, 1],
+        [8, 0.98],
+        [16, 0.95],
+      ],
+      "estimated",
+      {
+        reference: "docs/adr/0025-eficiencia-segun-la-potencia.md",
+        notes:
+          "Forma típica de un motor con inversor: pierde eficiencia con poca carga (tráfico lento, bajadas suaves) y un poco con mucha. Estimada: calibrar con viajes (TripObservation).",
+      },
+    ),
     wetRoad: sourced({ minPrecipMm: 0.3, crrFactor: 1.2, auxKw: 0.1 }, "estimated", {
       reference: "docs/adr/0022-via-mojada.md",
       notes:
@@ -357,6 +391,9 @@ export const MODEL_PARAMETERS: ModelParameters = {
           "Lado frío igual al modelo anterior (batería, llantas y tren fríos). En calor casi plano: el aire acondicionado ya suma el enfriamiento en los auxiliares.",
       },
     ),
+  },
+  weather: {
+    alongRoute: { spacingKm: 50, maxPoints: 10, hours: 24 },
   },
   chart: {
     windows: [

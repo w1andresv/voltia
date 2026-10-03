@@ -5,8 +5,10 @@ import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import { airDensity, type EnergyContext } from "./environment";
 import {
   calibrateToManual,
+  efficiencyFactor,
   energyProfileV2,
   localNetRateKwhPerKm,
+  referenceCruisePowerKw,
   segmentEnergyV2,
   stopEnergyKwh,
   temperatureFactor,
@@ -304,5 +306,78 @@ describe("desvíos y paradas (§5.8.1)", () => {
     const kinetic = kwh(0.5 * M * 1.05 * 25 * 25);
     expect(stopEnergyKwh(vp, regen, 90)).toBeCloseTo(kinetic * (1 / 0.9 - 0.7 * 0.8), 12);
     expect(stopEnergyKwh(vp, regen, 0)).toBe(0);
+  });
+});
+
+describe("M3.2 · eficiencia del tren motriz según la potencia (ADR-0025)", () => {
+  const points = MODEL_PARAMETERS.energy.drivetrainEfficiencyCurve.value;
+
+  it("efficiencyFactor interpola, se queda en los extremos y sin puntos vale 1", () => {
+    expect(efficiencyFactor(1, points)).toBe(1);
+    expect(efficiencyFactor(0, points)).toBe(0.78);
+    expect(efficiencyFactor(-3, points)).toBe(0.78);
+    expect(efficiencyFactor(0.25, points)).toBeCloseTo(0.89, 12); // a mitad entre (0,15; 0,85) y (0,35; 0,93)
+    expect(efficiencyFactor(100, points)).toBe(0.95);
+    expect(efficiencyFactor(0.2, [])).toBe(1);
+  });
+
+  it("la curva por defecto vale 1 en la potencia de referencia y pierde eficiencia con poca y con mucha carga", () => {
+    expect(efficiencyFactor(1, points)).toBe(1);
+    expect(efficiencyFactor(0.2, points)).toBeLessThan(0.9);
+    expect(efficiencyFactor(16, points)).toBeLessThan(0.96);
+    expect(points.every(([, f]) => f > 0.5 && f < 1.1)).toBe(true);
+  });
+
+  it("referenceCruisePowerKw: rodadura más aerodinámica a la velocidad de referencia", () => {
+    const v = 70 / 3.6;
+    const expected =
+      ((vp.rollingResistance.value * M * G_STANDARD_MS2 + 0.5 * airDensity(15, 0) * vp.dragAreaM2.value * v * v) * v) /
+      1000;
+    expect(referenceCruisePowerKw(vp, 70)).toBeCloseTo(expected, 12);
+    expect(referenceCruisePowerKw(vp, 70)).toBeGreaterThan(3);
+    expect(referenceCruisePowerKw(vp, 70)).toBeLessThan(12);
+  });
+
+  /** Crucero en llano, sin viento, a 15 °C y nivel del mar: la densidad es la de la potencia de referencia. */
+  const cruise = (kmh: number, efficiency: { refPowerKw: number; points: [number, number][] } | null) => {
+    const c15 = { ...ctx, conditions: { ...conditions, temperatureC: 15 } };
+    const v = kmh / 3.6;
+    return segmentEnergyV2(
+      { horizontalM: 1000, deltaHM: 0, v1Ms: v, v2Ms: v, altitudeM: 0 },
+      vp,
+      c15,
+      regen,
+      MODEL_PARAMETERS.energy.temperatureFactor.value,
+      null,
+      efficiency,
+    );
+  };
+  const model = { refPowerKw: referenceCruisePowerKw(vp, 70), points };
+
+  it("a la potencia de referencia, la tracción es la de antes (eficiencia constante)", () => {
+    const plain = cruise(70, null);
+    const withCurve = cruise(70, model);
+    expect(withCurve.tractionEnergyKwh).toBeCloseTo(plain.tractionEnergyKwh, 12);
+    expect(withCurve.netEnergyKwh).toBeCloseTo(plain.netEnergyKwh, 12);
+  });
+
+  it("con poca potencia (tráfico lento) gasta más que con eficiencia constante", () => {
+    const slow = cruise(25, model);
+    const plain = cruise(25, null);
+    expect(slow.tractionEnergyKwh).toBeGreaterThan(plain.tractionEnergyKwh * 1.03);
+    // Los auxiliares no cambian: la diferencia es solo de la tracción.
+    expect(slow.auxiliaryEnergyKwh).toBe(plain.auxiliaryEnergyKwh);
+  });
+
+  it("la eficiencia nunca pasa de 1 ni deja la tracción por debajo de la energía en la rueda", () => {
+    for (const kmh of [10, 25, 50, 70, 90, 110, 130]) {
+      const s = cruise(kmh, model);
+      expect(s.tractionEnergyKwh).toBeGreaterThan(s.wheelEnergyKwh);
+    }
+  });
+
+  it("sin curva (vacía) el resultado es exactamente el de eficiencia constante", () => {
+    const empty = { refPowerKw: model.refPowerKw, points: [] as [number, number][] };
+    expect(cruise(40, empty)).toEqual(cruise(40, null));
   });
 });

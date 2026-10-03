@@ -67,3 +67,53 @@ describe("snapshotHash", () => {
     });
   });
 });
+
+describe("M2 y M3: campos nuevos opcionales del snapshot", () => {
+  const along = {
+    "route-0": {
+      departIso: "2026-10-03T14:20:00.000Z",
+      source: "fake",
+      points: [
+        {
+          km: 0,
+          lat: 7,
+          lon: -73,
+          elevationM: 1000,
+          startIso: "2026-10-03T14:00:00.000Z",
+          temperatureC: [18, 18],
+          windKmh: [5, 6],
+          windDirDeg: [200, 210],
+          precipitationMm: [0, 1],
+        },
+      ],
+    },
+  };
+
+  it("un snapshot con clima por tramo y casetas se valida", () => {
+    const base = minimalSnapshot();
+    const s = {
+      ...base,
+      weatherAlong: along,
+      routes: [{ ...base.routes[0]!, tollBoothsKm: [4.2] }],
+    };
+    const parsed = parsePlanningSnapshot(JSON.parse(JSON.stringify(s)));
+    expect(parsed?.weatherAlong?.["route-0"]?.points).toHaveLength(1);
+    expect(parsed?.routes[0]?.tollBoothsKm).toEqual([4.2]);
+  });
+
+  it("rechaza un clima por tramo mal formado", () => {
+    const bad = { ...minimalSnapshot(), weatherAlong: { "route-0": { departIso: 5, points: [] } } };
+    expect(parsePlanningSnapshot(bad)).toBeNull();
+  });
+
+  it("la huella de un snapshot sin clima por tramo es la de siempre; con él, otra", () => {
+    const s = minimalSnapshot();
+    expect(snapshotHash(s)).toBe(snapshotHash({ ...s, weatherAlong: undefined }));
+    expect(snapshotHash({ ...s, weatherAlong: along })).not.toBe(snapshotHash(s));
+  });
+
+  it("snapshotInputs pasa el clima por tramo solo si existe", () => {
+    expect(snapshotInputs(minimalSnapshot())).not.toHaveProperty("weatherAlong");
+    expect(snapshotInputs(minimalSnapshot({ weatherAlong: along }))).toHaveProperty("weatherAlong");
+  });
+});

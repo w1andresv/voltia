@@ -342,3 +342,176 @@ describe("M2.2 · vía mojada (ADR-0022)", () => {
     });
   });
 });
+
+describe("M3.1 · clima por tramo y por hora (ADR-0024)", () => {
+  const flat = hillRoute(30);
+  const route: RawRoute = {
+    ...flat,
+    samples: flat.samples.map((s) => ({ ...s, elevM: 1000 })),
+    elevation: { gainM: 0, lossM: 0, minM: 1000, maxM: 1000 },
+  };
+  // La ruta va hacia el norte (rumbo 0°): un viento "desde 0°" es de frente, "desde 180°", de cola.
+  const hourlyOf = (v: number) => [v, v, v, v, v, v];
+  const point = (km: number, over: Record<string, number[]> = {}) => ({
+    lat: 7 + km / 111.195,
+    lon: -73,
+    elevationM: 1000,
+    startIso: "2026-10-03T12:00:00.000Z",
+    temperatureC: hourlyOf(20),
+    windKmh: hourlyOf(0),
+    windDirDeg: hourlyOf(0),
+    precipitationMm: hourlyOf(0),
+    ...over,
+    km,
+  });
+  const along = (points: ReturnType<typeof point>[], departIso = "2026-10-03T12:00:00.000Z") => ({
+    departIso,
+    points,
+  });
+  const noTemp = { ...conditions, temperatureC: null };
+  const run = (field?: ReturnType<typeof along>, single: Parameters<typeof energyProfileForRoute>[3] = null) =>
+    energyProfileForRoute(route, vehicle, noTemp, single, MODEL_PARAMETERS, field);
+
+  it("el viento de frente solo en la primera mitad gasta entre ruta calma y de frente en toda la ruta", () => {
+    const calm = run(along([point(0), point(30)]));
+    const headHalf = run(
+      along([
+        point(0, { windKmh: hourlyOf(40) }),
+        point(14, { windKmh: hourlyOf(40) }),
+        point(15, { windKmh: hourlyOf(0) }),
+        point(30, { windKmh: hourlyOf(0) }),
+      ]),
+    );
+    const headAll = run(along([point(0, { windKmh: hourlyOf(40) }), point(30, { windKmh: hourlyOf(40) })]));
+    expect(headHalf.totals.netEnergyKwh).toBeGreaterThan(calm.totals.netEnergyKwh);
+    expect(headHalf.totals.netEnergyKwh).toBeLessThan(headAll.totals.netEnergyKwh);
+    expect(headAll.weatherAlongPoints).toBe(2);
+  });
+
+  it("el mismo clima en todos los puntos da lo mismo que un solo punto con ese clima", () => {
+    const wind = { temperatureC: 20, windKmh: 25, windDirDeg: 0, elevationM: 1000 };
+    const single = run(undefined, wind);
+    const field = run(
+      along([point(0, { windKmh: hourlyOf(25) }), point(15, { windKmh: hourlyOf(25) }), point(30, { windKmh: hourlyOf(25) })]),
+    );
+    expect(field.totals.netEnergyKwh).toBeCloseTo(single.totals.netEnergyKwh, 9);
+    expect(field.durationMinutes).toBeCloseTo(single.durationMinutes, 9);
+  });
+
+  it("la lluvia de un lugar solo moja los kilómetros que quedan cerca de él", () => {
+    const dry = run(along([point(0), point(30)]));
+    const rainEnd = run(
+      along([point(0), point(15), point(16, { precipitationMm: hourlyOf(3) }), point(30, { precipitationMm: hourlyOf(3) })]),
+    );
+    const wetAll = run(
+      along([point(0, { precipitationMm: hourlyOf(3) }), point(30, { precipitationMm: hourlyOf(3) })]),
+    );
+    expect(dry.wetRoad).toBeUndefined();
+    expect(rainEnd.wetRoad).toBe("forecast");
+    expect(rainEnd.totals.netEnergyKwh).toBeGreaterThan(dry.totals.netEnergyKwh);
+    expect(rainEnd.totals.netEnergyKwh).toBeLessThan(wetAll.totals.netEnergyKwh);
+  });
+
+  it("la lluvia de una hora solo afecta lo que se recorre en esa hora", () => {
+    // La ruta tarda ~30 min: llueve desde la tercera hora, no antes.
+    const rainLater = along([
+      point(0, { precipitationMm: [0, 0, 0, 3, 3, 3] }),
+      point(30, { precipitationMm: [0, 0, 0, 3, 3, 3] }),
+    ]);
+    expect(run({ ...rainLater, departIso: "2026-10-03T12:00:00.000Z" }).wetRoad).toBeUndefined();
+    expect(run({ ...rainLater, departIso: "2026-10-03T15:00:00.000Z" }).wetRoad).toBe("forecast");
+  });
+
+  it("la lluvia elegida por el usuario manda sobre un pronóstico seco", () => {
+    const dryField = along([point(0), point(30)]);
+    const forced = energyProfileForRoute(route, vehicle, { ...noTemp, roadSurface: "wet" }, null, MODEL_PARAMETERS, dryField);
+    expect(forced.wetRoad).toBe("chosen");
+  });
+
+  it("la temperatura del clima por tramo cambia el consumo si el usuario no escribió una", () => {
+    const warm = run(along([point(0), point(30)]));
+    const cold = run(
+      along([
+        point(0, { temperatureC: hourlyOf(2) }),
+        point(30, { temperatureC: hourlyOf(2) }),
+      ]),
+    );
+    expect(cold.totals.netEnergyKwh).toBeGreaterThan(warm.totals.netEnergyKwh);
+    // Con una temperatura escrita por el usuario, el clima no la cambia.
+    const user = (field: ReturnType<typeof along>) =>
+      energyProfileForRoute(route, vehicle, { ...conditions, temperatureC: 22 }, null, MODEL_PARAMETERS, field);
+    expect(
+      user(along([point(0, { temperatureC: hourlyOf(2) }), point(30, { temperatureC: hourlyOf(2) })])).totals.netEnergyKwh,
+    ).toBeCloseTo(user(along([point(0), point(30)])).totals.netEnergyKwh, 9);
+  });
+
+  it("sin clima por tramo, la energía es la de antes y el resultado no lo menciona", () => {
+    const a = run(undefined, { temperatureC: 20, windKmh: 10, windDirDeg: 90 });
+    expect(a.weatherAlongPoints).toBeUndefined();
+    const b = energyProfileForRoute(route, vehicle, noTemp, { temperatureC: 20, windKmh: 10, windDirDeg: 90 });
+    expect(b.samples).toEqual(a.samples);
+  });
+
+  it("la memoria distingue el clima por tramo (otra serie, otro perfil)", () => {
+    const f1 = along([point(0, { windKmh: hourlyOf(40) }), point(30, { windKmh: hourlyOf(40) })]);
+    const f2 = along([point(0), point(30)]);
+    const a = energyProfileForRouteCached(route, vehicle, noTemp, null, MODEL_PARAMETERS, f1);
+    const b = energyProfileForRouteCached(route, vehicle, noTemp, null, MODEL_PARAMETERS, f2);
+    expect(b).not.toBe(a);
+    expect(energyProfileForRouteCached(route, vehicle, noTemp, null, MODEL_PARAMETERS, f1)).toBe(a);
+  });
+
+  it("el plan lo dice en sus supuestos", () => {
+    const plan = buildPlan({
+      raw: route,
+      vehicle,
+      conditions: noTemp,
+      chargers: [],
+      weather: null,
+      weatherAlong: along([point(0), point(30)]),
+      origin: { label: "A", lat: 7, lon: -73 },
+      destination: { label: "B", lat: 7.27, lon: -73 },
+      engine: "v2",
+      energyEngine: "v2",
+    });
+    expect(plan.assumptions?.find((x) => x.parameter === "energy.weatherAlongRoute")).toMatchObject({
+      source: "external_source",
+      value: { points: 2, hours: 24 },
+    });
+  });
+});
+
+describe("M3.2 · la curva de eficiencia en el perfil completo", () => {
+  const flatRoute = (km: number): RawRoute => {
+    const r = hillRoute(km);
+    return {
+      ...r,
+      samples: r.samples.map((s) => ({ ...s, elevM: 1000 })),
+      elevation: { gainM: 0, lossM: 0, minM: 1000, maxM: 1000 },
+    };
+  };
+  const noCurve = {
+    ...MODEL_PARAMETERS,
+    energy: {
+      ...MODEL_PARAMETERS.energy,
+      drivetrainEfficiencyCurve: { ...MODEL_PARAMETERS.energy.drivetrainEfficiencyCurve, value: [] },
+    },
+  };
+  const at = (kmh: number, params: typeof MODEL_PARAMETERS, v = vehicle) =>
+    energyProfileForRoute(flatRoute(40), v, { ...conditions, avgSpeedKmh: kmh, temperatureC: 15 }, null, params)
+      .totals.netEnergyKwh;
+
+  it("en crucero a la velocidad de referencia, casi no cambia; a poca velocidad, sube", () => {
+    const refKmh = MODEL_PARAMETERS.energy.manualReferenceSpeedKmh;
+    expect(Math.abs(at(refKmh, MODEL_PARAMETERS) / at(refKmh, noCurve) - 1)).toBeLessThan(0.015);
+    expect(at(25, MODEL_PARAMETERS) / at(25, noCurve)).toBeGreaterThan(1.03);
+  });
+
+  it("el consumo manual sigue ajustado: el factor vale 1 en el crucero del vehículo ya calibrado", () => {
+    const manual = { ...vehicle, consumptionKwhPer100km: 16 };
+    const refKmh = MODEL_PARAMETERS.energy.manualReferenceSpeedKmh;
+    const per100 = (params: typeof MODEL_PARAMETERS) => (at(refKmh, params, manual) / 40) * 100;
+    // Con y sin curva, el consumo manual a la velocidad de referencia da lo mismo (± arranque y parada).
+    expect(Math.abs(per100(MODEL_PARAMETERS) / per100(noCurve) - 1)).toBeLessThan(0.015);
+  });
+});

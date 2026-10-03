@@ -32,7 +32,7 @@ import {
   redact,
 } from "./routing.mapbox";
 import { fetchOsrmCandidates, type OsrmRoute } from "./routing.osrm";
-import { fetchWeather } from "./weather.openmeteo";
+import { fetchWeather, fetchWeatherAlong } from "./weather.openmeteo";
 
 export const OSRM_NO_TOKEN_WARNING =
   "Sin token de Mapbox en el servidor. La distancia usa OpenStreetMap (OSRM) y puede diferir de Google Maps.";
@@ -197,6 +197,9 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
   readonly id = "open-meteo";
   current(point: LatLon) {
     return fetchWeather(point);
+  }
+  along(points: LatLon[], hours: number) {
+    return fetchWeatherAlong(points, hours);
   }
 }
 

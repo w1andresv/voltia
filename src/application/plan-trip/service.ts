@@ -45,6 +45,8 @@ import { buildEnergyShadowReport, formatEnergyShadowReport } from "./energy-shad
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
 import { verifyPlanDetailed } from "./verify-plan";
 import { withDeadline } from "./deadline";
+import { weatherPointsAlong } from "@/domain/ev/engines/energy/weather-field";
+import type { WeatherAlongRoute } from "@/domain/ev/contracts/weather";
 import type { PlannerRunStats } from "@/domain/plan/shared";
 import { checkStopDetails, offlineStopText } from "./stop-details";
 import { formatStationFunnel, stationFunnel } from "./station-funnel";
@@ -186,11 +188,19 @@ export class EVRoutePlanningService {
     const rawRoutes = routed.routes;
     warnings.push(...routed.warnings);
     const mid = rawRoutes[0]?.samples[Math.floor((rawRoutes[0].samples.length || 1) / 2)];
-    const [routes, snapshot, dataset] = await Promise.all([
+    const departAt = (this.deps.clock ?? (() => new Date()))();
+    const [routes, snapshot, dataset, alongList] = await Promise.all([
       Promise.all(rawRoutes.map((route) => this.withElevation(route, elevationReports))),
       mid && weather ? weather.current(mid) : Promise.resolve(null),
       stations.getDataset(),
+      // Clima por hora en varios puntos de cada ruta (solo se usa con la energía v2).
+      Promise.all(rawRoutes.map((route) => this.weatherAlongRoute(route, departAt))),
     ]);
+    const weatherAlong: Record<string, WeatherAlongRoute> = {};
+    rawRoutes.forEach((route, i) => {
+      const along = alongList[i];
+      if (along) weatherAlong[route.id] = along;
+    });
     lap("data");
     logElevation(elevationReports, routes);
     // Error de datos (F2b): ninguna fuente de elevación respondió para una ruta de más de 5 km.
@@ -236,6 +246,7 @@ export class EVRoutePlanningService {
       origin: data.origin,
       destination: data.destination,
       ...(detours ? { detours } : {}),
+      ...(Object.keys(weatherAlong).length ? { weatherAlong } : {}),
       ...(elevationUnavailable ? { dataQuality: { elevation: "unavailable" as const } } : {}),
       params,
       stats: plannerStats,
@@ -390,6 +401,8 @@ export class EVRoutePlanningService {
       stationsVersion: dataset.version,
       ...(elevationUnavailable ? { dataQuality: { elevation: "unavailable" as const } } : {}),
       ...(detours ? { detours } : {}),
+      // Solo con la energía v2: la v1 no lo usa y el snapshot no carga datos de más.
+      ...(energy === "v2" && Object.keys(weatherAlong).length ? { weatherAlong } : {}),
     };
     const snapshotId = snapshotHash(geoBody);
     return {
@@ -460,6 +473,7 @@ export class EVRoutePlanningService {
       routes: snapshot.routes,
       chargers: snapshot.chargers,
       weather: snapshot.weather,
+      ...(snapshot.weatherAlong ? { weatherAlong: snapshot.weatherAlong } : {}),
       origin: request.origin,
       destination: request.destination,
       detours: snapshot.detours,
@@ -500,6 +514,34 @@ export class EVRoutePlanningService {
         verification: out.plan.verification,
       },
     };
+  }
+
+  /**
+   * Clima por hora en varios puntos de la ruta (M3.1). Solo si hace falta (energía v2 o sombra
+   * de energía) y el proveedor lo tiene; si no responde, el plan sigue con el clima de un punto.
+   */
+  private async weatherAlongRoute(
+    route: RawRoute,
+    departAt: Date,
+  ): Promise<WeatherAlongRoute | undefined> {
+    const { weather, params } = this.deps;
+    // Solo la energía v2 lo usa (también en su modo sombra).
+    const energyV2 = this.deps.energyMode === "v2" || this.deps.energyMode === "shadow";
+    if (!weather?.along || !energyV2) return undefined;
+    const cfg = params.weather.alongRoute;
+    const points = weatherPointsAlong(route, cfg.spacingKm, cfg.maxPoints);
+    if (!points.length) return undefined;
+    try {
+      const series = await weather.along(points, cfg.hours);
+      if (!series || series.length !== points.length) return undefined;
+      return {
+        departIso: departAt.toISOString(),
+        source: weather.id,
+        points: series.map((s, i) => ({ ...s, km: points[i]!.km })),
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   /** Elevación de una ruta. Si ningún proveedor responde, la ruta sigue plana y el plan lo avisa. */

@@ -1,6 +1,7 @@
 import type { RoadMix, RoadTier } from "./road-hierarchy";
 import type { FeasibilityStatus, InfeasibilityReason } from "./ev/engines/feasibility/engine";
 import type { DataSource } from "./ev/core/provenance";
+import type { WeatherAlongRoute } from "./ev/contracts/weather";
 import type {
   VehicleShape,
   PlaceShape,
@@ -460,6 +461,11 @@ export interface GeoBundle {
   energyEngine?: "legacy" | "v2";
   /** Desvíos medidos por vía, por `ruta|estación` (F4, DETOUR_SOURCE=matrix). */
   detours?: Record<string, { distanceKm: number; durationMin: number }>;
+  /**
+   * Clima por hora en varios puntos de cada ruta, por id de ruta (M3.1). Con él la energía v2
+   * usa el clima de cada tramo y de la hora en que se pasa; sin él, el clima de un punto.
+   */
+  weatherAlong?: Record<string, WeatherAlongRoute>;
   /**
    * Calidad de los datos (solo si algo faltó, F2b). `elevation: "unavailable"`:
    * ninguna fuente de elevación respondió y alguna ruta quedó plana; es un error
