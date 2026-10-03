@@ -1,7 +1,7 @@
 import type { ModelParameters } from "../ev/core/params";
 import { toTripConfiguration } from "../ev/core/trip-config";
 import { kwhToSocPct } from "../ev/core/units";
-import { FLAT_CURVE, chargeTimeMinutes, lerpFactor } from "../ev/engines/charging/curve";
+import { FLAT_CURVE, chargeTimeTable, type ChargeTimeTable } from "../ev/engines/charging/curve";
 import {
   planCharging,
   requiredInitialCharge,
@@ -37,71 +37,37 @@ import {
   type StopsChoice,
 } from "./shared";
 
-/** Tiempos de carga de una estación sobre la malla de integración. */
-interface ChargeTable {
-  /** Minutos acumulados de carga desde 0 hasta `soc`, sin los de conexión (creciente). */
-  at: PlannerNode["chargeAt"];
-  /** Minutos fijos de conexión por parada. */
-  overhead: number;
-  /** Minutos solo cargando, sin los de conexión. */
-  chargingMinutes: (from: number, to: number) => number;
-  /** SOC al que se llega cargando `min` minutos desde `from`, cuyo `at` ya se calculó (100 si no alcanza). */
-  socAfter: (from: number, atFrom: number, min: number) => number;
-}
+/** Tiempos de carga de una estación: la tabla única del motor de carga (M4.2, ADR-0026). */
+type ChargeTable = ChargeTimeTable;
 
-/**
- * Minutos de carga por estación, precalculados sobre la malla de integración:
- * la programación dinámica los consulta miles de veces.
- */
+/** La tabla de tiempos de una forma de cargar: pico y curva del vehículo, potencia de la toma y pérdidas. */
 function chargeTable(
   plug: RoutePlug,
   vehicle: Vehicle,
   capacityKwh: number,
   params: ModelParameters,
 ): ChargeTable {
-  const step = params.charging.integrationStepPct;
-  const overhead = params.charging.connectionOverheadMin.value;
-  const peak = plug.dc ? vehicle.dcMaxKw : vehicle.acMaxKw;
-  const curve = plug.dc ? vehicle.chargeCurve : FLAT_CURVE;
-  const n = Math.round(100 / step);
-  const cum = new Float64Array(n + 1);
-  const energy = (capacityKwh * step) / 100;
-  for (let k = 0; k < n; k++) {
-    const power = Math.min(peak * lerpFactor(curve, (k + 0.5) * step), plug.powerKw);
-    cum[k + 1] = cum[k]! + (energy / Math.max(power, 1.5)) * 60;
-  }
-  const at = (soc: number) => {
-    const x = Math.max(0, Math.min(100, soc)) / step;
-    const k = Math.min(n - 1, Math.floor(x));
-    return cum[k]! + (cum[k + 1]! - cum[k]!) * (x - k);
-  };
-  // Índice de salto sobre `cum` (que crece): para cada décima parte del tiempo total, el
-  // último tramo que empieza antes de ella. Encuentra el mismo tramo que una búsqueda
-  // binaria con 1–3 comparaciones: se llama una vez por llegada a una estación.
-  const total = cum[n]!;
-  const jump = new Int32Array(n + 1);
-  for (let g = 0, lo = 0; g <= n; g++) {
-    const boundary = (g * total) / n;
-    while (lo + 1 < n && cum[lo + 1]! < boundary) lo++;
-    jump[g] = lo;
-  }
-  const socAfter = (from: number, atFrom: number, min: number): number => {
-    if (min <= 0) return from;
-    const target = atFrom + min;
-    if (target >= total) return 100;
-    // El último tramo cuyo inicio está antes del tiempo pedido (cum crece).
-    let lo = jump[Math.min(n, Math.floor((target / total) * n))]!;
-    while (lo + 1 < n && cum[lo + 1]! < target) lo++;
-    const hi = lo + 1;
-    const x = lo + (target - cum[lo]!) / (cum[hi]! - cum[lo]!);
-    return Math.max(from, x * step);
-  };
-  return {
-    at,
-    overhead,
-    chargingMinutes: (from, to) => (to > from ? at(to) - at(from) : 0),
-    socAfter,
-  };
+  const eff = params.charging.efficiency.value;
+  return chargeTimeTable({
+    capacityKwh,
+    peakKw: plug.dc ? vehicle.dcMaxKw : vehicle.acMaxKw,
+    curve: plug.dc ? vehicle.chargeCurve : FLAT_CURVE,
+    plugKw: plug.powerKw,
+    efficiency: plug.dc ? eff.dc : eff.ac,
+    params: params.charging,
+  });
+}
+
+/**
+ * Minutos de cargar con una forma de cargar, con los mismos tiempos que la programación
+ * dinámica (para el resumen de adaptadores de `buildPlan`).
+ */
+export function v2PlugMinutes(
+  vehicle: Vehicle,
+  capacityKwh: number,
+  params: ModelParameters,
+): (plug: RoutePlug, from: number, to: number) => number {
+  return (plug, from, to) => chargeTable(plug, vehicle, capacityKwh, params).minutes(from, to);
 }
 
 /** Pisos con que se planifica: estrictos (el margen) o flexibles (ADR-0019). */
@@ -229,7 +195,7 @@ function prepareNodes(args: StopsArgs): Prepared {
       detourMin: c.detourMinutes ?? detourMinutesOf(detourKm, params),
       waitMin: c.availability === "occupied" ? params.planner.occupiedWaitMin.value : 0,
       chargeAt: table.at,
-      connectionMin: table.overhead,
+      connectionMin: table.overheadMin,
       fast: plugs[i]!.dc,
       ...(minSession > 0
         ? { minSessionSoc: (arrive: number, atArrive: number) => table.socAfter(arrive, atArrive, minSession) }
@@ -440,15 +406,10 @@ function planStopsWith(args: StopsArgs, prep: Prepared, reserves: Reserves): Sto
     const aboveRouteCap =
       stretched && p.departSoc > input.maxChargePct + tolerance ? stretched : undefined;
     const options: ChargeChoice[] = routePlugs(charger, vehicle).map((o) => {
-      const minutes = chargeTimeMinutes(
-        cap,
-        p.arriveSoc,
-        p.departSoc,
-        o.dc ? vehicle.dcMaxKw : vehicle.acMaxKw,
-        o.powerKw,
-        o.dc ? vehicle.chargeCurve : FLAT_CURVE,
-      );
+      // Los mismos minutos que optimizó la programación dinámica (una sola función de tiempo).
+      const minutes = chargeTable(o, vehicle, cap, params).minutes(p.arriveSoc, p.departSoc);
       const energyAddedKwh = ((p.departSoc - p.arriveSoc) / 100) * cap;
+      const eff = params.charging.efficiency.value;
       return {
         mode: o.adapter ? ("adapter" as const) : o.dc ? ("direct" as const) : ("ac" as const),
         socket: o.socket,
@@ -459,6 +420,8 @@ function planStopsWith(args: StopsArgs, prep: Prepared, reserves: Reserves): Sto
         minDepartSoc,
         departSoc: p.departSoc,
         energyAddedKwh,
+        // Lo que se paga: la batería recibe `eficiencia` de lo que entrega el cargador.
+        energyFromGridKwh: energyAddedKwh / (o.dc ? eff.dc : eff.ac),
         chargeMinutes: minutes,
         rangeGainKm: rangeFromEnergy(vehicle, energyAddedKwh),
         reachesNext: true,
@@ -474,6 +437,7 @@ function planStopsWith(args: StopsArgs, prep: Prepared, reserves: Reserves): Sto
       minDepartSoc,
       chargeMinutes: chosenOption.chargeMinutes,
       energyAddedKwh: chosenOption.energyAddedKwh,
+      energyFromGridKwh: chosenOption.energyFromGridKwh,
       bestSocket: plug.socket,
       adapter: plug.adapter ?? undefined,
       alternative: acOpt

@@ -116,8 +116,9 @@ function ChargeOptions({ stop }: { stop: ChargeStop }) {
               sales al {formatPct(option.departSoc)}
             </div>
             <div>
-              {formatKwh(option.energyAddedKwh)} · {formatMinutes(option.chargeMinutes)} · alcance{" "}
-              {formatKm(option.rangeGainKm)}
+              {formatKwh(option.energyAddedKwh)}
+              {option.energyFromGridKwh ? ` (se pagan ${formatKwh(option.energyFromGridKwh)})` : ""} ·{" "}
+              {formatMinutes(option.chargeMinutes)} · alcance {formatKm(option.rangeGainKm)}
               {option.reachesNext
                 ? " · sigue al siguiente punto"
                 : " · no cubre el siguiente tramo"}
@@ -167,6 +168,11 @@ function ChargeOptions({ stop }: { stop: ChargeStop }) {
         {formatKwh(stop.energyAddedKwh)} · {formatKw(stop.chargeKw)} ·{" "}
         {formatMinutes(stop.chargeMinutes)} · alcance {formatKm(stop.rangeGainKm)}
       </div>
+      {stop.energyFromGridKwh ? (
+        <div className="text-muted">
+          Se pagan {formatKwh(stop.energyFromGridKwh)} del cargador (con las pérdidas de carga)
+        </div>
+      ) : null}
     </div>
   );
 }

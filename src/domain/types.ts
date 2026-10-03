@@ -131,6 +131,8 @@ export interface ChargeChoice {
   minDepartSoc: number;
   departSoc: number;
   energyAddedKwh: number;
+  /** Planificador v2 (M4.2): lo que se paga, con las pérdidas de carga. Ausente en el v1. */
+  energyFromGridKwh?: number;
   chargeMinutes: number;
   rangeGainKm: number;
   reachesNext: boolean;
@@ -189,6 +191,8 @@ export interface ChargeStop {
   belowMarginNext?: true;
   chargeMinutes: number;
   energyAddedKwh: number;
+  /** Planificador v2 (M4.2): lo que se paga, con las pérdidas de carga (kWh del cargador). Ausente en el v1. */
+  energyFromGridKwh?: number;
   bestSocket: ChargerSocket;
   /** Presente cuando la opción elegida usa un adaptador de la lista verificada. */
   adapter?: { from: ConnectorType; to: ConnectorType };

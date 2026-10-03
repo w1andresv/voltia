@@ -10,7 +10,7 @@ import { adapterSummary } from "./plan/presentation";
 import { planAssumptions, planDataQuality } from "./plan/quality";
 import { placeChargers, stopEvents, type PlannerRunStats } from "./plan/shared";
 import { planStopsLegacy } from "./plan/stops-v1";
-import { planStopsV2 } from "./plan/stops-v2";
+import { planStopsV2, v2PlugMinutes } from "./plan/stops-v2";
 import type {
   Charger,
   ItineraryNode,
@@ -122,7 +122,12 @@ export function buildPlan(args: {
   const stops = chosen.stops.map((st) => ({
     ...st,
     nextLabel: st.nextLabel || destination.label,
-    adapterNeeded: adapterSummary(st, vehicle, cap),
+    adapterNeeded: adapterSummary(
+      st,
+      vehicle,
+      cap,
+      args.engine === "v2" ? v2PlugMinutes(vehicle, cap, params) : undefined,
+    ),
   }));
 
   // La curva de batería sale del SOCEngine: regeneración recortada según el SOC

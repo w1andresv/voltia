@@ -182,9 +182,27 @@ describe("Bucaramanga → Bogotá, MG S5 EV al 100 %, motor v2 con estaciones de
     // Carga rápida: a Tunja se llega con 10 de margen sobre el piso.
     expect(tunja!.arriveSoc).toBeGreaterThanOrEqual(p.safetyPct + 10 - 0.5);
     expect(santana!.fastChargeExtraPct).toBeGreaterThan(0);
-    // En la última parada no hay extra de carga rápida; lo que carga de más es la sesión mínima de 10 min.
+    // En la última parada no hay extra de carga rápida. Con las pérdidas de carga (M4.2) la carga
+    // necesaria ya dura más que la sesión mínima de 10 min, así que casi no sobra nada.
     expect(tunja!.fastChargeExtraPct).toBeUndefined();
-    expect(tunja!.sessionExtraPct).toBeGreaterThan(0);
+    expect(tunja!.departSoc - tunja!.minDepartSoc).toBeLessThan(3);
     expect(p.arrivalSoc).toBeGreaterThanOrEqual(p.safetyPct - 0.5);
+  });
+
+  it("sin pérdidas de carga, lo que carga de más en la última parada es la sesión mínima de 10 min", () => {
+    const p = plan(STATIONS, {
+      ...MODEL_PARAMETERS,
+      charging: {
+        ...MODEL_PARAMETERS.charging,
+        efficiency: { ...MODEL_PARAMETERS.charging.efficiency, value: { dc: 1, ac: 1 } },
+      },
+      planner: {
+        ...MODEL_PARAMETERS.planner,
+        stretchChargeSocPct: { ...MODEL_PARAMETERS.planner.stretchChargeSocPct, value: 80 },
+      },
+    });
+    const tunja = p.stops[1]!;
+    expect(tunja.fastChargeExtraPct).toBeUndefined();
+    expect(tunja.sessionExtraPct).toBeGreaterThan(0);
   });
 });

@@ -72,6 +72,15 @@ export function planAssumptions(args: {
       source: overhead.source,
     });
   }
+  if (stops.some((s) => s.energyFromGridKwh != null)) {
+    const eff = params.charging.efficiency;
+    out.push({
+      parameter: "charging.efficiency",
+      value: eff.value,
+      source: eff.source,
+      ...(eff.reference ? { reference: eff.reference } : {}),
+    });
+  }
   if (stops.some((s) => s.detourSource !== "calculated")) {
     const factor = params.corridor.detourRoadFactor;
     out.push({

@@ -751,7 +751,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
   ],
   "plans": [
     {
-      "arrivalSoc": 14.2,
+      "arrivalSoc": 13.2,
       "departureCharge": undefined,
       "distanceKm": 130.6,
       "energyKwh": 20.2,
@@ -759,17 +759,17 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
       "id": "route-0",
       "initialSoc": 35,
       "label": "Ruta A",
-      "minSoc": 14.2,
+      "minSoc": 13.2,
       "noTolls": undefined,
       "stops": [
-        "s20 33.9→56 15 min",
+        "s20 33.9→55 15 min",
       ],
       "totalMinutes": 158,
       "verification": "verified en 1",
       "via": "Ruta 45A, Ruta 62",
     },
     {
-      "arrivalSoc": 14.2,
+      "arrivalSoc": 13.2,
       "departureCharge": undefined,
       "distanceKm": 128.7,
       "energyKwh": 20.1,
@@ -777,10 +777,10 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
       "id": "route-1",
       "initialSoc": 35,
       "label": "Ruta B",
-      "minSoc": 14.2,
+      "minSoc": 13.2,
       "noTolls": undefined,
       "stops": [
-        "s20 34→56 15 min",
+        "s20 34→55 15 min",
       ],
       "totalMinutes": 159,
       "via": "Ruta 45A, Ruta 62",
@@ -856,9 +856,9 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
       "minSoc": 20.9,
       "noTolls": undefined,
       "stops": [
-        "s20 20.9→63 25 min",
+        "s20 20.9→63 26 min",
       ],
-      "totalMinutes": 168,
+      "totalMinutes": 169,
       "verification": "verified en 1",
       "via": "Ruta 45A, Ruta 62",
     },
@@ -874,9 +874,9 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
       "minSoc": 20,
       "noTolls": undefined,
       "stops": [
-        "s20 20→62 25 min",
+        "s20 20→62 26 min",
       ],
-      "totalMinutes": 168,
+      "totalMinutes": 169,
       "via": "Ruta 45A, Ruta 62",
     },
     {

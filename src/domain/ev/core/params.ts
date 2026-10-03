@@ -73,6 +73,14 @@ export interface ModelParameters {
     connectionOverheadMin: SourcedValue<number>;
     /** Paso de la integración de la curva de carga, en puntos de SOC. */
     integrationStepPct: number;
+    /**
+     * Pérdidas de carga (M4.2, ADR-0026), planificador v2: la fracción de la energía del
+     * cargador que llega a la batería. En AC pasa por el cargador a bordo (~88 %); en DC
+     * las pérdidas son menores (~95 %). La potencia que carga la batería con una toma que
+     * limita la estación es `potencia × eficiencia`; la curva del vehículo ya es de la
+     * batería y no se toca. Los kWh que se pagan son los de la batería ÷ la eficiencia. 1 = sin pérdidas.
+     */
+    efficiency: SourcedValue<{ dc: number; ac: number }>;
   };
   planner: {
     /** Tope de seguridad de paradas por ruta. */
@@ -258,6 +266,11 @@ export const MODEL_PARAMETERS: ModelParameters = {
         "Estacionar, app, conectar, desconectar y salir. Decisión del producto; calibrar con paradas reales.",
     }),
     integrationStepPct: 0.5,
+    efficiency: sourced({ dc: 0.95, ac: 0.88 }, "estimated", {
+      reference: "docs/adr/0026-perdidas-de-carga.md",
+      notes:
+        "Valores de partida a confirmar por el dueño del producto: AC por el cargador a bordo, DC por la conversión y el calor. Calibrar con cargas reales (kWh del cargador frente a SOC ganado).",
+    }),
   },
   planner: {
     maxStops: 7,
