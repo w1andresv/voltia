@@ -41,10 +41,18 @@ export interface PlannerNode {
 export interface PlannerInput {
   samples: EnergySample[];
   initialSocPct: number;
-  /** Piso de SOC en todo punto, también al llegar a una estación. */
+  /** Piso de SOC en todo punto, también al llegar a una estación: nunca se baja de aquí. */
   floorPct: number;
-  /** SOC mínimo al destino. */
+  /** SOC mínimo al destino: nunca se llega con menos. */
   destinationReservePct: number;
+  /**
+   * Margen flexible (ADR-0019): el SOC objetivo, por encima del piso y de la
+   * reserva al destino. Bajar de `pct` se permite, pero al comparar planes cuesta
+   * `penaltyMinPerPct` minutos por punto, medido en el punto más bajo de cada
+   * tramo (la llegada al destino incluida). Así solo se baja si se ahorra una
+   * parada o bastante tiempo. Sin él, el piso es el objetivo.
+   */
+  softFloor?: { pct: number; penaltyMinPerPct: number };
   /** Tope de carga en ruta. */
   maxChargePct: number;
   /**
@@ -62,7 +70,8 @@ export interface PlannerInput {
   tolerancePct: number;
   /**
    * Al salir de una estación rápida hacia otra estación, ese tramo debe terminar
-   * con `extraPct` puntos de más sobre el piso: se carga eso más de lo necesario
+   * con `extraPct` puntos de más sobre el objetivo (`softFloor`, o el piso si no
+   * hay): se carga eso más de lo necesario
    * para no llegar justo a la siguiente parada. No aplica al tramo final (no hay
    * otra parada que cuidar: solo se pide la reserva al destino), ni si ya se
    * sale con `maxSocPct` o más (ni con el tope de carga). Ningún plan viable
@@ -102,6 +111,8 @@ export interface PlannerResult {
 interface Label {
   stops: number;
   minutes: number;
+  /** Minutos equivalentes por bajar del margen flexible (no son tiempo real). */
+  penalty: number;
   detourKm: number;
   detourKwh: number;
   minSoc: number;
@@ -116,23 +127,28 @@ function diff(a: number, b: number, eps = 1e-6): number {
   return Math.abs(a - b) > eps ? a - b : 0;
 }
 
-/** < 0 si `a` es mejor que `b` para la estrategia. */
-export function compareLabels(
-  a: Pick<Label, "stops" | "minutes" | "detourKm" | "detourKwh" | "minSoc">,
-  b: Pick<Label, "stops" | "minutes" | "detourKm" | "detourKwh" | "minSoc">,
-  objective: PlanningMode,
-): number {
+type Comparable = Pick<Label, "stops" | "minutes" | "detourKm" | "detourKwh" | "minSoc"> & {
+  penalty?: number;
+};
+
+/**
+ * < 0 si `a` es mejor que `b` para la estrategia. El tiempo que se compara
+ * incluye los minutos equivalentes por bajar del margen flexible (ADR-0019).
+ */
+export function compareLabels(a: Comparable, b: Comparable, objective: PlanningMode): number {
+  const ta = a.minutes + (a.penalty ?? 0);
+  const tb = b.minutes + (b.penalty ?? 0);
   switch (objective) {
     case "fewer_stops":
-      return diff(a.stops, b.stops) || diff(a.minutes, b.minutes) || diff(a.detourKm, b.detourKm) || diff(b.minSoc, a.minSoc);
+      return diff(a.stops, b.stops) || diff(ta, tb) || diff(a.detourKm, b.detourKm) || diff(b.minSoc, a.minSoc);
     case "efficient":
-      return diff(a.detourKwh, b.detourKwh) || diff(a.stops, b.stops) || diff(a.minutes, b.minutes);
+      return diff(a.detourKwh, b.detourKwh) || diff(a.stops, b.stops) || diff(ta, tb);
     case "safer":
-      return diff(b.minSoc, a.minSoc) || diff(a.stops, b.stops) || diff(a.minutes, b.minutes);
+      return diff(b.minSoc, a.minSoc) || diff(a.stops, b.stops) || diff(ta, tb);
     case "fastest":
     case "custom":
     default:
-      return diff(a.minutes, b.minutes) || diff(a.stops, b.stops) || diff(a.detourKm, b.detourKm) || diff(b.minSoc, a.minSoc);
+      return diff(ta, tb) || diff(a.stops, b.stops) || diff(a.detourKm, b.detourKm) || diff(b.minSoc, a.minSoc);
   }
 }
 
@@ -158,6 +174,15 @@ export function planCharging(input: PlannerInput): PlannerResult {
   let destinationShort = false;
   let best: (Label & { arrival: number; lastNode: number; lastD: number }) | null = null;
 
+  const soft = input.softFloor;
+  /** Minutos equivalentes por el punto más bajo `low` de un tramo, si queda bajo el margen flexible. */
+  const penaltyOf = (low: number): number =>
+    soft && low < soft.pct - input.tolerancePct ? soft.penaltyMinPerPct * (soft.pct - low) : 0;
+  /** El extra de carga rápida se mide sobre el objetivo, no sobre el piso. */
+  const target = soft ? Math.max(floor, soft.pct - input.tolerancePct) : floor;
+  /** Con qué SOC mínimo debe terminar un tramo que lleva `margin` puntos de extra de carga rápida. */
+  const lowestFor = (margin: number): number => (margin > 0 ? target + margin : floor);
+
   const buffer = input.fastChargeBuffer;
   const bufferCap = buffer ? Math.min(buffer.maxSocPct, input.maxChargePct) : 0;
   /** Puntos de más con que debe llegar a la siguiente estación el tramo que sale de `fromNode` con `startSoc`. */
@@ -166,12 +191,12 @@ export function planCharging(input: PlannerInput): PlannerResult {
     return startSoc < bufferCap - input.tolerancePct ? buffer.extraPct : 0;
   };
 
-  const cand: Pick<Label, "stops" | "minutes" | "detourKm" | "detourKwh" | "minSoc"> = { stops: 0, minutes: 0, detourKm: 0, detourKwh: 0, minSoc: 0 };
+  const cand: Pick<Label, "stops" | "minutes" | "penalty" | "detourKm" | "detourKwh" | "minSoc"> = { stops: 0, minutes: 0, penalty: 0, detourKm: 0, detourKwh: 0, minSoc: 0 };
   const reach = (j: number, soc: number, lowest: number, margin: number, fromNode: number, fromD: number, base: Label) => {
     const node = nodes[j]!;
     const arrive = soc - node.detourPct;
     const low = Math.min(lowest, arrive);
-    if (low < floor + margin) return;
+    if (low < lowestFor(margin)) return;
     reachable.add(j);
     let firstK = Math.floor(arrive / grid + EPS) + 1;
     // Sesión mínima: si se para, se carga al menos ese tiempo, o hasta el tope en ruta.
@@ -183,6 +208,7 @@ export function planCharging(input: PlannerInput): PlannerResult {
     cand.detourKm = base.detourKm + node.detourKm;
     cand.detourKwh = base.detourKwh + node.detourKwh;
     cand.minSoc = Math.min(base.minSoc, low);
+    cand.penalty = base.penalty + penaltyOf(low);
     const fixedMin = base.minutes + node.detourMin + node.waitMin;
     const row = labels[j]!;
     for (let k = Math.max(0, firstK); k <= levels; k++) {
@@ -196,7 +222,8 @@ export function planCharging(input: PlannerInput): PlannerResult {
   const atDestination = (soc: number, lowest: number, fromNode: number, fromD: number, base: Label) => {
     // Al destino no se exige el margen de carga rápida: solo la reserva.
     if (soc >= reserve) {
-      const final = { ...base, minSoc: Math.min(base.minSoc, lowest), arrival: soc, lastNode: fromNode, lastD: fromD };
+      const low = Math.min(lowest, soc);
+      const final = { ...base, minSoc: Math.min(base.minSoc, low), penalty: base.penalty + penaltyOf(low), arrival: soc, lastNode: fromNode, lastD: fromD };
       if (!best || compareLabels(final, best, objective) < 0) best = final;
     } else {
       destinationShort = true;
@@ -245,7 +272,7 @@ export function planCharging(input: PlannerInput): PlannerResult {
         atDestination(soc, lowest, fromNode, fromD, base);
         return true;
       }
-      if (lowest < floor + margin) continue;
+      if (lowest < lowestFor(margin)) continue;
       for (const j of byIdx.get(pos) ?? []) reach(j, soc, lowest, margin, fromNode, fromD, base);
     }
     return true;
@@ -258,7 +285,7 @@ export function planCharging(input: PlannerInput): PlannerResult {
       if (lowest < floor) return false;
       if (idx > furthestIdx) furthestIdx = idx;
       // Con el margen de carga rápida se sigue recorriendo (para `furthestIdx`), pero solo se acepta lo que lo cumple.
-      const withMargin = lowest >= floor + margin;
+      const withMargin = lowest >= lowestFor(margin);
       if (idx === destIdx) {
         atDestination(soc, lowest, fromNode, fromD, base);
         return false;
@@ -269,7 +296,7 @@ export function planCharging(input: PlannerInput): PlannerResult {
     });
   };
 
-  const origin: Label = { stops: 0, minutes: 0, detourKm: 0, detourKwh: 0, minSoc: input.initialSocPct, arrive: input.initialSocPct, prevNode: -1, prevD: -1 };
+  const origin: Label = { stops: 0, minutes: 0, penalty: 0, detourKm: 0, detourKwh: 0, minSoc: input.initialSocPct, arrive: input.initialSocPct, prevNode: -1, prevD: -1 };
   expand(-1, -1, 0, input.initialSocPct, origin);
   for (let n = 0; n < nodes.length; n++) {
     for (let k = 0; k <= levels; k++) {

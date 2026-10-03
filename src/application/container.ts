@@ -6,13 +6,13 @@ import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import type { GeocodingProvider } from "@/domain/ports/geocoding";
 import { getEnv } from "@/infrastructure/config/env";
 import {
+  MapboxGeocodingProvider,
   MapboxMatrixProvider,
   MapboxRoutingProvider,
   MapboxTerrainElevationProvider,
   OpenMeteoElevationProvider,
   OpenMeteoWeatherProvider,
   OsrmRoutingProvider,
-  PhotonGeocodingProvider,
 } from "@/infrastructure/providers/adapters";
 import { mapboxServerToken } from "@/infrastructure/providers/routing.mapbox";
 import { DatasetStationCatalog } from "@/infrastructure/stations/catalog.adapter";
@@ -156,5 +156,5 @@ export function createPlanningService(
 }
 
 export function createGeocoder(): GeocodingProvider {
-  return new PhotonGeocodingProvider();
+  return new MapboxGeocodingProvider();
 }

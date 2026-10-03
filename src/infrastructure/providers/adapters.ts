@@ -23,7 +23,8 @@ import {
 import { fetchElevations } from "./elevation.openmeteo";
 import { MAPBOX_MATRIX_MAX_COORDINATES, fetchMapboxMatrix } from "./matrix.mapbox";
 import type { DistanceMatrixProvider } from "@/domain/ports/distance-matrix";
-import { reversePlace, searchPlaces } from "./geocode.photon";
+import { searchPlaces } from "./geocode.mapbox";
+import { reversePlace } from "./geocode.photon";
 import {
   MapboxRoutingError,
   fetchMapboxCandidates,
@@ -191,7 +192,8 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
   }
 }
 
-export class PhotonGeocodingProvider implements GeocodingProvider {
+/** Búsqueda con Mapbox; el nombre del punto que se toca en el mapa sigue con Photon. */
+export class MapboxGeocodingProvider implements GeocodingProvider {
   search(query: string, near?: LatLon) {
     return searchPlaces(query, near);
   }

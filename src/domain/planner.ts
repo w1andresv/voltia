@@ -1,6 +1,6 @@
 import { annotateEnergy, energyMode, STYLE_SPEED_FACTOR } from "./energy";
 import { MODEL_PARAMETERS, type ModelParameters } from "./ev/core/params";
-import { reserveSocPct } from "./ev/core/trip-config";
+import { reserveSocPct, toTripConfiguration } from "./ev/core/trip-config";
 import type { MeasuredDetour } from "./ev/contracts/detour";
 import { detourEnergyV2, energyProfileForRoute, type EnergyEngine } from "./ev/energy-v2";
 import { batteryDepletion } from "./ev/engines/soc/depletion";
@@ -143,8 +143,23 @@ export function buildPlan(args: {
   const minSoc = sim.minSoc;
   const depletion = batteryDepletion(samples);
   const remainingKwh = Math.max(0, (arrivalSoc / 100) * vehicle.batteryKwh);
+  // Con el v2 el margen es flexible (ADR-0019): si su plan es viable sin paradas ni
+  // carga previa, se llega sin recargar aunque sea unos puntos bajo el margen.
   const canArriveWithoutCharge =
-    stops.length === 0 && arrivalSoc >= safety - tolerance && minSoc >= safety - tolerance;
+    args.engine === "v2"
+      ? feasible && stops.length === 0 && !departureCharge
+      : stops.length === 0 && arrivalSoc >= safety - tolerance && minSoc >= safety - tolerance;
+  const lowestSoc = Math.min(minSoc, arrivalSoc);
+  const belowMargin =
+    args.engine === "v2" && feasible && lowestSoc < safety - 0.05
+      ? {
+          lowestSoc,
+          points: safety - lowestSoc,
+          // El piso del planificador: el margen flexible, o 5 % en ruta con "permitir bajar del margen".
+          floorPct: toTripConfiguration(vehicle, conditions, weather, params).minimumSocPercent,
+          ...(chosen.belowMarginReason ? { reason: chosen.belowMarginReason } : {}),
+        }
+      : undefined;
 
   const itinerary: ItineraryNode[] = [
     {
@@ -214,6 +229,7 @@ export function buildPlan(args: {
     minSoc,
     safetyPct: safety,
     safetyMarginPct: arrivalSoc - safety,
+    ...(belowMargin ? { belowMargin } : {}),
     canArriveWithoutCharge,
     feasible,
     infeasibleReason: reason,

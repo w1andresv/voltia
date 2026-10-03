@@ -180,6 +180,12 @@ export interface ChargeStop {
    * tiene menos paradas; "only-way": sin eso no hay plan viable.
    */
   aboveRouteCap?: "fewer-stops" | "only-way";
+  /**
+   * Planificador v2 (ADR-0019): el tramo que sigue baja unos puntos del margen
+   * (ver `RoutePlan.belowMargin`), así que `minDepartSoc` es lo que se carga y
+   * no lo que pediría el margen completo. Ausente si el tramo lo respeta.
+   */
+  belowMarginNext?: true;
   chargeMinutes: number;
   energyAddedKwh: number;
   bestSocket: ChargerSocket;
@@ -292,6 +298,14 @@ export interface ItineraryNode {
   charge?: ChargeStop;
 }
 
+/**
+ * Por qué el plan v2 baja del margen de seguridad (ADR-0019): "only-way",
+ * respetándolo no hay plan viable; "no-precharge", no hay que cargar antes de
+ * salir; "fewer-stops", tiene menos paradas; "faster", las mismas paradas pero
+ * bastante menos tiempo cargando.
+ */
+export type BelowMarginReason = "only-way" | "no-precharge" | "fewer-stops" | "faster";
+
 export interface RoutePlan {
   id: string;
   label: string;
@@ -325,6 +339,19 @@ export interface RoutePlan {
   minSoc: number;
   safetyPct: number;
   safetyMarginPct: number;
+  /**
+   * Planificador v2 (ADR-0019): el plan baja del margen de seguridad. `lowestSoc`
+   * es su punto más bajo (en ruta o al llegar), `points` cuánto queda bajo el
+   * margen, `floorPct` lo más bajo que el planificador permite y `reason` qué se
+   * gana con eso; sin `reason`, baja porque el usuario lo permitió en ruta
+   * (`TripConditions.allowBelowSafety`). Ausente si el plan respeta el margen.
+   */
+  belowMargin?: {
+    lowestSoc: number;
+    points: number;
+    floorPct: number;
+    reason?: BelowMarginReason;
+  };
   canArriveWithoutCharge: boolean;
   feasible: boolean;
   infeasibleReason?: string;

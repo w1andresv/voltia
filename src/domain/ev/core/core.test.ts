@@ -3,7 +3,7 @@ import type { TripConditions, Vehicle } from "../../types";
 import { DEFAULT_CURVE } from "../../charging";
 import { MODEL_PARAMETERS } from "./params";
 import { isEstimated, sourced } from "./provenance";
-import { reserveSocPct, toTripConfiguration } from "./trip-config";
+import { flexibleReserveSocPct, reserveSocPct, toTripConfiguration } from "./trip-config";
 import {
   G_MS2,
   hoursToMinutes,
@@ -129,8 +129,9 @@ describe("toTripConfiguration", () => {
       ambient: { temperatureC: null, temperatureSource: "none", windKmh: null, windDirDeg: null },
       cruiseSpeedKmh: null,
       reserveSocPercent: 10,
-      minimumSocPercent: 10,
-      destinationReserveSocPercent: 10,
+      minimumSocPercent: 7,
+      destinationReserveSocPercent: 7,
+      belowMarginPenaltyMinPerPct: 4,
       maxChargeTargetSocPercent: 80,
       planningEnergyMarginPercent: 0,
       objective: "fastest",
@@ -138,18 +139,25 @@ describe("toTripConfiguration", () => {
     });
   });
 
-  it("la reserva en ruta y al destino es el margen (ADR-0017)", () => {
+  it("el margen es el objetivo; en ruta y al destino se puede bajar 3 puntos de él (ADR-0019)", () => {
     for (const c of [conditions(), conditions({ safetyMode: "conservative" })]) {
       const cfg = toTripConfiguration(vehicle(), c);
       expect(cfg.reserveSocPercent).toBe(reserveSocPct(c));
-      expect(cfg.destinationReserveSocPercent).toBe(reserveSocPct(c));
+      expect(cfg.minimumSocPercent).toBe(reserveSocPct(c) - 3);
+      expect(cfg.destinationReserveSocPercent).toBe(reserveSocPct(c) - 3);
+      expect(flexibleReserveSocPct(c)).toBe(reserveSocPct(c) - 3);
     }
   });
 
-  it("con 'permitir bajar del margen' el destino sigue pidiendo el margen", () => {
+  it("el margen flexible no baja de 5 %, ni del margen si este ya es menor", () => {
+    expect(flexibleReserveSocPct(conditions({ safetyMode: "custom", customSafetyPct: 7 }))).toBe(5);
+    expect(flexibleReserveSocPct(conditions({ safetyMode: "custom", customSafetyPct: 4 }))).toBe(4);
+  });
+
+  it("con 'permitir bajar del margen' el destino pide el margen flexible", () => {
     const cfg = toTripConfiguration(vehicle(), conditions({ allowBelowSafety: true, safetyMode: "normal" }));
     expect(cfg.minimumSocPercent).toBe(5);
-    expect(cfg.destinationReserveSocPercent).toBe(15);
+    expect(cfg.destinationReserveSocPercent).toBe(12);
   });
 
   it("con 'permitir bajar del margen' el piso en ruta es 5 %", () => {

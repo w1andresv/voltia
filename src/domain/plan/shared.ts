@@ -7,6 +7,7 @@ import { placeOnRoute } from "../ev/engines/corridor/engine";
 import type { FeasibilityStatus, InfeasibilityReason } from "../ev/engines/feasibility/engine";
 import {
   isVerifiedForPlanning,
+  type BelowMarginReason,
   type ChargeStop,
   type Charger,
   type RoutePlan,
@@ -114,6 +115,8 @@ export interface StopsChoice {
   firstChargerUnreachable?: boolean;
   feasibilityStatus?: FeasibilityStatus;
   infeasibilityCode?: InfeasibilityReason;
+  /** v2 (ADR-0019): el plan baja del margen a propósito, y por qué. */
+  belowMarginReason?: BelowMarginReason;
 }
 
 export type StopsArgs = {

@@ -31,12 +31,20 @@ export interface TripConfiguration {
   };
   /** Velocidad fijada por el usuario, si la hay. */
   cruiseSpeedKmh: number | null;
-  /** Reserva: el margen de seguridad del viaje (ADR-0016). */
+  /**
+   * Reserva: el margen de seguridad del viaje (ADR-0016). Es el objetivo: el
+   * planificador v2 puede bajar unos puntos de él si vale la pena (ADR-0019).
+   */
   reserveSocPercent: number;
-  /** Piso en todo punto de la ruta: la reserva, o `belowSafetyFloorPct` (5 %) con "permitir bajar del margen". */
+  /**
+   * Piso duro en todo punto de la ruta (v2): el margen flexible
+   * (`flexibleReserveSocPct`), o `belowSafetyFloorPct` (5 %) con "permitir bajar del margen".
+   */
   minimumSocPercent: number;
-  /** SOC mínimo al destino: la reserva, también con "permitir bajar del margen" (ADR-0017). */
+  /** SOC mínimo al destino (v2): el margen flexible, también con "permitir bajar del margen". */
   destinationReserveSocPercent: number;
+  /** Minutos que cuesta, al comparar planes, cada punto por debajo del margen (ADR-0019). */
+  belowMarginPenaltyMinPerPct: number;
   maxChargeTargetSocPercent: number;
   planningEnergyMarginPercent: number;
   objective: PlanningMode;
@@ -51,6 +59,7 @@ export function toTripConfiguration(
   params: ModelParameters = MODEL_PARAMETERS,
 ): TripConfiguration {
   const reserve = reserveSocPct(conditions);
+  const flexible = flexibleReserveSocPct(conditions, params);
   const userTemp = conditions.temperatureC;
   const weatherTemp = weather?.temperatureC ?? null;
   return {
@@ -68,8 +77,11 @@ export function toTripConfiguration(
     },
     cruiseSpeedKmh: conditions.avgSpeedKmh,
     reserveSocPercent: reserve,
-    minimumSocPercent: conditions.allowBelowSafety ? params.planner.belowSafetyFloorPct : reserve,
-    destinationReserveSocPercent: reserve,
+    minimumSocPercent: conditions.allowBelowSafety
+      ? Math.min(params.planner.belowSafetyFloorPct, flexible)
+      : flexible,
+    destinationReserveSocPercent: flexible,
+    belowMarginPenaltyMinPerPct: params.planner.marginFlex.value.penaltyMinPerPct,
     maxChargeTargetSocPercent: routeChargeCapPct(params),
     planningEnergyMarginPercent: params.planning.energyMarginPercent,
     objective: conditions.planningMode,
@@ -90,4 +102,19 @@ export function routeChargeCapPct(params: ModelParameters = MODEL_PARAMETERS): n
  */
 export function reserveSocPct(c: TripConditions): number {
   return safetyPct(c);
+}
+
+/**
+ * Lo más bajo que el planificador v2 deja llegar la batería (ADR-0019): el
+ * margen menos `marginFlex.belowPct` puntos, sin bajar de `belowSafetyFloorPct`
+ * (si el margen ya está por debajo de ese piso, el margen). Por encima de este
+ * valor y por debajo del margen, bajar tiene un costo al comparar planes.
+ */
+export function flexibleReserveSocPct(
+  c: TripConditions,
+  params: ModelParameters = MODEL_PARAMETERS,
+): number {
+  const reserve = reserveSocPct(c);
+  const lowest = Math.min(reserve, params.planner.belowSafetyFloorPct);
+  return Math.max(lowest, reserve - params.planner.marginFlex.value.belowPct);
 }

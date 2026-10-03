@@ -16,8 +16,10 @@ import {
   FIRST_CHARGER_UNREACHABLE_REASON,
   INFEASIBILITY_TEXT,
   isVerifiedForPlanning,
+  type BelowMarginReason,
   type ChargeChoice,
   type ChargeStop,
+  type TripConditions,
   type Vehicle,
 } from "../types";
 import {
@@ -90,21 +92,93 @@ function chargeTable(
   };
 }
 
+/** Pisos con que se planifica: estrictos (el margen) o flexibles (ADR-0019). */
+interface Reserves {
+  /** Piso duro en todo punto de la ruta. */
+  floor: number;
+  /** SOC mínimo al destino. */
+  destReserve: number;
+  /** Margen flexible: bajar del margen se permite con un costo (ver `PlannerInput.softFloor`). */
+  soft?: PlannerInput["softFloor"];
+}
+
+/** Minutos que suman las paradas (carga y desvío): la ruta es la misma, el manejo no cambia. */
+function stopMinutes(c: StopsChoice): number {
+  return c.stops.reduce((a, s) => a + s.chargeMinutes + s.detourMinutes, 0);
+}
+
+/**
+ * Margen flexible (ADR-0019): el plan que baja del margen se usa solo si es
+ * claramente mejor que el que lo respeta: hace posible el viaje, evita la
+ * carga antes de salir, tiene menos paradas, o con las mismas ahorra al menos
+ * `minSavingMin`. En "más segura", solo si respetando el margen no hay plan.
+ * Devuelve por qué conviene, o null si no conviene.
+ */
+function flexibleGain(
+  strict: StopsChoice,
+  flex: StopsChoice,
+  mode: TripConditions["planningMode"],
+  minSavingMin: number,
+): BelowMarginReason | null {
+  if (!flex.feasible) return null;
+  if (!strict.feasible) return "only-way";
+  if (mode === "safer") return null;
+  // Ahorrarse la carga previa cuenta; pedir unos puntos menos de ella, no.
+  if (!flex.departureCharge !== !strict.departureCharge) {
+    return flex.departureCharge ? null : "no-precharge";
+  }
+  if (flex.stops.length !== strict.stops.length) {
+    return flex.stops.length < strict.stops.length ? "fewer-stops" : null;
+  }
+  return stopMinutes(strict) - stopMinutes(flex) >= minSavingMin ? "faster" : null;
+}
+
 /**
  * Planificador v2 (F7): paradas por programación dinámica con costo
  * lexicográfico según la estrategia, carga previa sobre el mismo planificador
  * y viabilidad con códigos. Sin reglas de puntaje ni tope fijo de paradas.
+ *
+ * Margen flexible (ADR-0019): primero planifica respetando el margen (el piso
+ * de siempre); si ese plan tiene paradas, pide carga previa o no existe,
+ * planifica también dejando bajar unos puntos del margen y se queda con ese
+ * solo si es claramente mejor (`flexibleGain`).
  */
 export function planStopsV2(args: StopsArgs): StopsChoice {
+  const { vehicle, conditions, weather, params } = args;
+  const cfg = toTripConfiguration(vehicle, conditions, weather, params);
+  const margin = cfg.reserveSocPercent;
+  const strict = planStopsWith(args, {
+    floor: conditions.allowBelowSafety ? params.planner.belowSafetyFloorPct : margin,
+    destReserve: margin,
+  });
+  const canFlex = cfg.destinationReserveSocPercent < margin - params.planner.socTolerancePct;
+  const settled = strict.feasible && !strict.departureCharge;
+  if (!canFlex || (settled && (strict.stops.length === 0 || conditions.planningMode === "safer"))) {
+    return strict;
+  }
+  const flex = planStopsWith(args, {
+    floor: cfg.minimumSocPercent,
+    destReserve: cfg.destinationReserveSocPercent,
+    soft: { pct: margin, penaltyMinPerPct: cfg.belowMarginPenaltyMinPerPct },
+  });
+  const { minSavingMin } = params.planner.marginFlex.value;
+  const gain = flexibleGain(strict, flex, conditions.planningMode, minSavingMin);
+  return gain ? { ...flex, belowMarginReason: gain } : strict;
+}
+
+function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
   const { samples, vehicle, conditions, weather, params } = args;
   const tolerance = params.planner.socTolerancePct;
   const regen = params.soc.regenAcceptance;
   const cfg = toTripConfiguration(vehicle, conditions, weather, params);
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
-  const floor = cfg.minimumSocPercent;
-  // Al destino siempre se pide el margen, también con "permitir bajar del margen" (ADR-0017).
-  const destReserve = cfg.destinationReserveSocPercent;
+  const { floor, destReserve } = reserves;
+  // Lo que cada parada busca respetar (lo necesario, el extra de carga rápida): el
+  // piso del plan o, si el plan es flexible, el margen completo (ADR-0019).
+  const aim = reserves.soft
+    ? { floor: reserves.soft.pct, dest: reserves.soft.pct }
+    : { floor, dest: destReserve };
   const ctx: EnergyCtx = {
     vehicle,
     conditions,
@@ -147,6 +221,7 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
     initialSocPct: conditions.initialSoc,
     floorPct: floor,
     destinationReservePct: destReserve,
+    ...(reserves.soft ? { softFloor: reserves.soft } : {}),
     maxChargePct: cfg.maxChargeTargetSocPercent,
     nodes,
     objective: conditions.planningMode,
@@ -163,7 +238,9 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
   /**
    * SOC de salida que la parada `i` necesita para que la ruta sea viable: llegar
    * a la siguiente sobre el piso (con su desvío) o al destino con el margen. Sin
-   * el extra de carga rápida ni la sesión mínima, que son conveniencia.
+   * el extra de carga rápida ni la sesión mínima, que son conveniencia. En el
+   * plan flexible se mide contra el margen completo: si baja de él a propósito
+   * (ADR-0019), sale con menos que esto.
    */
   const neededDepart = (planned: PlannedStop[], i: number): number => {
     const p = planned[i]!;
@@ -175,8 +252,8 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
       nextNode ? nextNode.sIdx : destIdx,
       cap,
       {
-        arrivalTargetPct: nextNode ? floor : destReserve,
-        floorPct: floor,
+        arrivalTargetPct: nextNode ? aim.floor : aim.dest,
+        floorPct: aim.floor,
         extraKwh: nextNode ? nextNode.detourKwh : 0,
         tolerancePct: tolerance,
       },
@@ -274,7 +351,10 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
     const plug = plugs[p.node]!;
     const next = planned[i + 1];
     const nextNode = next ? nodes[next.node]! : null;
-    const minDepartSoc = Math.min(p.departSoc, neededDepart(planned, i));
+    const needed = neededDepart(planned, i);
+    const minDepartSoc = Math.min(p.departSoc, needed);
+    // Margen flexible (ADR-0019): sale con menos de lo que pide el margen completo.
+    const belowMarginNext = needed > p.departSoc + tolerance;
     const extraPct = Math.max(0, p.departSoc - minDepartSoc);
     // Por qué se carga más que lo necesario: la sesión mínima o el extra de carga rápida.
     const sessionSoc = Math.min(input.maxChargePct, node.minSessionSoc?.(p.arriveSoc) ?? 0);
@@ -286,8 +366,8 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
             nextNode.sIdx,
             cap,
             {
-              arrivalTargetPct: floor + bufferCfg.extraPct,
-              floorPct: floor + bufferCfg.extraPct,
+              arrivalTargetPct: aim.floor + bufferCfg.extraPct,
+              floorPct: aim.floor + bufferCfg.extraPct,
               extraKwh: nextNode.detourKwh,
               tolerancePct: tolerance,
             },
@@ -366,6 +446,7 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
       ...(fastChargeExtraPct >= 1 ? { fastChargeExtraPct } : {}),
       ...(sessionExtraPct >= 1 ? { sessionExtraPct } : {}),
       ...(aboveRouteCap ? { aboveRouteCap } : {}),
+      ...(belowMarginNext ? { belowMarginNext } : {}),
     };
   });
 

@@ -22,7 +22,7 @@ export type GuideContent = {
 
 const PHOTON_STEP: FlowStep = {
   actor: "browser",
-  who: "Navegador → Servidor → Photon",
+  who: "Navegador → Servidor → Mapbox / Photon",
   title: "Elegir origen y destino",
   blocks: [
     {
@@ -39,8 +39,10 @@ const PHOTON_STEP: FlowStep = {
           title: "Algoritmo",
           items: [
             <>
-              <Code>searchPlacesFn</Code> y <Code>reversePlaceFn</Code> (server actions) con límite
-              de consultas por IP.
+              <Code>GET /api/places?q=</Code> mientras escribes: busca solo en Mapbox, el mismo
+              geocodificador que traza la ruta (se cancela la búsqueda vieja y se guarda en caché
+              unos minutos). Al tocar el mapa, <Code>reversePlaceFn</Code> (server action) con
+              Photon.
             </>,
             <>
               El resultado es un <Code>Place</Code>: <Code>{"{ label, lat, lon, context }"}</Code>.
@@ -54,8 +56,8 @@ const PHOTON_STEP: FlowStep = {
       lines: [
         {
           method: "GET",
-          url: "https://photon.komoot.io/api/?q=Piedecuesta&lat=…&lon=…&lang=es",
-          note: "búsqueda, caché 2 min",
+          url: "https://api.mapbox.com/search/geocode/v6/forward?q=Piedecuesta&country=co&language=es",
+          note: "búsqueda, caché 5 min",
         },
         {
           method: "GET",
@@ -95,8 +97,9 @@ const WEATHER_LINE = {
 
 const COMMON_START: SequenceItem[] = [
   { from: "U", to: "B", text: "Escribe o toca origen y destino" },
-  { from: "B", to: "S", text: "searchPlacesFn / reversePlaceFn" },
-  { from: "S", to: "P", text: "/api?q= … /reverse?lat=&lon=" },
+  { from: "B", to: "S", text: "GET /api/places / reversePlaceFn" },
+  { from: "S", to: "MB", text: "/search/geocode/v6/forward?q=" },
+  { from: "S", to: "P", text: "/reverse?lat=&lon= (toque en el mapa)" },
 ];
 
 export const GUIDE_V2: GuideContent = {
@@ -546,14 +549,8 @@ export const GUIDE_V2: GuideContent = {
     },
   ],
   endpoints: [
-    [
-      "Photon",
-      <>
-        <Code>/api</Code>, <Code>/reverse</Code>
-      </>,
-      "Buscar o tocar un lugar",
-      "2–5 min",
-    ],
+    ["Mapbox", <Code key="g">/search/geocode/v6/forward</Code>, "Buscar un lugar", "5 min"],
+    ["Photon", <Code key="r">/reverse</Code>, "Tocar un lugar en el mapa", "5 min"],
     ["Blaze", <Code key="l">GET /stations</Code>, "Mapa y planificación", "15 min"],
     [
       "Blaze",
@@ -924,14 +921,8 @@ export const GUIDE_V1: GuideContent = {
     },
   ],
   endpoints: [
-    [
-      "Photon",
-      <>
-        <Code>/api</Code>, <Code>/reverse</Code>
-      </>,
-      "Buscar o tocar un lugar",
-      "2–5 min",
-    ],
+    ["Mapbox", <Code key="g">/search/geocode/v6/forward</Code>, "Buscar un lugar", "5 min"],
+    ["Photon", <Code key="r">/reverse</Code>, "Tocar un lugar en el mapa", "5 min"],
     ["EV-on-way", <Code key="s">GET /api/stations</Code>, "Mapa y planificación", "cookie 6 h"],
     ["OSM Overpass", <Code key="o">/api/interpreter</Code>, "Refresco del dataset", "6 h"],
     [

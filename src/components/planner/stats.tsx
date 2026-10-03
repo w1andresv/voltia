@@ -11,6 +11,7 @@ import {
   formatPct,
   formatSoc,
 } from "@/lib/format";
+import { belowMarginText } from "@/lib/below-margin";
 import { DepletionNotice } from "./depletion-notice";
 
 const ENERGY_PARAM_LABEL: Record<string, string> = {
@@ -30,6 +31,7 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
     plan.detourKm >= 0.5 ? `+${formatKm(plan.detourKm, 1)} de desvío a cargadores` : undefined;
   const distanceHint = [detourHint, engineHint].filter(Boolean).join(" · ") || undefined;
   const chargeKwh = plan.stops.reduce((sum, stop) => sum + stop.energyAddedKwh, 0);
+  const belowMargin = belowMarginText(plan);
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
@@ -55,7 +57,9 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
           value={formatSoc(plan.arrivalSoc)}
           tone={
             plan.arrivalSoc < plan.safetyPct
-              ? "danger"
+              ? plan.feasible && plan.belowMargin
+                ? "warn"
+                : "danger"
               : plan.arrivalSoc < plan.safetyPct + 8
                 ? "warn"
                 : "ok"
@@ -65,6 +69,11 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
         <Stat label="Tiempo de carga" value={formatMinutes(plan.chargeMinutes)} />
         <Stat label="Energía a cargar" value={formatKwh(chargeKwh)} className="col-span-2" />
       </div>
+      {belowMargin ? (
+        <p className="rounded-lg bg-warn/10 px-3 py-2 text-xs leading-relaxed text-warn">
+          {belowMargin}
+        </p>
+      ) : null}
       {plan.energyEngine === "v2" ? (
         <p className="text-xs leading-relaxed text-muted">
           Consumo con física por tramo y perfil de velocidad (modelo v2).
@@ -122,8 +131,8 @@ export function PlanStats({ plan }: { plan: RoutePlan }) {
 
       {plan.canArriveWithoutCharge ? (
         <div className="rounded-lg bg-ok/10 px-3 py-2 text-xs text-ok">
-          Llegas sin recargar. Restan {formatKwh(plan.remainingKwh)} · margen{" "}
-          {formatPct(plan.safetyMarginPct)}.
+          Llegas sin recargar. Restan {formatKwh(plan.remainingKwh)}
+          {plan.safetyMarginPct >= 0 ? ` · margen ${formatPct(plan.safetyMarginPct)}` : ""}.
         </div>
       ) : next ? (
         <div className="rounded-lg bg-bg-elevated px-3 py-2 text-xs text-muted">

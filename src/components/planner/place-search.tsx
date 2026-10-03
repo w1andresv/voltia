@@ -1,12 +1,16 @@
-import { useMutation } from "@tanstack/react-query";
-import { MapPin, X } from "lucide-react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { LoaderCircle, MapPin, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from "react";
-import { searchPlacesFn } from "@/server/actions/plan";
 import type { Place } from "@/domain/types";
+import { fetchPlaces, placeQueryKey } from "@/lib/places";
 import { usePlanner } from "@/lib/store";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { suppressMapClicks } from "./map-click";
+
+/** Espera tras la última letra antes de buscar. */
+const SEARCH_DEBOUNCE_MS = 200;
 
 /** Celular: la lista se abre bajo el campo y el teclado tapa buena parte de la pantalla. */
 function isNarrow(): boolean {
@@ -32,35 +36,49 @@ export function PlaceSearch({
   const box = useRef<HTMLDivElement>(null);
   const listId = useId();
   const setPlaceSearchOpen = usePlanner((s) => s.setPlaceSearchOpen);
+  /** Enter antes de que lleguen los resultados del texto actual: elige el primero al llegar. */
+  const enterPending = useRef(false);
 
   useEffect(() => {
     setQ(value?.label ?? "");
   }, [value]);
 
-  const search = useMutation({
-    mutationFn: (query: string) => searchPlacesFn({ data: { q: query } }),
-    onError: (error) => console.error("[place-search]", error),
+  const typing = q.trim().length >= 2 && !(value && q === value.label);
+  const term = useDebouncedValue(typing ? placeQueryKey(q) : "", SEARCH_DEBOUNCE_MS);
+  // Una consulta por texto: la caché responde al instante si se vuelve a escribir
+  // (o se borra una letra), y React Query cancela la búsqueda que ya no sirve.
+  const search = useQuery({
+    queryKey: ["places", term],
+    queryFn: ({ signal }) => fetchPlaces(term, signal),
+    enabled: term.length >= 2,
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
+    retry: false,
+    // Mientras busca, deja la lista anterior en vez de "Buscando…".
+    placeholderData: keepPreviousData,
   });
 
   useEffect(() => {
-    if (q.trim().length < 2 || (value && q === value.label)) {
-      setOpen(false);
-      return;
-    }
-    const t = setTimeout(() => {
-      search.mutate(q);
-      setOpen(true);
-    }, 280);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
+    if (search.error) console.error("[place-search]", search.error);
+  }, [search.error]);
 
   const results = search.data ?? [];
-  const showList = open && q.trim().length >= 2 && !(value && q === value.label);
+  /** Los resultados son del texto que se ve, no de uno anterior. */
+  const fresh =
+    typing && term === placeQueryKey(q) && search.isSuccess && !search.isPlaceholderData;
+  const loading = typing && !fresh && !search.isError;
+  const showList = open && typing;
 
   useEffect(() => {
     setHi(0);
   }, [search.data]);
+
+  useEffect(() => {
+    if (!fresh || !enterPending.current) return;
+    enterPending.current = false;
+    if (results[0]) pick(results[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fresh, results]);
 
   useEffect(() => {
     if (!showList) return;
@@ -88,6 +106,7 @@ export function PlaceSearch({
   }, [showList]);
 
   function pick(p: Place) {
+    enterPending.current = false;
     suppressMapClicks(900);
     onChange(p);
     setQ(p.label);
@@ -102,7 +121,11 @@ export function PlaceSearch({
     >
       <div className="relative">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
-          {icon ?? <MapPin className="size-4" />}
+          {showList && loading ? (
+            <LoaderCircle className="size-4 animate-spin" aria-label="Buscando" />
+          ) : (
+            (icon ?? <MapPin className="size-4" />)
+          )}
         </span>
         <Input
           ref={inputRef}
@@ -123,10 +146,12 @@ export function PlaceSearch({
             if (isNarrow()) {
               setTimeout(() => box.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 250);
             }
-            if (q.trim().length >= 2 && !(value && q === value.label)) setOpen(true);
+            if (typing) setOpen(true);
           }}
           onChange={(e) => {
             setQ(e.target.value);
+            enterPending.current = false;
+            setOpen(e.target.value.trim().length >= 2);
             if (value) onChange(null);
           }}
           onKeyDown={(e) => {
@@ -138,12 +163,14 @@ export function PlaceSearch({
               e.preventDefault();
               setHi((i) => Math.max(i - 1, 0));
             } else if (e.key === "Enter") {
-              const chosen = results[hi] ?? results[0];
-              if (chosen) {
-                e.preventDefault();
-                pick(chosen);
-              }
+              if (!typing) return;
+              e.preventDefault();
+              // Con la lista de un texto anterior, Enter elegiría otro lugar: espera la buena.
+              const chosen = fresh ? (results[hi] ?? results[0]) : undefined;
+              if (chosen) pick(chosen);
+              else if (loading) enterPending.current = true;
             } else if (e.key === "Escape") {
+              enterPending.current = false;
               setOpen(false);
             }
           }}
@@ -174,9 +201,9 @@ export function PlaceSearch({
           role="listbox"
           className="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-y-auto overscroll-contain rounded-lg border border-border bg-surface-2 shadow-float"
         >
-          {search.isPending && results.length === 0 ? (
+          {loading && results.length === 0 ? (
             <div className="px-3 py-3 text-xs text-muted">Buscando…</div>
-          ) : search.isError ? (
+          ) : search.isError && !loading ? (
             <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-warn">
               <span>No se pudo buscar lugares. Revisa tu conexión.</span>
               <button
@@ -185,7 +212,7 @@ export function PlaceSearch({
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  search.mutate(q);
+                  void search.refetch();
                 }}
               >
                 Reintentar
@@ -194,7 +221,7 @@ export function PlaceSearch({
           ) : results.length === 0 ? (
             <div className="px-3 py-3 text-xs text-muted">Sin resultados</div>
           ) : (
-            <ul>
+            <ul className={cn("transition-opacity", loading && "opacity-60")} aria-busy={loading}>
               {results.map((p, i) => (
                 <li key={`${p.lat}-${p.lon}-${p.label}`}>
                   <button

@@ -128,8 +128,10 @@ export function BatteryDialog() {
               <Metric
                 label="Llegada"
                 value={formatSoc(plan.arrivalSoc)}
-                hint={plan.feasible ? "objetivo cubierto" : "bajo el margen"}
-                tone={plan.arrivalSoc < floor ? "danger" : "ok"}
+                hint={
+                  !plan.feasible ? "bajo el margen" : plan.belowMargin ? "margen flexible" : "objetivo cubierto"
+                }
+                tone={plan.arrivalSoc < floor ? (plan.feasible && plan.belowMargin ? "warn" : "danger") : "ok"}
               />
               <Metric label="Paradas" value={String(plan.stops.length)} />
               <Metric label="SOC mínimo" value={formatSoc(plan.minSoc)} />
@@ -140,7 +142,11 @@ export function BatteryDialog() {
               </p>
             ) : null}
             {plan.canArriveWithoutCharge ? (
-              <p className="mt-2 text-xs text-ok">Llegas sin recargar. Margen {formatPct(plan.safetyMarginPct)}.</p>
+              <p className="mt-2 text-xs text-ok">
+                {plan.belowMargin
+                  ? `Llegas sin recargar, un poco bajo el margen de ${formatPct(plan.safetyPct)} (es flexible).`
+                  : `Llegas sin recargar. Margen ${formatPct(plan.safetyMarginPct)}.`}
+              </p>
             ) : plan.feasible ? (
               <p className="mt-2 text-xs text-muted">
                 {plan.stops.length === 1 ? "Una parada de carga" : `${plan.stops.length} paradas`} ·{" "}
@@ -199,9 +205,16 @@ function Metric({
   label: string;
   value: string;
   hint?: string;
-  tone?: "default" | "ok" | "danger";
+  tone?: "default" | "ok" | "warn" | "danger";
 }) {
-  const color = tone === "ok" ? "text-ok" : tone === "danger" ? "text-danger" : "text-fg";
+  const color =
+    tone === "ok"
+      ? "text-ok"
+      : tone === "warn"
+        ? "text-warn"
+        : tone === "danger"
+          ? "text-danger"
+          : "text-fg";
   return (
     <div className="rounded-md bg-bg-elevated px-2.5 py-2">
       <div className="text-[11px] text-muted">{label}</div>
