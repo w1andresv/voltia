@@ -16,6 +16,17 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { MODES, usePlanPreviews } from "./use-plan-previews";
 
+/** Superficie de la vía (ADR-0022): "auto" decide con el pronóstico de lluvia. */
+const ROAD_SURFACES = [
+  { id: "auto", label: "Automática", hint: "Mojada si el pronóstico trae lluvia en la ruta." },
+  { id: "dry", label: "Seca", hint: "Ignora la lluvia del pronóstico." },
+  {
+    id: "wet",
+    label: "Mojada",
+    hint: "Más resistencia al rodar y limpiaparabrisas: el consumo sube.",
+  },
+] as const;
+
 /**
  * Ajustes avanzados: estrategia, permitir bajar del margen, temperatura y
  * velocidad media. El estilo de conducción y el margen de seguridad están en el
@@ -35,7 +46,7 @@ export function ConditionsDialog() {
         <DialogHeader>
           <DialogTitle>Ajustes avanzados</DialogTitle>
           <DialogDescription>
-            Estrategia, temperatura y velocidad media. El estilo de conducción, el margen de
+            Estrategia, temperatura, vía y velocidad media. El estilo de conducción, el margen de
             seguridad, los pasajeros y el A/C están en el formulario del viaje.
           </DialogDescription>
         </DialogHeader>
@@ -115,6 +126,26 @@ export function ConditionsDialog() {
               Usar clima
             </Button>
           </Row>
+          <div className="grid gap-2">
+            <Label>Vía</Label>
+            <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Superficie de la vía">
+              {ROAD_SURFACES.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={(c.roadSurface ?? "auto") === r.id}
+                  onClick={() => patch({ roadSurface: r.id })}
+                  className={`min-h-11 rounded-lg px-2 py-1.5 text-sm ${(c.roadSurface ?? "auto") === r.id ? "bg-accent/15 font-medium" : "bg-bg-elevated hover:bg-surface-2"}`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs leading-relaxed text-muted">
+              {ROAD_SURFACES.find((r) => r.id === (c.roadSurface ?? "auto"))?.hint}
+            </p>
+          </div>
           <Row
             label="Velocidad media"
             value={c.avgSpeedKmh == null ? "ruta" : `${c.avgSpeedKmh} km/h`}

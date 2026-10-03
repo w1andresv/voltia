@@ -58,6 +58,8 @@ export function placeChargers(
   samples: { lat: number; lon: number; km: number }[],
   measured: Record<string, MeasuredDetour> | undefined,
   params: ModelParameters,
+  /** Línea fina de la ruta (M5, solo el planificador v2); sin ella, se proyecta contra las muestras. */
+  line?: { lat: number; lon: number; km: number }[],
 ): Charger[] {
   return placeOnRoute(
     chargers.filter((c) => isVerifiedForPlanning(c)),
@@ -66,6 +68,7 @@ export function placeChargers(
       maxKm: params.corridor.maxFromRouteKm,
       detourRoadFactor: params.corridor.detourRoadFactor.value,
       measured,
+      ...(line ? { line } : {}),
     },
   );
 }
@@ -119,6 +122,19 @@ export interface StopsChoice {
   belowMarginReason?: BelowMarginReason;
 }
 
+/**
+ * Acumulador opcional de lo que hizo el planificador v2 (banco, registros y prueba de
+ * presupuesto, ADR-0020): estaciones compatibles, corridas de la programación dinámica
+ * y sus contadores. Lo pasa quien quiere medir; el planificador solo suma.
+ */
+export interface PlannerRunStats {
+  stations: number;
+  runs: number;
+  expansions: number;
+  arrivals: number;
+  labelWrites: number;
+}
+
 export type StopsArgs = {
   samples: EnergySample[];
   chargers: Charger[];
@@ -127,4 +143,6 @@ export type StopsArgs = {
   weather: WeatherSnapshot | null;
   detourKwh?: DetourEnergy;
   params: ModelParameters;
+  /** Si viene, el planificador v2 suma aquí lo que hizo. */
+  stats?: PlannerRunStats;
 };

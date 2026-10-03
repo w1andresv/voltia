@@ -128,6 +128,42 @@ export function tunnelStretchesKm(route: ProviderRoute): { fromKm: number; toKm:
   return out;
 }
 
+/**
+ * Km (desde el origen del proveedor) de las casetas de peaje: las intersecciones con
+ * `tollCollection.type === "toll_booth"`. Un pórtico electrónico ("toll_gantry") no obliga
+ * a detenerse y no cuenta. El km sale como el de los túneles: la geometría del paso reparte su
+ * distancia. Casetas a menos de `minGapKm` una de otra (los carriles de una misma plaza)
+ * son una sola parada.
+ */
+export function tollBoothsKm(route: ProviderRoute, minGapKm = 0.25): number[] {
+  const all: number[] = [];
+  let km = 0;
+  for (const leg of route.legs) {
+    for (const step of leg.steps ?? []) {
+      const stepKm = step.distanceM / 1000;
+      const line = step.geometry ?? [];
+      const inters = step.intersections ?? [];
+      if (stepKm > 0 && line.length >= 2 && inters.some((it) => it.tollCollection?.type === "toll_booth")) {
+        const cum = [0];
+        for (let i = 1; i < line.length; i++)
+          cum.push(cum[i - 1]! + haversineKm(line[i - 1]!, line[i]!));
+        const scale = stepKm / (cum[cum.length - 1]! || stepKm);
+        let from = 0;
+        for (const it of inters) {
+          from = nearestIndex(line, it.location, from);
+          if (it.tollCollection?.type === "toll_booth") all.push(km + cum[from]! * scale);
+        }
+      }
+      km += Math.max(0, stepKm);
+    }
+  }
+  const out: number[] = [];
+  for (const x of all.sort((a, b) => a - b)) {
+    if (!out.length || x - out[out.length - 1]! >= minGapKm) out.push(x);
+  }
+  return out;
+}
+
 /** Km desde el origen donde está cada punto intermedio (fin de cada tramo salvo el último). */
 export function legBoundariesKm(route: ProviderRoute): number[] {
   const legs = route.legs;

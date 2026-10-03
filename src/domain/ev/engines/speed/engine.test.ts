@@ -191,3 +191,46 @@ describe("paradas intermedias y tope por clase vial (F5)", () => {
     expect(speedMesh(route, 100).every((p) => p.roadTier === "secondary")).toBe(true);
   });
 });
+
+describe("casetas de peaje (M2.1, ADR-0021)", () => {
+  const withTolls = (km: number, tolls: number[], legs?: number[]): RawRoute => ({
+    ...straight(km, 80),
+    tollBoothsKm: tolls,
+    ...(legs ? { legBoundariesKm: legs } : {}),
+  });
+
+  it("la malla marca la caseta como parada de peaje", () => {
+    const mesh = speedMesh(withTolls(10, [4.2]), 100);
+    const toll = mesh.find((p) => p.toll);
+    expect(toll).toMatchObject({ km: 4.2, stop: true, toll: true });
+    expect(mesh.filter((p) => p.toll)).toHaveLength(1);
+  });
+
+  it("una caseta pegada a un punto intermedio o a otra caseta (< 150 m) se descarta", () => {
+    const mesh = speedMesh(withTolls(10, [5.1, 7.0, 7.1], [5]), 100);
+    expect(mesh.filter((p) => p.toll).map((p) => p.km)).toEqual([7]);
+  });
+
+  it("el perfil frena a 0 km/h en la caseta, la marca y suma el tiempo detenido", () => {
+    const without = buildSpeedProfile(speedMesh(straight(10, 80), 100), "normal");
+    const withToll = buildSpeedProfile(speedMesh(withTolls(10, [5]), 100), "normal");
+    // La malla es de 0,1 km: 5,1 sale como 5,1000000000000005, así que se busca con tolerancia.
+    const near = (km: number) => withToll.points.find((p) => Math.abs(p.km - km) < 1e-6)!;
+    const at = near(5);
+    expect(at.speedKmh).toBe(0);
+    expect(at.limitingFactor).toBe("toll");
+    // Frena antes (a 100 m aún no llega a 62 km/h con 1,5 m/s²) y vuelve a arrancar después.
+    expect(near(4.9).speedKmh).toBeLessThan(65);
+    expect(near(5.1).speedKmh).toBeLessThan(60);
+    // Lejos de la caseta, la velocidad es la de siempre.
+    expect(near(2).speedKmh).toBeCloseTo(80, 6);
+    const seconds = MODEL_PARAMETERS.speed.tollStopSeconds.value;
+    expect(withToll.durationMinutes).toBeGreaterThan(without.durationMinutes + seconds / 60);
+  });
+
+  it("sin casetas, el perfil es el de siempre", () => {
+    const a = buildSpeedProfile(speedMesh(straight(10, 80), 100), "normal");
+    const b = buildSpeedProfile(speedMesh({ ...straight(10, 80), tollBoothsKm: [] }, 100), "normal");
+    expect(b).toEqual(a);
+  });
+});

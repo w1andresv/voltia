@@ -73,6 +73,14 @@ export interface ModelParameters {
     connectionOverheadMin: SourcedValue<number>;
     /** Paso de la integración de la curva de carga, en puntos de SOC. */
     integrationStepPct: number;
+    /**
+     * Pérdidas de carga (M4.2, ADR-0026), planificador v2: la fracción de la energía del
+     * cargador que llega a la batería. En AC pasa por el cargador a bordo (~88 %); en DC
+     * las pérdidas son menores (~95 %). La potencia que carga la batería con una toma que
+     * limita la estación es `potencia × eficiencia`; la curva del vehículo ya es de la
+     * batería y no se toca. Los kWh que se pagan son los de la batería ÷ la eficiencia. 1 = sin pérdidas.
+     */
+    efficiency: SourcedValue<{ dc: number; ac: number }>;
   };
   planner: {
     /** Tope de seguridad de paradas por ruta. */
@@ -121,6 +129,11 @@ export interface ModelParameters {
     /** Pasada 2: rutas reales que se piden como máximo para verificar un plan (especificación §4). */
     maxVerifyIterations: number;
     /**
+     * Pasada 2: tiempo máximo al planificar (rutas más su elevación), ms. Al agotarse se
+     * responde con la pasada 1, marcada `failed`, igual que al compartir un viaje (ADR-0020).
+     */
+    verifyBudgetMs: number;
+    /**
      * Planificador v2: en una estación de carga rápida (DC) se carga `extraPct`
      * puntos más de lo que pide el tramo siguiente, sin pasar de `maxSocPct`
      * (del 90 al 100 % la carga se vuelve lenta) ni del tope de carga en ruta.
@@ -134,6 +147,12 @@ export interface ModelParameters {
     curvatureSpanM: number;
     /** Tope por clase vial cuando el proveedor no da el límite legal, km/h (D8). `unknown` sin tope. */
     defaultByRoadTier: SourcedValue<Partial<Record<RoadTier, number>>>;
+    /**
+     * Tiempo detenido en una caseta de peaje, s (M2.1, ADR-0021). Estimado: con carril de
+     * efectivo es más; con TAG, menos. Se suma al tiempo y a los auxiliares, y el perfil
+     * frena hasta 0 antes de la caseta y vuelve a arrancar después.
+     */
+    tollStopSeconds: SourcedValue<number>;
     /** Por modo de conducción (especificación §5.3). `targetSpeedFactor` escala la velocidad típica; nunca supera el límite legal. */
     modes: SourcedValue<
       Record<
@@ -166,11 +185,32 @@ export interface ModelParameters {
     /** Velocidad a la que se supone medido el consumo manual del usuario, km/h. */
     manualReferenceSpeedKmh: number;
     /**
+     * Eficiencia del tren motriz según la potencia en la rueda (M3.2, ADR-0025): pares
+     * [P / P_ref, factor]. P_ref es la potencia de crucero del vehículo en llano a
+     * `manualReferenceSpeedKmh`; ahí el factor es 1, así `drivetrainEfficiency` sigue siendo
+     * la eficiencia de crucero y el ajuste al consumo manual no se mueve. La eficiencia en
+     * cada tramo es `drivetrainEfficiency × factor(P / P_ref)`. Vacío = eficiencia constante.
+     */
+    drivetrainEfficiencyCurve: SourcedValue<[number, number][]>;
+    /**
+     * Vía mojada (M2.2, ADR-0022): con lluvia de al menos `minPrecipMm` (mm en la hora del
+     * pronóstico) o si el usuario la elige, la resistencia a la rodadura sube por `crrFactor`
+     * y los limpiaparabrisas y el desempañador suman `auxKw` a los auxiliares.
+     */
+    wetRoad: SourcedValue<{ minPrecipMm: number; crrFactor: number; auxKw: number }>;
+    /**
      * Pérdida de eficiencia de la tracción por temperatura (D4): [°C, factor]; la
      * energía de tracción se divide por la eficiencia y se multiplica por el
      * factor interpolado. Es el `EfficiencyModel` de la especificación §5.4.
      */
     temperatureFactor: SourcedValue<[number, number][]>;
+  };
+  weather: {
+    /**
+     * Clima por tramo (M3.1, ADR-0024): un punto cada `spacingKm` de ruta (como mucho
+     * `maxPoints`, con el origen y el destino) y pronóstico por hora de `hours` horas.
+     */
+    alongRoute: { spacingKm: number; maxPoints: number; hours: number };
   };
   chart: {
     /** Ventana de la gráfica de consumo según el largo de la ruta (especificación §5.10). */
@@ -183,7 +223,8 @@ export interface ModelParameters {
 }
 
 export const MODEL_PARAMETERS: ModelParameters = {
-  modelVersion: "0.1.0-legacy",
+  // 0.6.0: M1–M5 (ADR-0020 a 0027). Antes "0.1.0-legacy": ADR-0016 a 0019 cambiaron resultados sin versionar.
+  modelVersion: "0.6.0",
   vehicle: {
     bodyTypePhysics: sourced(
       {
@@ -226,6 +267,11 @@ export const MODEL_PARAMETERS: ModelParameters = {
         "Estacionar, app, conectar, desconectar y salir. Decisión del producto; calibrar con paradas reales.",
     }),
     integrationStepPct: 0.5,
+    efficiency: sourced({ dc: 0.95, ac: 0.88 }, "estimated", {
+      reference: "docs/adr/0026-perdidas-de-carga.md",
+      notes:
+        "Valores de partida a confirmar por el dueño del producto: AC por el cargador a bordo, DC por la conversión y el calor. Calibrar con cargas reales (kWh del cargador frente a SOC ganado).",
+    }),
   },
   planner: {
     maxStops: 7,
@@ -253,6 +299,7 @@ export const MODEL_PARAMETERS: ModelParameters = {
     socGridPct: 1,
     occupiedWaitMin: sourced(15, "estimated", { notes: "Sin datos de ocupación; calibrar." }),
     maxVerifyIterations: 3,
+    verifyBudgetMs: 8000,
     fastChargeBuffer: sourced({ extraPct: 10, maxSocPct: 90 }, "configurable", {
       notes:
         "Decisión del dueño del producto (2026-09-27): aprovechar la velocidad de la carga rápida para evitar paradas largas en carga lenta. Desde 2026-09-29 solo en tramos que terminan en otra estación, no al destino.",
@@ -269,6 +316,11 @@ export const MODEL_PARAMETERS: ModelParameters = {
         notes: "Decisión del producto; confirmar contra la normativa colombiana vigente.",
       },
     ),
+    tollStopSeconds: sourced(30, "estimated", {
+      reference: "docs/adr/0021-peajes-como-paradas.md",
+      notes:
+        "Valor de partida a confirmar por el dueño del producto: carril de efectivo y TAG se promedian. Calibrar con viajes con peaje.",
+    }),
     modes: sourced(
       {
         efficient: {
@@ -313,6 +365,30 @@ export const MODEL_PARAMETERS: ModelParameters = {
       { notes: "Calibrar con viajes reales (TripObservation)." },
     ),
     manualReferenceSpeedKmh: 70,
+    drivetrainEfficiencyCurve: sourced(
+      [
+        [0, 0.78],
+        [0.15, 0.85],
+        [0.35, 0.93],
+        [0.6, 0.98],
+        [1, 1],
+        [2, 1.01],
+        [4, 1],
+        [8, 0.98],
+        [16, 0.95],
+      ],
+      "estimated",
+      {
+        reference: "docs/adr/0025-eficiencia-segun-la-potencia.md",
+        notes:
+          "Forma típica de un motor con inversor: pierde eficiencia con poca carga (tráfico lento, bajadas suaves) y un poco con mucha. Estimada: calibrar con viajes (TripObservation).",
+      },
+    ),
+    wetRoad: sourced({ minPrecipMm: 0.3, crrFactor: 1.2, auxKw: 0.1 }, "estimated", {
+      reference: "docs/adr/0022-via-mojada.md",
+      notes:
+        "Valores de partida: la rodadura sube 15–25 % en mojado (se toma 20 %) y los limpiaparabrisas y el desempañador suman ~0,1 kW. Calibrar con viajes bajo lluvia.",
+    }),
     temperatureFactor: sourced(
       [
         [0, 1.28],
@@ -329,6 +405,9 @@ export const MODEL_PARAMETERS: ModelParameters = {
           "Lado frío igual al modelo anterior (batería, llantas y tren fríos). En calor casi plano: el aire acondicionado ya suma el enfriamiento en los auxiliares.",
       },
     ),
+  },
+  weather: {
+    alongRoute: { spacingKm: 50, maxPoints: 10, hours: 24 },
   },
   chart: {
     windows: [

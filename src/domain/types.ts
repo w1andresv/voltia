@@ -1,6 +1,7 @@
 import type { RoadMix, RoadTier } from "./road-hierarchy";
 import type { FeasibilityStatus, InfeasibilityReason } from "./ev/engines/feasibility/engine";
 import type { DataSource } from "./ev/core/provenance";
+import type { WeatherAlongRoute } from "./ev/contracts/weather";
 import type {
   VehicleShape,
   PlaceShape,
@@ -130,6 +131,8 @@ export interface ChargeChoice {
   minDepartSoc: number;
   departSoc: number;
   energyAddedKwh: number;
+  /** Planificador v2 (M4.2): lo que se paga, con las pérdidas de carga. Ausente en el v1. */
+  energyFromGridKwh?: number;
   chargeMinutes: number;
   rangeGainKm: number;
   reachesNext: boolean;
@@ -188,6 +191,8 @@ export interface ChargeStop {
   belowMarginNext?: true;
   chargeMinutes: number;
   energyAddedKwh: number;
+  /** Planificador v2 (M4.2): lo que se paga, con las pérdidas de carga (kWh del cargador). Ausente en el v1. */
+  energyFromGridKwh?: number;
   bestSocket: ChargerSocket;
   /** Presente cuando la opción elegida usa un adaptador de la lista verificada. */
   adapter?: { from: ConnectorType; to: ConnectorType };
@@ -230,6 +235,8 @@ export interface WeatherSnapshot {
   windDirDeg: number;
   /** Altura (m) de la celda del pronóstico: la temperatura se corrige desde ahí. */
   elevationM?: number;
+  /** Lluvia de la hora actual, mm. Con ella la energía v2 decide si la vía está mojada (M2.2). */
+  precipitationMm?: number;
   source?: string;
 }
 
@@ -261,6 +268,11 @@ export interface RawRoute {
    * puntos intermedios.
    */
   legBoundariesKm?: number[];
+  /**
+   * Km de las casetas de peaje (en el eje de las muestras). Ahí el perfil de velocidad v2
+   * se detiene y paga el tiempo detenido (M2.1, ADR-0021). Solo si la ruta pasa por casetas.
+   */
+  tollBoothsKm?: number[];
   /** Túneles (km en el eje de las muestras): ahí la elevación se limpia (F2b). */
   structures?: { kind: "tunnel" | "bridge"; fromKm: number; toKm: number }[];
   /**
@@ -453,6 +465,11 @@ export interface GeoBundle {
   energyEngine?: "legacy" | "v2";
   /** Desvíos medidos por vía, por `ruta|estación` (F4, DETOUR_SOURCE=matrix). */
   detours?: Record<string, { distanceKm: number; durationMin: number }>;
+  /**
+   * Clima por hora en varios puntos de cada ruta, por id de ruta (M3.1). Con él la energía v2
+   * usa el clima de cada tramo y de la hora en que se pasa; sin él, el clima de un punto.
+   */
+  weatherAlong?: Record<string, WeatherAlongRoute>;
   /**
    * Calidad de los datos (solo si algo faltó, F2b). `elevation: "unavailable"`:
    * ninguna fuente de elevación respondió y alguna ruta quedó plana; es un error

@@ -57,3 +57,12 @@ Cada cifra tiene su fuente en `seeds/0001_vehicle_catalog.sql`, en las líneas q
 - auxiliares (0,45 kW).
 
 Se ajustarán con la calibración de "¿Con cuánto llegaste?".
+
+## Curvas de carga reales (M4.4, 2026-10-03)
+
+8 de los 11 vehículos usan la curva de carga DC genérica (`DEFAULT_CURVE`: 55 % del pico en 0 %, 100 % entre 15 y 40 %, 42 % en 80 %, 8 % en 100 %) y 3 una segunda curva (`0,70 → 1 → 0,82 → 0,50 → 0,32`). Ninguna es del fabricante: el seed lo dice. El tiempo de cada parada depende de esa curva más que de cualquier otro parámetro, así que es el dato que más mejora el plan.
+
+**Falta:** para cada vehículo (`mg-s5-ev-comfort`, `mg-s5-ev-deluxe`, `tesla-model-3-lr-awd`, `tesla-model-y-rwd`, `tesla-model-y-lr-awd`, `volvo-ex30-sm-er`, `changan-nevo-q05-e-max`, `changan-nevo-q05-e-max-ultra`, `geely-ex5-se`, `geely-ex5-pro`, `geely-ex5-max`) una curva DC publicada (fabricante o prueba independiente) con su referencia. Sin fuente, se queda la genérica: **no se inventan curvas**.
+
+Al conseguir una: cargarla en `seeds/0001_vehicle_catalog.sql` y en `src/domain/vehicles.ts` (la prueba `src/seeds.test.ts` compara ambos), anotar la fuente aquí, regenerar la caracterización con su antes y después y publicar con `npm run db:seed`.
+

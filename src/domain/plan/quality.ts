@@ -24,6 +24,34 @@ export function planAssumptions(args: {
         ...(v.reference ? { reference: v.reference } : {}),
       });
     }
+    if (energyV2.wetRoad) {
+      const wet = params.energy.wetRoad;
+      out.push({
+        parameter: "energy.wetRoad",
+        value: { ...wet.value, origin: energyV2.wetRoad },
+        source: wet.source,
+        ...(wet.reference ? { reference: wet.reference } : {}),
+      });
+    }
+    if (energyV2.weatherAlongPoints) {
+      out.push({
+        parameter: "energy.weatherAlongRoute",
+        value: {
+          points: energyV2.weatherAlongPoints,
+          hours: params.weather.alongRoute.hours,
+        },
+        source: "external_source",
+      });
+    }
+    if (energyV2.tollStops) {
+      const toll = params.speed.tollStopSeconds;
+      out.push({
+        parameter: "speed.tollStopSeconds",
+        value: { seconds: toll.value, booths: energyV2.tollStops },
+        source: toll.source,
+        ...(toll.reference ? { reference: toll.reference } : {}),
+      });
+    }
     const regen = params.energy.regenModes;
     if (regen.source === "estimated") {
       out.push({ parameter: "energy.regenModes", value: energyV2.regen, source: regen.source });
@@ -42,6 +70,15 @@ export function planAssumptions(args: {
       parameter: "charging.connectionOverheadMin",
       value: overhead.value,
       source: overhead.source,
+    });
+  }
+  if (stops.some((s) => s.energyFromGridKwh != null)) {
+    const eff = params.charging.efficiency;
+    out.push({
+      parameter: "charging.efficiency",
+      value: eff.value,
+      source: eff.source,
+      ...(eff.reference ? { reference: eff.reference } : {}),
     });
   }
   if (stops.some((s) => s.detourSource !== "calculated")) {

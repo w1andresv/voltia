@@ -44,6 +44,9 @@ export function adapterSummary(
   stop: ChargeStop,
   vehicle: Vehicle,
   cap: number,
+  /** Minutos de una forma de cargar; por defecto los del cálculo anterior. El v2 pasa los suyos (M4.2). */
+  minutesOf: (plug: RoutePlug, from: number, to: number) => number = (plug, from, to) =>
+    plugMinutes(plug, vehicle, cap, from, to),
 ): ChargeStop["adapterNeeded"] {
   const plugs = routePlugs(stop.charger, vehicle);
   const without = plugs.filter((p) => !p.adapter);
@@ -54,7 +57,7 @@ export function adapterSummary(
     ? {
         mode: bestWithout.dc ? ("direct" as const) : ("ac" as const),
         chargeKw: bestWithout.powerKw,
-        chargeMinutes: plugMinutes(bestWithout, vehicle, cap, stop.arriveSoc, stop.departSoc),
+        chargeMinutes: minutesOf(bestWithout, stop.arriveSoc, stop.departSoc),
       }
     : null;
   // Lo lleva y el plan lo usa.
@@ -78,7 +81,7 @@ export function adapterSummary(
     carried: false,
     withAdapter: {
       chargeKw: best.powerKw,
-      chargeMinutes: plugMinutes(best, vehicle, cap, stop.arriveSoc, stop.departSoc),
+      chargeMinutes: minutesOf(best, stop.arriveSoc, stop.departSoc),
     },
     withoutAdapter,
   };

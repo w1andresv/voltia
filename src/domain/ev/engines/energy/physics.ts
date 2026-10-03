@@ -1,4 +1,4 @@
-import type { ElevationProfile, RouteSample } from "@/domain/types";
+import type { ElevationProfile, RouteSample, WeatherSnapshot } from "@/domain/types";
 import { elevationAtKm } from "@/domain/ev/core/elevation-grid";
 import type { EnergySample } from "@/domain/ev/contracts/energy";
 import type { SpeedProfilePoint } from "@/domain/ev/contracts/speed";
@@ -7,7 +7,14 @@ import { intervalIndex } from "@/domain/ev/core/axis";
 import { MODEL_PARAMETERS, type ModelParameters } from "@/domain/ev/core/params";
 import { sourced } from "@/domain/ev/core/provenance";
 import { G_STANDARD_MS2, J_PER_KWH, kmhToMs, msToKmh } from "@/domain/ev/core/units";
-import { acPowerKw, airDensity, airSpeedSq, segmentTempC, type EnergyContext } from "./environment";
+import {
+  acPowerKw,
+  airDensity,
+  airSpeedSq,
+  segmentTempC,
+  type EnergyContext,
+  type WetRoad,
+} from "./environment";
 import type { VehicleEnergyParams } from "./vehicle-params";
 
 /**
@@ -74,6 +81,42 @@ export function temperatureFactor(
   return points[points.length - 1]![1];
 }
 
+/**
+ * Factor de la eficiencia del tren motriz según P / P_ref (M3.2), interpolado entre los
+ * puntos y constante fuera de ellos. Sin puntos, 1: eficiencia constante.
+ */
+export function efficiencyFactor(powerRatio: number, points: [number, number][]): number {
+  if (!points.length) return 1;
+  if (powerRatio <= points[0]![0]) return points[0]![1];
+  for (let i = 1; i < points.length; i++) {
+    const [x1, f1] = points[i]!;
+    if (powerRatio <= x1) {
+      const [x0, f0] = points[i - 1]!;
+      return f0 + ((f1 - f0) * (powerRatio - x0)) / (x1 - x0);
+    }
+  }
+  return points[points.length - 1]![1];
+}
+
+/** La eficiencia según la potencia: `P_ref` (kW en la rueda, ver `referenceCruisePowerKw`) y la curva. */
+export interface EfficiencyModel {
+  refPowerKw: number;
+  points: [number, number][];
+}
+
+/**
+ * Potencia en la rueda (kW) de crucero en llano, sin viento, a `speedKmh`: rodadura más
+ * aerodinámica con la densidad estándar al nivel del mar. Fija para cada vehículo: no
+ * depende del clima ni de la ruta, así el factor de eficiencia no se mueve con ellos.
+ */
+export function referenceCruisePowerKw(vp: VehicleEnergyParams, speedKmh: number): number {
+  const v = kmhToMs(speedKmh);
+  const force =
+    vp.rollingResistance.value * vp.massKg.value * G_STANDARD_MS2 +
+    0.5 * airDensity(15, 0) * vp.dragAreaM2.value * v * v;
+  return (force * v) / 1000;
+}
+
 /** Energía de un tramo con aceleración constante entre v1 y v2. */
 export function segmentEnergyV2(
   seg: EnergySegmentInput,
@@ -81,6 +124,10 @@ export function segmentEnergyV2(
   ctx: EnergyContext,
   regen: RegenModeParams,
   thermal: [number, number][] = MODEL_PARAMETERS.energy.temperatureFactor.value,
+  /** Vía mojada en este tramo (M2.2); null o sin él, seca. */
+  wet: WetRoad | null = null,
+  /** Eficiencia según la potencia (M3.2); null o sin él, constante. */
+  efficiency: EfficiencyModel | null = null,
 ): EnergySegment {
   const dh = seg.horizontalM;
   const theta = dh > 0 ? Math.atan(seg.deltaHM / dh) : 0;
@@ -107,7 +154,7 @@ export function segmentEnergyV2(
     rho *
     vp.dragAreaM2.value *
     airSpeedSq(msToKmh(Math.sqrt(vBarSq)), ctx.weather, seg.headingDeg);
-  const fRoll = vp.rollingResistance.value * m * g * Math.cos(theta);
+  const fRoll = vp.rollingResistance.value * (wet ? wet.crrFactor : 1) * m * g * Math.cos(theta);
   const fGrade = m * g * Math.sin(theta);
   const fAcc = mEff * a;
   const wheelJ = (fAero + fRoll + fGrade + fAcc) * d;
@@ -118,7 +165,11 @@ export function segmentEnergyV2(
   let regenKwh = 0;
   let friction = 0;
   if (wheelKwh >= 0) {
-    traction = (wheelKwh / vp.drivetrainEfficiency.value) * temperatureFactor(temp, thermal);
+    const eta = efficiency
+      ? vp.drivetrainEfficiency.value *
+        efficiencyFactor(wheelKwh / hours / Math.max(efficiency.refPowerKw, 1e-6), efficiency.points)
+      : vp.drivetrainEfficiency.value;
+    traction = (wheelKwh / eta) * temperatureFactor(temp, thermal);
   } else {
     const braking = -wheelKwh;
     const capturable = braking * regen.captureFraction * vp.regenEfficiency.value;
@@ -126,7 +177,8 @@ export function segmentEnergyV2(
     regenKwh = Math.min(capturable, cap);
     friction = Math.max(0, braking - regenKwh / vp.regenEfficiency.value);
   }
-  const aux = (vp.baseAuxPowerKw.value + acPowerKw(ctx.conditions.ac, temp)) * hours;
+  const aux =
+    (vp.baseAuxPowerKw.value + acPowerKw(ctx.conditions.ac, temp) + (wet ? wet.auxKw : 0)) * hours;
   const consumed = traction + aux;
   return {
     distanceM: d,
@@ -208,6 +260,22 @@ export function calibrateToManual(
   };
 }
 
+/** Lo que cambia la energía de un tramo además de la física base (M2). */
+export interface EnergyProfileOptions {
+  /** Segundos detenido en cada caseta de peaje del perfil de velocidad (`limitingFactor` "toll"). */
+  tollStopSeconds?: number;
+  /**
+   * Clima del tramo cuyo punto medio está en `km` y que se recorre `secondsFromDeparture`
+   * después de salir (el tiempo del perfil de velocidad, sin contar las paradas a cargar).
+   * Sin él, todos los tramos usan `ctx.weather` (M3.1, ADR-0024).
+   */
+  weatherAt?: (km: number, secondsFromDeparture: number) => WeatherSnapshot | null;
+  /** Vía mojada con el clima del tramo (null = seca). Sin él, toda la ruta seca. */
+  wetFor?: (weather: WeatherSnapshot | null) => WetRoad | null;
+  /** Eficiencia del tren motriz según la potencia (M3.2). Sin él, constante. */
+  efficiency?: EfficiencyModel;
+}
+
 export interface EnergyProfileV2 {
   /** Una por muestra de la ruta, como el perfil del modelo anterior (lo consume el SOCEngine). */
   samples: EnergySample[];
@@ -220,6 +288,8 @@ export interface EnergyProfileV2 {
   };
   durationMinutes: number;
   segments: number;
+  /** Km recorridos con la vía mojada (M2.2); 0 si toda la ruta es seca. */
+  wetKm: number;
 }
 
 type RouteSampleIn = Omit<
@@ -243,6 +313,7 @@ export function energyProfileV2(
   regen: RegenModeParams,
   /** Perfil de altura denso; sin él, la altura se interpola entre muestras. */
   profile?: ElevationProfile,
+  opts: EnergyProfileOptions = {},
 ): EnergyProfileV2 {
   const n = samples.length;
   const acc = samples.map(() => ({ gross: 0, regen: 0, net: 0, seconds: 0, meters: 0 }));
@@ -254,6 +325,7 @@ export function energyProfileV2(
     frictionBrakeEnergyKwh: 0,
   };
   let seconds = 0;
+  let wetKm = 0;
   let si = 1;
   let ei = 1;
   const elevAt = (km: number) => {
@@ -270,6 +342,12 @@ export function energyProfileV2(
     const p = mesh[i]!;
     const q = mesh[i + 1]!;
     const hNext = elevAt(q.km);
+    // Clima del tramo: el de su lugar y su hora (M3.1); sin campo, el de `ctx`.
+    const midKm = (p.km + q.km) / 2;
+    const weather = opts.weatherAt ? opts.weatherAt(midKm, seconds) : ctx.weather;
+    const segCtx = opts.weatherAt ? { ...ctx, weather } : ctx;
+    const wet = opts.wetFor?.(weather) ?? null;
+    if (wet) wetKm += q.km - p.km;
     const seg = segmentEnergyV2(
       {
         horizontalM: (q.km - p.km) * 1000,
@@ -280,8 +358,11 @@ export function energyProfileV2(
         headingDeg: p.headingDeg,
       },
       vp,
-      ctx,
+      segCtx,
       regen,
+      undefined,
+      wet,
+      opts.efficiency ?? null,
     );
     hPrev = hNext;
     si = intervalIndex(samples, q.km, si);
@@ -297,6 +378,21 @@ export function energyProfileV2(
     totals.netEnergyKwh += seg.netEnergyKwh;
     totals.auxiliaryEnergyKwh += seg.auxiliaryEnergyKwh;
     totals.frictionBrakeEnergyKwh += seg.frictionBrakeEnergyKwh;
+    // Caseta de peaje: el carro espera detenido y sigue pagando los auxiliares (M2.1).
+    if (opts.tollStopSeconds && speed[i + 1]!.limitingFactor === "toll") {
+      const temp = segmentTempC(segCtx, hNext);
+      const idleKwh =
+        ((vp.baseAuxPowerKw.value + acPowerKw(ctx.conditions.ac, temp) + (wet ? wet.auxKw : 0)) *
+          opts.tollStopSeconds) /
+        3600;
+      slot.gross += idleKwh;
+      slot.net += idleKwh;
+      slot.seconds += opts.tollStopSeconds;
+      seconds += opts.tollStopSeconds;
+      totals.energyConsumedKwh += idleKwh;
+      totals.netEnergyKwh += idleKwh;
+      totals.auxiliaryEnergyKwh += idleKwh;
+    }
   }
 
   let cum = 0;
@@ -321,6 +417,7 @@ export function energyProfileV2(
     totals,
     durationMinutes: seconds / 60,
     segments: Math.max(0, mesh.length - 1),
+    wetKm,
   };
 }
 

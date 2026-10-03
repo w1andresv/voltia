@@ -34,7 +34,13 @@ export interface ProviderStep {
   durationS: number;
   geometry?: LatLon[];
   /** Intersecciones con la clase vial del proveedor (base de la jerarquía de vías). */
-  intersections?: { location: LatLon; roadClass?: string; classes?: string[] }[];
+  intersections?: {
+    location: LatLon;
+    roadClass?: string;
+    classes?: string[];
+    /** Punto de cobro de peaje: "toll_booth" (caseta, el carro se detiene) o "toll_gantry" (pórtico). */
+    tollCollection?: { type: string; name?: string };
+  }[];
 }
 
 export interface RouteRequest {

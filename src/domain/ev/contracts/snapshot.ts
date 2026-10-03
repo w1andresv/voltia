@@ -83,6 +83,7 @@ const RawRouteSchema = z
     minorRoadScore: z.number().optional(),
     engine: z.enum(["mapbox-traffic", "mapbox", "osrm"]).optional(),
     legBoundariesKm: z.array(z.number()).optional(),
+    tollBoothsKm: z.array(z.number()).optional(),
     structures: z
       .array(z.object({ kind: z.enum(["tunnel", "bridge"]), fromKm: z.number(), toKm: z.number() }))
       .optional(),
@@ -112,6 +113,23 @@ const ChargerSchema = z
   })
   .passthrough();
 
+const WeatherSeriesSchema = z.object({
+  lat: z.number(),
+  lon: z.number(),
+  elevationM: z.number().optional(),
+  startIso: z.string(),
+  temperatureC: z.array(z.number()).max(72),
+  windKmh: z.array(z.number()).max(72),
+  windDirDeg: z.array(z.number()).max(72),
+  precipitationMm: z.array(z.number()).max(72),
+});
+
+const WeatherAlongRouteSchema = z.object({
+  departIso: z.string(),
+  source: z.string().optional(),
+  points: z.array(WeatherSeriesSchema.extend({ km: z.number() })).max(24),
+});
+
 const WeatherSchema = z
   .object({ temperatureC: z.number(), windKmh: z.number(), windDirDeg: z.number() })
   .passthrough();
@@ -139,6 +157,7 @@ const SnapshotObjectSchema = z.object({
   detours: z
     .record(z.string(), z.object({ distanceKm: z.number(), durationMin: z.number() }))
     .optional(),
+  weatherAlong: z.record(z.string(), WeatherAlongRouteSchema).optional(),
   verifiedRoutes: z
     .record(
       z.string(),
@@ -189,6 +208,8 @@ export function snapshotHash(
     stationsVersion: s.stationsVersion ?? null,
     dataQuality: s.dataQuality ?? null,
     detours: s.detours ?? null,
+    // Solo cuenta cuando existe: el hash de un snapshot sin clima por tramo no cambia.
+    ...(s.weatherAlong ? { weatherAlong: s.weatherAlong } : {}),
   });
 }
 
@@ -198,6 +219,7 @@ export function snapshotInputs(s: PlanningSnapshot) {
     routes: s.routes,
     chargers: s.chargers,
     weather: s.weather,
+    ...(s.weatherAlong ? { weatherAlong: s.weatherAlong } : {}),
     ...(s.dataQuality ? { dataQuality: s.dataQuality } : {}),
     ...(s.snapshotId ? { snapshotId: s.snapshotId } : {}),
   };

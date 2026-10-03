@@ -34,11 +34,37 @@ export const USER_AGENT = asciiHeader(`EV-on-way/1.0 (EV trip planner; ${CONTACT
  *     dentro de la ventana de `cacheTtlMs`, incluso en una función nueva.
  */
 const memoryCache = new Map<string, { at: number; value: unknown }>();
+/**
+ * Tope de entradas de la memoria del proceso: un LRU (el Map conserva el orden de
+ * inserción). Las respuestas de rutas pesan cientos de KB y un proceso que vive horas
+ * (Fluid compute) las acumulaba sin límite; la Data Cache de Next sigue detrás.
+ */
+export const MEMORY_CACHE_MAX_ENTRIES = 200;
 
 function memoryHit<T>(key: string, ttlMs: number): T | undefined {
   const hit = memoryCache.get(key);
-  if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
-  return undefined;
+  if (!hit) return undefined;
+  if (Date.now() - hit.at >= ttlMs) {
+    memoryCache.delete(key);
+    return undefined;
+  }
+  // Se usó ahora: pasa al final, la más reciente.
+  memoryCache.delete(key);
+  memoryCache.set(key, hit);
+  return hit.value as T;
+}
+
+function memoryStore(key: string, value: unknown): void {
+  memoryCache.delete(key);
+  memoryCache.set(key, { at: Date.now(), value });
+  while (memoryCache.size > MEMORY_CACHE_MAX_ENTRIES) {
+    memoryCache.delete(memoryCache.keys().next().value as string);
+  }
+}
+
+/** Entradas en la memoria de este proceso (pruebas y diagnóstico). */
+export function providerMemorySize(): number {
+  return memoryCache.size;
 }
 
 /** Espera indicada por `Retry-After` (segundos o fecha HTTP), acotada a 10s. */
@@ -158,7 +184,7 @@ export async function fetchJson<T>(
     cacheOptions(cacheTtlMs),
   );
   const value = await cached();
-  memoryCache.set(key, { at: Date.now(), value });
+  memoryStore(key, value);
   return value;
 }
 

@@ -10,7 +10,9 @@ export type LimitingFactor =
   | "curvature"
   | "acceleration"
   | "deceleration"
-  | "stop";
+  | "stop"
+  /** Caseta de peaje: se detiene (M2.1). */
+  | "toll";
 
 export interface SpeedProfilePoint {
   km: number;

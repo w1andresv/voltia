@@ -2,14 +2,16 @@ import { annotateEnergy, energyMode, STYLE_SPEED_FACTOR } from "./energy";
 import { MODEL_PARAMETERS, type ModelParameters } from "./ev/core/params";
 import { reserveSocPct, toTripConfiguration } from "./ev/core/trip-config";
 import type { MeasuredDetour } from "./ev/contracts/detour";
-import { detourEnergyV2, energyProfileForRoute, type EnergyEngine } from "./ev/energy-v2";
+import type { WeatherAlongRoute } from "./ev/contracts/weather";
+import { detourEnergyV2, energyProfileForRouteCached, type EnergyEngine } from "./ev/energy-v2";
+import { fineRouteLine } from "./ev/core/axis";
 import { batteryDepletion } from "./ev/engines/soc/depletion";
 import { simulateSoc } from "./ev/engines/soc/simulate";
 import { adapterSummary } from "./plan/presentation";
 import { planAssumptions, planDataQuality } from "./plan/quality";
-import { placeChargers, stopEvents } from "./plan/shared";
+import { placeChargers, stopEvents, type PlannerRunStats } from "./plan/shared";
 import { planStopsLegacy } from "./plan/stops-v1";
-import { planStopsV2 } from "./plan/stops-v2";
+import { planStopsV2, v2PlugMinutes } from "./plan/stops-v2";
 import type {
   Charger,
   ItineraryNode,
@@ -67,6 +69,10 @@ export function buildPlan(args: {
   params?: ModelParameters;
   /** Ninguna fuente de elevación respondió (va a `dataQuality`). */
   elevationUnavailable?: boolean;
+  /** Acumulador opcional de lo que hizo el planificador v2 (banco y registros, ADR-0020). */
+  stats?: PlannerRunStats;
+  /** Clima por hora en varios puntos de esta ruta (M3.1, solo con la energía v2). */
+  weatherAlong?: WeatherAlongRoute;
 }): RoutePlan {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
   const params = args.params ?? MODEL_PARAMETERS;
@@ -82,11 +88,18 @@ export function buildPlan(args: {
       : s.speedKmh * styleSpeed,
   }));
 
-  const attached = placeChargers(args.chargers, samplesPre, args.detours, params);
+  // El v2 ubica las estaciones contra la línea fina de la ruta (M5, ADR-0027); el v1, contra las muestras.
+  const attached = placeChargers(
+    args.chargers,
+    samplesPre,
+    args.detours,
+    params,
+    args.engine === "v2" ? fineRouteLine(raw) : undefined,
+  );
   // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
   const energyV2 =
     args.energyEngine === "v2"
-      ? energyProfileForRoute(raw, vehicle, conditions, weather, params)
+      ? energyProfileForRouteCached(raw, vehicle, conditions, weather, params, args.weatherAlong)
       : null;
   const energySamples = energyV2 ? energyV2.samples : annotateEnergy(samplesPre, ctx);
   // Con la energía v2, el desvío usa el consumo local del perfil y el costo de parar (§5.8.1).
@@ -102,6 +115,7 @@ export function buildPlan(args: {
           weather,
           detourKwh: detourEnergy,
           params,
+          stats: args.stats,
         })
       : planStopsLegacy({
           samples: energySamples,
@@ -116,7 +130,12 @@ export function buildPlan(args: {
   const stops = chosen.stops.map((st) => ({
     ...st,
     nextLabel: st.nextLabel || destination.label,
-    adapterNeeded: adapterSummary(st, vehicle, cap),
+    adapterNeeded: adapterSummary(
+      st,
+      vehicle,
+      cap,
+      args.engine === "v2" ? v2PlugMinutes(vehicle, cap, params) : undefined,
+    ),
   }));
 
   // La curva de batería sale del SOCEngine: regeneración recortada según el SOC

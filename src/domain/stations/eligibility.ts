@@ -36,13 +36,17 @@ export function evaluateEligibility(station: ConsolidatedStation): { eligible: b
     if (!SUPPORTED_STANDARDS.includes(c.standard)) return false;
     if (c.powerKw == null) return false; // Estándar sin default conocido (p.ej. "other")
     if (!c.confirmed) return false;
+    if (c.status === "offline") return false; // M4.1: un conector apagado no se planifica
     return true;
   });
 
   if (validConnectors.length === 0) {
+    const allOffline = station.connectors.length > 0 && station.connectors.every(c => c.status === "offline");
     const hasUnconfirmed = station.connectors.some(c => !c.confirmed);
     const hasNoPower = station.connectors.some(c => c.powerKw == null);
-    if (hasUnconfirmed) {
+    if (allOffline) {
+      reasons.push("Conectores fuera de servicio");
+    } else if (hasUnconfirmed) {
       reasons.push("Conectores no confirmados por fuentes oficiales o comunidad");
     } else if (hasNoPower) {
       reasons.push("Sin potencia de carga reportada");

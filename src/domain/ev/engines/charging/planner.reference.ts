@@ -1,0 +1,363 @@
+import type { EnergySample } from "@/domain/ev/contracts/energy";
+import type { PlanningMode } from "@/domain/types";
+import { compareLabels } from "./planner";
+
+/**
+ * COPIA CONGELADA del planificador de cargas anterior a M1 (ADR-0020), solo para
+ * pruebas: es el oráculo con que se comprueba que la versión optimizada da la
+ * misma viabilidad y el mismo costo óptimo. No lo importa código de producción.
+ * No se modifica: si cambia la regla del planificador, cambia el oráculo a propósito
+ * y en su propio commit.
+ */
+
+/**
+ * ChargingPlanner v2 (plan §4.9, especificación §5.8): dónde parar y cuánto
+ * cargar. Programación dinámica sobre (estación, SOC de salida en una malla),
+ * con costo lexicográfico según la estrategia. No calcula consumo ni tiempos:
+ * recibe inyectados el recorrido del SOC (SOCEngine) y el tiempo de carga de
+ * cada estación (curva). Reemplaza la selección por puntaje (D6).
+ */
+
+/** Recorre el SOC desde una muestra (lo inyecta el SOCEngine: `walkSoc`). */
+export type SocWalkerRef = (
+  fromIdx: number,
+  startSoc: number,
+  visit: (idx: number, soc: number, lowest: number) => boolean,
+) => void;
+
+export interface PlannerNodeRef {
+  /** Muestra de la ruta donde queda la estación. */
+  sIdx: number;
+  /** Puntos de SOC del desvío de ida y vuelta (se descuentan al llegar). */
+  detourPct: number;
+  detourKm: number;
+  detourKwh: number;
+  detourMin: number;
+  /** Espera esperada (p. ej. estación ocupada). */
+  waitMin: number;
+  /** Minutos para cargar de `fromSoc` a `toSoc` en esta estación, con los minutos fijos. */
+  chargeMinutes: (fromSoc: number, toSoc: number) => number;
+  /** Carga rápida (DC): al salir de aquí aplica `PlannerInputRef.fastChargeBuffer`. */
+  fast?: boolean;
+  /**
+   * Sesión mínima (ADR-0018): SOC al que se llega en esta estación cargando el
+   * tiempo mínimo desde `arriveSoc`. Si se para aquí, se sale con al menos ese
+   * SOC (o con el tope en ruta, si queda más arriba). Sin él, basta un punto.
+   */
+  minSessionSoc?: (arriveSoc: number) => number;
+}
+
+export interface PlannerInputRef {
+  samples: EnergySample[];
+  initialSocPct: number;
+  /** Piso de SOC en todo punto, también al llegar a una estación: nunca se baja de aquí. */
+  floorPct: number;
+  /** SOC mínimo al destino: nunca se llega con menos. */
+  destinationReservePct: number;
+  /**
+   * Margen flexible (ADR-0019): el SOC objetivo, por encima del piso y de la
+   * reserva al destino. Bajar de `pct` se permite, pero al comparar planes cuesta
+   * `penaltyMinPerPct` minutos por punto, medido en el punto más bajo de cada
+   * tramo (la llegada al destino incluida). Así solo se baja si se ahorra una
+   * parada o bastante tiempo. Sin él, el piso es el objetivo.
+   */
+  softFloor?: { pct: number; penaltyMinPerPct: number };
+  /** Tope de carga en ruta. */
+  maxChargePct: number;
+  /**
+   * Tope estirado (ADR-0018): si viene, se puede salir de una estación hasta este
+   * SOC, por encima de `maxChargePct`. Quien llama acepta ese plan solo si tiene
+   * menos paradas. La sesión mínima y el extra de carga rápida siguen midiéndose
+   * contra `maxChargePct`.
+   */
+  stretchChargePct?: number;
+  /** Estaciones compatibles, ordenadas por `sIdx`. */
+  nodes: PlannerNodeRef[];
+  objective: PlanningMode;
+  walk: SocWalkerRef;
+  gridPct: number;
+  tolerancePct: number;
+  /**
+   * Al salir de una estación rápida hacia otra estación, ese tramo debe terminar
+   * con `extraPct` puntos de más sobre el objetivo (`softFloor`, o el piso si no
+   * hay): se carga eso más de lo necesario
+   * para no llegar justo a la siguiente parada. No aplica al tramo final (no hay
+   * otra parada que cuidar: solo se pide la reserva al destino), ni si ya se
+   * sale con `maxSocPct` o más (ni con el tope de carga). Ningún plan viable
+   * deja de serlo.
+   */
+  fastChargeBuffer?: { extraPct: number; maxSocPct: number };
+  /**
+   * Atajo opcional (mismo resultado que `walk`): SOC gastado acumulado por
+   * muestra (%), con la regeneración aceptada entera, y el SOC hasta el cual la
+   * batería la acepta entera. Un tramo cuyo SOC nunca pasa de ese valor es
+   * lineal: se resuelve con sumas entre estaciones en vez de muestra por muestra.
+   * Si el SOC puede pasarlo (regeneración recortada), se recorre con `walk`.
+   */
+  linear?: { spentPct: ArrayLike<number>; fullRegenBelowPct: number };
+}
+
+export interface PlannedStopRef {
+  node: number;
+  arriveSoc: number;
+  departSoc: number;
+}
+
+export interface PlannerResultRef {
+  feasible: boolean;
+  stops: PlannedStopRef[];
+  arrivalSoc: number;
+  minSoc: number;
+  objective: {
+    stops: number;
+    extraMinutes: number;
+    /** Único cambio sobre la copia: la penalización, para comparar el costo total con el nuevo. */
+    penaltyMinutes: number;
+    detourKm: number;
+    detourKwh: number;
+  };
+  /** Estaciones alcanzables desde el origen con alguna combinación de cargas. */
+  reachable: number[];
+  /** Km (índice de muestra) más lejano al que se llega sin bajar del piso. */
+  furthestIdx: number;
+  /** Se llega al tramo final pero no con la reserva al destino. */
+  destinationShort: boolean;
+}
+
+interface Label {
+  stops: number;
+  minutes: number;
+  /** Minutos equivalentes por bajar del margen flexible (no son tiempo real). */
+  penalty: number;
+  detourKm: number;
+  detourKwh: number;
+  minSoc: number;
+  arrive: number;
+  prevNode: number;
+  prevD: number;
+}
+
+const EPS = 1e-9;
+
+/** Planifica las paradas. Si no hay plan viable, `feasible` es false y se informa hasta dónde se llega. */
+export function planChargingReference(input: PlannerInputRef): PlannerResultRef {
+  const { samples, nodes, walk, objective } = input;
+  const destIdx = samples.length - 1;
+  const floor = input.floorPct - input.tolerancePct;
+  const reserve = input.destinationReservePct - input.tolerancePct;
+  const grid = input.gridPct;
+  const softLevels = Math.floor(input.maxChargePct / grid + EPS);
+  const levels = Math.max(softLevels, Math.floor((input.stretchChargePct ?? 0) / grid + EPS));
+  const byIdx = new Map<number, number[]>();
+  nodes.forEach((n, i) => {
+    const list = byIdx.get(n.sIdx) ?? [];
+    list.push(i);
+    byIdx.set(n.sIdx, list);
+  });
+  // labels[n][k]: mejor forma de salir de la estación n con SOC k × grid.
+  const labels: (Label | undefined)[][] = nodes.map(() => new Array<Label | undefined>(levels + 1));
+  const reachable = new Set<number>();
+  let furthestIdx = 0;
+  let destinationShort = false;
+  let best: (Label & { arrival: number; lastNode: number; lastD: number }) | null = null;
+
+  const soft = input.softFloor;
+  /** Minutos equivalentes por el punto más bajo `low` de un tramo, si queda bajo el margen flexible. */
+  const penaltyOf = (low: number): number =>
+    soft && low < soft.pct - input.tolerancePct ? soft.penaltyMinPerPct * (soft.pct - low) : 0;
+  /** El extra de carga rápida se mide sobre el objetivo, no sobre el piso. */
+  const target = soft ? Math.max(floor, soft.pct - input.tolerancePct) : floor;
+  /** Con qué SOC mínimo debe terminar un tramo que lleva `margin` puntos de extra de carga rápida. */
+  const lowestFor = (margin: number): number => (margin > 0 ? target + margin : floor);
+
+  const buffer = input.fastChargeBuffer;
+  const bufferCap = buffer ? Math.min(buffer.maxSocPct, input.maxChargePct) : 0;
+  /** Puntos de más con que debe llegar a la siguiente estación el tramo que sale de `fromNode` con `startSoc`. */
+  const marginFrom = (fromNode: number, startSoc: number): number => {
+    if (!buffer || fromNode < 0 || !nodes[fromNode]!.fast) return 0;
+    return startSoc < bufferCap - input.tolerancePct ? buffer.extraPct : 0;
+  };
+
+  const cand: Pick<Label, "stops" | "minutes" | "penalty" | "detourKm" | "detourKwh" | "minSoc"> = { stops: 0, minutes: 0, penalty: 0, detourKm: 0, detourKwh: 0, minSoc: 0 };
+  const reach = (j: number, soc: number, lowest: number, margin: number, fromNode: number, fromD: number, base: Label) => {
+    const node = nodes[j]!;
+    const arrive = soc - node.detourPct;
+    const low = Math.min(lowest, arrive);
+    if (low < lowestFor(margin)) return;
+    reachable.add(j);
+    let firstK = Math.floor(arrive / grid + EPS) + 1;
+    // Sesión mínima: si se para, se carga al menos ese tiempo, o hasta el tope en ruta.
+    if (node.minSessionSoc) {
+      firstK = Math.max(firstK, Math.min(softLevels, Math.ceil(node.minSessionSoc(arrive) / grid - EPS)));
+    }
+    // Un solo candidato que cambia solo en los minutos: se copia únicamente si gana.
+    cand.stops = base.stops + 1;
+    cand.detourKm = base.detourKm + node.detourKm;
+    cand.detourKwh = base.detourKwh + node.detourKwh;
+    cand.minSoc = Math.min(base.minSoc, low);
+    cand.penalty = base.penalty + penaltyOf(low);
+    const fixedMin = base.minutes + node.detourMin + node.waitMin;
+    const row = labels[j]!;
+    for (let k = Math.max(0, firstK); k <= levels; k++) {
+      cand.minutes = fixedMin + node.chargeMinutes(arrive, k * grid);
+      const cur = row[k];
+      if (!cur || compareLabels(cand, cur, objective) < 0) {
+        row[k] = { ...cand, arrive, prevNode: fromNode, prevD: fromD };
+      }
+    }
+  };
+  const atDestination = (soc: number, lowest: number, fromNode: number, fromD: number, base: Label) => {
+    // Al destino no se exige el margen de carga rápida: solo la reserva.
+    if (soc >= reserve) {
+      const low = Math.min(lowest, soc);
+      const final = { ...base, minSoc: Math.min(base.minSoc, low), penalty: base.penalty + penaltyOf(low), arrival: soc, lastNode: fromNode, lastD: fromD };
+      if (!best || compareLabels(final, best, objective) < 0) best = final;
+    } else {
+      destinationShort = true;
+    }
+  };
+
+  // Atajo lineal: posiciones con estaciones (más el origen y el destino) y, entre posiciones
+  // seguidas, el máximo del gasto acumulado; el mínimo del gasto hacia adelante dice si el
+  // SOC de un tramo puede pasar del umbral de regeneración completa.
+  const lin = input.linear;
+  const spent = lin?.spentPct;
+  const positions = lin ? [...new Set([0, ...nodes.map((n) => n.sIdx), destIdx])].sort((a, b) => a - b) : [];
+  const posOf = new Map(positions.map((p, i) => [p, i]));
+  const segMax = positions.map((p, b) => {
+    if (!spent || b === 0) return -Infinity;
+    let m = -Infinity;
+    for (let i = positions[b - 1]! + 1; i <= p; i++) m = Math.max(m, spent[i]!);
+    return m;
+  });
+  const minAhead = new Float64Array(samples.length + 1).fill(Infinity);
+  if (spent) for (let i = samples.length - 1; i >= 0; i--) minAhead[i] = Math.min(minAhead[i + 1]!, spent[i]!);
+
+  const expandLinear = (fromNode: number, fromD: number, fromIdx: number, startSoc: number, base: Label, margin: number): boolean => {
+    if (!lin || !spent) return false;
+    const a = posOf.get(fromIdx);
+    const base0 = spent[fromIdx]!;
+    // El SOC más alto del tramo es el de salida, o más si se gana bajando: si no pasa del umbral, es lineal.
+    const maxSoc = startSoc + Math.max(0, base0 - minAhead[fromIdx + 1]!);
+    if (a == null || maxSoc > lin.fullRegenBelowPct) return false;
+    let runMax = -Infinity;
+    for (let b = a + 1; b < positions.length; b++) {
+      const pos = positions[b]!;
+      runMax = Math.max(runMax, segMax[b]!);
+      const lowest = Math.min(startSoc, startSoc - (runMax - base0));
+      if (lowest < floor) {
+        // Hasta dónde se llegó sobre el piso dentro de este tramo (para `furthestIdx`).
+        for (let i = positions[b - 1]! + 1; i < pos; i++) {
+          if (startSoc - (spent[i]! - base0) < floor) break;
+          if (i > furthestIdx) furthestIdx = i;
+        }
+        return true;
+      }
+      if (pos > furthestIdx) furthestIdx = pos;
+      const soc = startSoc - (spent[pos]! - base0);
+      if (pos === destIdx) {
+        atDestination(soc, lowest, fromNode, fromD, base);
+        return true;
+      }
+      if (lowest < lowestFor(margin)) continue;
+      for (const j of byIdx.get(pos) ?? []) reach(j, soc, lowest, margin, fromNode, fromD, base);
+    }
+    return true;
+  };
+
+  const expand = (fromNode: number, fromD: number, fromIdx: number, startSoc: number, base: Label) => {
+    const margin = marginFrom(fromNode, startSoc);
+    if (expandLinear(fromNode, fromD, fromIdx, startSoc, base, margin)) return;
+    walk(fromIdx, startSoc, (idx, soc, lowest) => {
+      if (lowest < floor) return false;
+      if (idx > furthestIdx) furthestIdx = idx;
+      // Con el margen de carga rápida se sigue recorriendo (para `furthestIdx`), pero solo se acepta lo que lo cumple.
+      const withMargin = lowest >= lowestFor(margin);
+      if (idx === destIdx) {
+        atDestination(soc, lowest, fromNode, fromD, base);
+        return false;
+      }
+      if (!withMargin) return true;
+      for (const j of byIdx.get(idx) ?? []) reach(j, soc, lowest, margin, fromNode, fromD, base);
+      return true;
+    });
+  };
+
+  const origin: Label = { stops: 0, minutes: 0, penalty: 0, detourKm: 0, detourKwh: 0, minSoc: input.initialSocPct, arrive: input.initialSocPct, prevNode: -1, prevD: -1 };
+  expand(-1, -1, 0, input.initialSocPct, origin);
+  for (let n = 0; n < nodes.length; n++) {
+    for (let k = 0; k <= levels; k++) {
+      const label = labels[n]![k];
+      if (label) expand(n, k, nodes[n]!.sIdx, k * grid, label);
+    }
+  }
+
+  const chosen = best as (Label & { arrival: number; lastNode: number; lastD: number }) | null;
+  if (!chosen) {
+    return {
+      feasible: false,
+      stops: [],
+      arrivalSoc: Number.NaN,
+      minSoc: Number.NaN,
+      objective: { stops: 0, extraMinutes: 0, penaltyMinutes: 0, detourKm: 0, detourKwh: 0 },
+      reachable: [...reachable].sort((a, b) => a - b),
+      furthestIdx,
+      destinationShort,
+    };
+  }
+  const stops: PlannedStopRef[] = [];
+  let n = chosen.lastNode;
+  let k = chosen.lastD;
+  while (n >= 0) {
+    const label = labels[n]![k]!;
+    stops.unshift({ node: n, arriveSoc: label.arrive, departSoc: k * grid });
+    n = label.prevNode;
+    k = label.prevD;
+  }
+  return {
+    feasible: true,
+    stops,
+    arrivalSoc: chosen.arrival,
+    minSoc: chosen.minSoc,
+    objective: {
+      stops: chosen.stops,
+      extraMinutes: chosen.minutes,
+      penaltyMinutes: chosen.penalty,
+      detourKm: chosen.detourKm,
+      detourKwh: chosen.detourKwh,
+    },
+    reachable: [...reachable].sort((a, b) => a - b),
+    furthestIdx,
+    destinationShort,
+  };
+}
+
+/**
+ * Carga previa (§5.8.6): menor número entero de puntos a agregar al SOC actual
+ * con el que hay plan viable, por búsqueda binaria (la viabilidad crece con el
+ * SOC inicial). La salida no pasa de 100 %. null si ni al 100 % hay plan.
+ */
+export function requiredInitialChargeReference(
+  input: PlannerInputRef,
+): { additionalPct: number; startSoc: number; result: PlannerResultRef } | null {
+  const current = input.initialSocPct;
+  const cache = new Map<number, PlannerResultRef>();
+  const at = (add: number) => {
+    let r = cache.get(add);
+    if (!r) {
+      r = planChargingReference({ ...input, initialSocPct: Math.min(100, current + add) });
+      cache.set(add, r);
+    }
+    return r;
+  };
+  const maxAdd = Math.max(1, Math.ceil(100 - current - 1e-9));
+  if (!at(maxAdd).feasible) return null;
+  let lo = 0; // sin cargar: no viable (por eso se llama)
+  let hi = maxAdd;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (at(mid).feasible) hi = mid;
+    else lo = mid;
+  }
+  return { additionalPct: hi, startSoc: Math.min(100, current + hi), result: at(hi) };
+}

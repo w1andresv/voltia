@@ -20,6 +20,8 @@ import type {
 import type { EnergyEngine } from "./energy-v2";
 import type { ModelParameters } from "./core/params";
 import type { PlanningSnapshot } from "./contracts/snapshot";
+import type { WeatherAlongRoute } from "./contracts/weather";
+import type { PlannerRunStats } from "../plan/shared";
 import { detoursForRoute, type MeasuredDetour } from "./contracts/detour";
 
 export type { EnergyEngine };
@@ -40,6 +42,10 @@ export interface PlanInputs {
   snapshotId?: string;
   /** Parámetros del modelo; sin ellos, los calibrados (`MODEL_PARAMETERS`). */
   params?: ModelParameters;
+  /** Acumulador opcional de lo que hizo el planificador v2 (registros, ADR-0020). */
+  stats?: PlannerRunStats;
+  /** Clima por hora en varios puntos de cada ruta, por id de ruta (M3.1). */
+  weatherAlong?: Record<string, WeatherAlongRoute>;
 }
 
 export interface ComputedPlans {
@@ -70,6 +76,8 @@ export function buildPlans(
       detours: detoursForRoute(inputs.detours, raw.id),
       params: inputs.params,
       elevationUnavailable: inputs.dataQuality?.elevation === "unavailable",
+      stats: inputs.stats,
+      weatherAlong: inputs.weatherAlong?.[raw.id],
     }),
     ...(inputs.snapshotId ? { snapshotId: inputs.snapshotId } : {}),
   }));
@@ -112,7 +120,14 @@ export function rankVerifiedFirst(
 /** Lo que hace falta de un snapshot para recalcular sus planes (también el `geo` del navegador). */
 export type SnapshotInputs = Pick<
   PlanningSnapshot,
-  "routes" | "chargers" | "weather" | "detours" | "energyEngine" | "verifiedRoutes" | "dataQuality"
+  | "routes"
+  | "chargers"
+  | "weather"
+  | "weatherAlong"
+  | "detours"
+  | "energyEngine"
+  | "verifiedRoutes"
+  | "dataQuality"
 > & { plannerEngine?: PlannerEngine; snapshotId?: string };
 
 /**
@@ -137,15 +152,22 @@ export function computePlansFromSnapshot(
     routes: snapshot.routes,
     chargers: snapshot.chargers,
     weather: snapshot.weather,
+    ...(snapshot.weatherAlong ? { weatherAlong: snapshot.weatherAlong } : {}),
     origin: places.origin,
     destination: places.destination,
     detours: snapshot.detours,
   };
   const engine = snapshot.plannerEngine ?? "legacy";
   const energy = snapshot.energyEngine ?? "legacy";
-  const plans = buildPlans(inputs, vehicle, conditions, engine, energy).map((plan) => {
-    const v = snapshot.verifiedRoutes?.[plan.id];
-    if (!v) return plan;
+  const withSnapshotId = (plan: RoutePlan): RoutePlan => ({
+    ...plan,
+    ...(inputs.snapshotId ? { snapshotId: inputs.snapshotId } : {}),
+  });
+  const plans = inputs.routes.map((raw) => {
+    const v = snapshot.verifiedRoutes?.[raw.id];
+    const pass1 = () => withSnapshotId(buildPlans({ ...inputs, routes: [raw] }, vehicle, conditions, engine, energy)[0]!);
+    if (!v) return pass1();
+    // El plan verificado primero: la pasada 1 solo se arma si el verificado ya no alcanza.
     const ids = v.chargerIds ? new Set(v.chargerIds) : null;
     const verified = buildPlan({
       raw: v.route,
@@ -159,13 +181,13 @@ export function computePlansFromSnapshot(
       energyEngine: energy,
       params,
       elevationUnavailable: inputs.dataQuality?.elevation === "unavailable",
+      weatherAlong: snapshot.weatherAlong?.[raw.id],
     });
-    if (!verified.feasible && plan.feasible) return plan;
-    return {
-      ...verified,
-      verification: v.verification,
-      ...(inputs.snapshotId ? { snapshotId: inputs.snapshotId } : {}),
-    };
+    if (!verified.feasible) {
+      const plan = pass1();
+      if (plan.feasible) return plan;
+    }
+    return withSnapshotId({ ...verified, verification: v.verification });
   });
   const ranked = rankVerifiedFirst(plans, conditions.planningMode);
   return { plans: ranked, selectedId: ranked[0]?.id ?? "" };

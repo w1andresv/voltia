@@ -2,6 +2,7 @@
  * Composición: el único lugar de la capa de aplicación que conoce los
  * proveedores concretos (Mapbox, OSRM, Open-Meteo, Photon, Postgres).
  */
+import { after } from "next/server";
 import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import type { GeocodingProvider } from "@/domain/ports/geocoding";
 import { getEnv } from "@/infrastructure/config/env";
@@ -131,6 +132,18 @@ function stationDeps(
   };
 }
 
+/**
+ * El modo sombra corre después de responder (`after()` de Next). Fuera de una petición
+ * (scripts, pruebas) `after` no está disponible: se corre enseguida.
+ */
+function deferAfterResponse(work: () => void): void {
+  try {
+    after(work);
+  } catch {
+    work();
+  }
+}
+
 /** Servicio de planificación con los proveedores de producción. `overrides` reemplaza piezas (tests, grabación). */
 export function createPlanningService(
   overrides: Partial<PlanningDeps> = {},
@@ -146,6 +159,7 @@ export function createPlanningService(
       ? { stations: overrides.stations }
       : stationDeps(overrides.engineMode ?? (getEnv().PLANNER_ENGINE as PlannerEngineMode))),
     params: MODEL_PARAMETERS,
+    defer: deferAfterResponse,
     engineMode: getEnv().PLANNER_ENGINE as PlannerEngineMode,
     energyMode: getEnv().ENERGY_ENGINE as EnergyEngineMode,
     // Desvíos medidos (F4): solo con DETOUR_SOURCE=matrix y token de Mapbox.

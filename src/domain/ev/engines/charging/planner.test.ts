@@ -31,7 +31,8 @@ function node(sIdx: number, kw = 60, extra: Partial<PlannerNode> = {}): PlannerN
     detourKwh: 0,
     detourMin: 0,
     waitMin: 0,
-    chargeMinutes: (from, to) => (to > from ? ((to - from) / kw) * 60 : 0),
+    chargeAt: (soc) => (soc / kw) * 60,
+    connectionMin: 0,
     ...extra,
   };
 }

@@ -1,5 +1,5 @@
 import type { ChargeCurvePoint } from "@/domain/types";
-import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
+import { MODEL_PARAMETERS, type ModelParameters } from "@/domain/ev/core/params";
 
 /**
  * Curva de carga: cuánto tarda cargar de A a B (plan §4.8). La curva genérica
@@ -66,4 +66,80 @@ export function chargeTimeMinutes(
     hours += energyPerStep / Math.max(power, 1.5);
   }
   return hours * 60 + (opts.withOverhead === false ? 0 : params.connectionOverheadMin.value);
+}
+
+/**
+ * Tiempos de carga de una toma sobre la malla de integración (M4.2, ADR-0026): la ÚNICA
+ * función de tiempo del planificador v2. La programación dinámica, las opciones de cada
+ * parada y el resumen de adaptadores salen de aquí, así lo que se optimiza y lo que se
+ * muestra son los mismos minutos. Se precalcula una vez por toma: se consulta miles de veces.
+ */
+export interface ChargeTimeTable {
+  /** Minutos acumulados de carga desde 0 hasta `soc`, sin los de conexión (crece). */
+  at: (soc: number) => number;
+  /** Minutos fijos de conexión por parada. */
+  overheadMin: number;
+  /** Minutos para cargar de `from` a `to`, con los de conexión (0 si no carga). */
+  minutes: (from: number, to: number) => number;
+  /** Minutos solo cargando, sin los de conexión. */
+  chargingMinutes: (from: number, to: number) => number;
+  /** SOC al que se llega cargando `min` minutos desde `from` (cuyo `at` ya se calculó); 100 si no alcanza. */
+  socAfter: (from: number, atFrom: number, min: number) => number;
+}
+
+export function chargeTimeTable(args: {
+  capacityKwh: number;
+  /** Pico del vehículo en esta forma de cargar (DC o AC), kW, y su curva por SOC. */
+  peakKw: number;
+  curve: ChargeCurvePoint[];
+  /** Potencia de la toma (la menor entre estación, vehículo y adaptador), kW. */
+  plugKw: number;
+  /** Fracción de la energía del cargador que llega a la batería (M4.2); 1 = sin pérdidas. */
+  efficiency: number;
+  params: Pick<ModelParameters["charging"], "integrationStepPct" | "connectionOverheadMin">;
+}): ChargeTimeTable {
+  const { capacityKwh, peakKw, curve, plugKw, efficiency, params } = args;
+  const step = params.integrationStepPct;
+  const overhead = params.connectionOverheadMin.value;
+  const n = Math.floor(100 / step + 1e-9);
+  const cum = new Float64Array(n + 1);
+  const energy = (capacityKwh * step) / 100;
+  for (let k = 0; k < n; k++) {
+    // La curva del vehículo ya es de la batería; la estación entrega `plugKw` y llega `× eficiencia`.
+    const power = Math.min(peakKw * lerpFactor(curve, (k + 0.5) * step), plugKw * efficiency);
+    cum[k + 1] = cum[k]! + (energy / Math.max(power, 1.5)) * 60;
+  }
+  const at = (soc: number) => {
+    const x = Math.max(0, Math.min(100, soc)) / step;
+    const k = Math.min(n - 1, Math.floor(x));
+    return cum[k]! + (cum[k + 1]! - cum[k]!) * (x - k);
+  };
+  // Índice de salto sobre `cum` (que crece): para cada fracción del tiempo total, el último
+  // tramo que empieza antes. Encuentra el mismo tramo que una búsqueda binaria con 1–3
+  // comparaciones: se llama una vez por llegada a una estación.
+  const total = cum[n]!;
+  const jump = new Int32Array(n + 1);
+  for (let g = 0, lo = 0; g <= n; g++) {
+    const boundary = (g * total) / n;
+    while (lo + 1 < n && cum[lo + 1]! < boundary) lo++;
+    jump[g] = lo;
+  }
+  const socAfter = (from: number, atFrom: number, min: number): number => {
+    if (min <= 0) return from;
+    const target = atFrom + min;
+    if (target >= total) return 100;
+    // El último tramo cuyo inicio está antes del tiempo pedido (cum crece).
+    let lo = jump[Math.min(n, Math.floor((target / total) * n))]!;
+    while (lo + 1 < n && cum[lo + 1]! < target) lo++;
+    const hi = lo + 1;
+    const x = lo + (target - cum[lo]!) / (cum[hi]! - cum[lo]!);
+    return Math.max(from, x * step);
+  };
+  return {
+    at,
+    overheadMin: overhead,
+    minutes: (from, to) => (to > from ? at(to) - at(from) + overhead : 0),
+    chargingMinutes: (from, to) => (to > from ? at(to) - at(from) : 0),
+    socAfter,
+  };
 }

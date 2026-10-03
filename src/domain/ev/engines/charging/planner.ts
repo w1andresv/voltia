@@ -26,16 +26,29 @@ export interface PlannerNode {
   detourMin: number;
   /** Espera esperada (p. ej. estación ocupada). */
   waitMin: number;
-  /** Minutos para cargar de `fromSoc` a `toSoc` en esta estación, con los minutos fijos. */
-  chargeMinutes: (fromSoc: number, toSoc: number) => number;
+  /**
+   * Minutos acumulados de carga desde 0 hasta `soc`, sin los minutos fijos: creciente.
+   * Los minutos de cargar de A a B son `chargeAt(B) − chargeAt(A) + connectionMin` (ver
+   * `nodeChargeMinutes`). Que sea una resta de una función acumulada es lo que deja
+   * resolver las llegadas a una estación sin recorrer todos los niveles de salida (ADR-0020).
+   */
+  chargeAt: (soc: number) => number;
+  /** Minutos fijos por parada (estacionar, conectar, salir), una vez por carga. */
+  connectionMin: number;
   /** Carga rápida (DC): al salir de aquí aplica `PlannerInput.fastChargeBuffer`. */
   fast?: boolean;
   /**
    * Sesión mínima (ADR-0018): SOC al que se llega en esta estación cargando el
    * tiempo mínimo desde `arriveSoc`. Si se para aquí, se sale con al menos ese
    * SOC (o con el tope en ruta, si queda más arriba). Sin él, basta un punto.
+   * Recibe también `chargeAt(arriveSoc)`, que el planificador ya calculó.
    */
-  minSessionSoc?: (arriveSoc: number) => number;
+  minSessionSoc?: (arriveSoc: number, chargeAtArrive: number) => number;
+}
+
+/** Minutos para cargar de `fromSoc` a `toSoc` en la estación, con los minutos fijos (0 si no carga). */
+export function nodeChargeMinutes(node: PlannerNode, fromSoc: number, toSoc: number): number {
+  return toSoc > fromSoc ? node.chargeAt(toSoc) - node.chargeAt(fromSoc) + node.connectionMin : 0;
 }
 
 export interface PlannerInput {
@@ -99,13 +112,31 @@ export interface PlannerResult {
   stops: PlannedStop[];
   arrivalSoc: number;
   minSoc: number;
-  objective: { stops: number; extraMinutes: number; detourKm: number; detourKwh: number };
+  objective: {
+    stops: number;
+    extraMinutes: number;
+    /** Minutos equivalentes por bajar del margen flexible (no son tiempo real). */
+    penaltyMinutes: number;
+    detourKm: number;
+    detourKwh: number;
+  };
+  /** Contadores deterministas del trabajo hecho (banco y prueba de presupuesto, ADR-0020). */
+  stats: PlannerStats;
   /** Estaciones alcanzables desde el origen con alguna combinación de cargas. */
   reachable: number[];
   /** Km (índice de muestra) más lejano al que se llega sin bajar del piso. */
   furthestIdx: number;
   /** Se llega al tramo final pero no con la reserva al destino. */
   destinationShort: boolean;
+}
+
+export interface PlannerStats {
+  /** Etiquetas (estación, SOC de salida) expandidas, más la del origen. */
+  expansions: number;
+  /** Llegadas a una estación guardadas (ganan su cubeta). */
+  arrivals: number;
+  /** Etiquetas de salida armadas al resolver las llegadas. */
+  labelWrites: number;
 }
 
 interface Label {
@@ -119,6 +150,14 @@ interface Label {
   arrive: number;
   prevNode: number;
   prevD: number;
+}
+
+/** Llegada a una estación: lo que cuesta llegar, sin lo que cuesta cargar (ver `cand`). */
+interface Arrival extends Pick<Label, "stops" | "minutes" | "penalty" | "detourKm" | "detourKwh" | "minSoc" | "arrive" | "prevNode" | "prevD"> {
+  /** Minutos acumulados al llegar más desvío y espera (sin la carga). */
+  fixed: number;
+  /** Orden de llegada: desempata a igual costo. */
+  seq: number;
 }
 
 const EPS = 1e-9;
@@ -161,15 +200,20 @@ export function planCharging(input: PlannerInput): PlannerResult {
   const grid = input.gridPct;
   const softLevels = Math.floor(input.maxChargePct / grid + EPS);
   const levels = Math.max(softLevels, Math.floor((input.stretchChargePct ?? 0) / grid + EPS));
-  const byIdx = new Map<number, number[]>();
+  // Estaciones por muestra (un arreglo, no un Map: se consulta en cada muestra recorrida).
+  const nodesAt: (number[] | undefined)[] = new Array<number[] | undefined>(samples.length);
   nodes.forEach((n, i) => {
-    const list = byIdx.get(n.sIdx) ?? [];
-    list.push(i);
-    byIdx.set(n.sIdx, list);
+    (nodesAt[n.sIdx] ??= []).push(i);
   });
   // labels[n][k]: mejor forma de salir de la estación n con SOC k × grid.
   const labels: (Label | undefined)[][] = nodes.map(() => new Array<Label | undefined>(levels + 1));
-  const reachable = new Set<number>();
+  // arrivals[n][k]: la mejor llegada a la estación n cuyo primer nivel de salida posible es k.
+  // Se guarda la llegada una sola vez y los niveles de salida se arman al procesar la
+  // estación (`resolveLabels`), en vez de escribir los ~90 niveles por cada llegada (ADR-0020).
+  const arrivals: (Arrival | undefined)[][] = nodes.map(() => new Array<Arrival | undefined>(levels + 1));
+  const stats: PlannerStats = { expansions: 0, arrivals: 0, labelWrites: 0 };
+  let seq = 0;
+  const reachableFlag = new Uint8Array(nodes.length);
   let furthestIdx = 0;
   let destinationShort = false;
   let best: (Label & { arrival: number; lastNode: number; lastD: number }) | null = null;
@@ -191,17 +235,21 @@ export function planCharging(input: PlannerInput): PlannerResult {
     return startSoc < bufferCap - input.tolerancePct ? buffer.extraPct : 0;
   };
 
+  // Candidato a llegada. `minutes` es la clave de comparación `fixed − chargeAt(arrive)`: al
+  // salir con `k` los minutos son esa clave + chargeAt(k) + conexión, y el segundo sumando es
+  // igual para todas las llegadas, así que el orden entre ellas no depende de `k`.
   const cand: Pick<Label, "stops" | "minutes" | "penalty" | "detourKm" | "detourKwh" | "minSoc"> = { stops: 0, minutes: 0, penalty: 0, detourKm: 0, detourKwh: 0, minSoc: 0 };
   const reach = (j: number, soc: number, lowest: number, margin: number, fromNode: number, fromD: number, base: Label) => {
     const node = nodes[j]!;
     const arrive = soc - node.detourPct;
     const low = Math.min(lowest, arrive);
     if (low < lowestFor(margin)) return;
-    reachable.add(j);
+    reachableFlag[j] = 1;
+    const atArrive = node.chargeAt(arrive);
     let firstK = Math.floor(arrive / grid + EPS) + 1;
     // Sesión mínima: si se para, se carga al menos ese tiempo, o hasta el tope en ruta.
     if (node.minSessionSoc) {
-      firstK = Math.max(firstK, Math.min(softLevels, Math.ceil(node.minSessionSoc(arrive) / grid - EPS)));
+      firstK = Math.max(firstK, Math.min(softLevels, Math.ceil(node.minSessionSoc(arrive, atArrive) / grid - EPS)));
     }
     // Un solo candidato que cambia solo en los minutos: se copia únicamente si gana.
     cand.stops = base.stops + 1;
@@ -210,13 +258,61 @@ export function planCharging(input: PlannerInput): PlannerResult {
     cand.minSoc = Math.min(base.minSoc, low);
     cand.penalty = base.penalty + penaltyOf(low);
     const fixedMin = base.minutes + node.detourMin + node.waitMin;
-    const row = labels[j]!;
-    for (let k = Math.max(0, firstK); k <= levels; k++) {
-      cand.minutes = fixedMin + node.chargeMinutes(arrive, k * grid);
-      const cur = row[k];
-      if (!cur || compareLabels(cand, cur, objective) < 0) {
-        row[k] = { ...cand, arrive, prevNode: fromNode, prevD: fromD };
+    const bucket = Math.max(0, firstK);
+    if (bucket > levels) return;
+    cand.minutes = fixedMin - atArrive;
+    const row = arrivals[j]!;
+    const cur = row[bucket];
+    // Gana la de menor costo; a igual costo, la que llegó antes (la primera que se vio).
+    if (!cur || compareLabels(cand, cur, objective) < 0) {
+      row[bucket] = {
+        stops: cand.stops,
+        minutes: cand.minutes,
+        penalty: cand.penalty,
+        detourKm: cand.detourKm,
+        detourKwh: cand.detourKwh,
+        minSoc: cand.minSoc,
+        fixed: fixedMin,
+        arrive,
+        prevNode: fromNode,
+        prevD: fromD,
+        seq: seq++,
+      };
+      stats.arrivals++;
+    }
+  };
+  /**
+   * Etiquetas de salida de la estación `n` a partir de sus llegadas. Con SOC de salida
+   * `k × grid` valen las llegadas cuyo primer nivel es `k` o menos; entre ellas gana la
+   * mejor (el orden no depende de `k`, ver `cand`), y el desempate es la llegada más antigua.
+   */
+  const resolveLabels = (n: number) => {
+    const node = nodes[n]!;
+    const bucket = arrivals[n]!;
+    const row = labels[n]!;
+    let run: Arrival | undefined;
+    for (let k = 0; k <= levels; k++) {
+      const a = bucket[k];
+      if (a) {
+        if (!run) run = a;
+        else {
+          const c = compareLabels(a, run, objective);
+          if (c < 0 || (c === 0 && a.seq < run.seq)) run = a;
+        }
       }
+      if (!run) continue;
+      row[k] = {
+        stops: run.stops,
+        minutes: run.fixed + nodeChargeMinutes(node, run.arrive, k * grid),
+        penalty: run.penalty,
+        detourKm: run.detourKm,
+        detourKwh: run.detourKwh,
+        minSoc: run.minSoc,
+        arrive: run.arrive,
+        prevNode: run.prevNode,
+        prevD: run.prevD,
+      };
+      stats.labelWrites++;
     }
   };
   const atDestination = (soc: number, lowest: number, fromNode: number, fromD: number, base: Label) => {
@@ -273,12 +369,14 @@ export function planCharging(input: PlannerInput): PlannerResult {
         return true;
       }
       if (lowest < lowestFor(margin)) continue;
-      for (const j of byIdx.get(pos) ?? []) reach(j, soc, lowest, margin, fromNode, fromD, base);
+      const here = nodesAt[pos];
+      if (here) for (const j of here) reach(j, soc, lowest, margin, fromNode, fromD, base);
     }
     return true;
   };
 
   const expand = (fromNode: number, fromD: number, fromIdx: number, startSoc: number, base: Label) => {
+    stats.expansions++;
     const margin = marginFrom(fromNode, startSoc);
     if (expandLinear(fromNode, fromD, fromIdx, startSoc, base, margin)) return;
     walk(fromIdx, startSoc, (idx, soc, lowest) => {
@@ -291,7 +389,8 @@ export function planCharging(input: PlannerInput): PlannerResult {
         return false;
       }
       if (!withMargin) return true;
-      for (const j of byIdx.get(idx) ?? []) reach(j, soc, lowest, margin, fromNode, fromD, base);
+      const here = nodesAt[idx];
+      if (here) for (const j of here) reach(j, soc, lowest, margin, fromNode, fromD, base);
       return true;
     });
   };
@@ -299,12 +398,18 @@ export function planCharging(input: PlannerInput): PlannerResult {
   const origin: Label = { stops: 0, minutes: 0, penalty: 0, detourKm: 0, detourKwh: 0, minSoc: input.initialSocPct, arrive: input.initialSocPct, prevNode: -1, prevD: -1 };
   expand(-1, -1, 0, input.initialSocPct, origin);
   for (let n = 0; n < nodes.length; n++) {
+    resolveLabels(n);
     for (let k = 0; k <= levels; k++) {
       const label = labels[n]![k];
       if (label) expand(n, k, nodes[n]!.sIdx, k * grid, label);
     }
   }
 
+  const reachableList = (): number[] => {
+    const out: number[] = [];
+    for (let j = 0; j < reachableFlag.length; j++) if (reachableFlag[j]) out.push(j);
+    return out;
+  };
   const chosen = best as (Label & { arrival: number; lastNode: number; lastD: number }) | null;
   if (!chosen) {
     return {
@@ -312,8 +417,9 @@ export function planCharging(input: PlannerInput): PlannerResult {
       stops: [],
       arrivalSoc: Number.NaN,
       minSoc: Number.NaN,
-      objective: { stops: 0, extraMinutes: 0, detourKm: 0, detourKwh: 0 },
-      reachable: [...reachable].sort((a, b) => a - b),
+      objective: { stops: 0, extraMinutes: 0, penaltyMinutes: 0, detourKm: 0, detourKwh: 0 },
+      stats,
+      reachable: reachableList(),
       furthestIdx,
       destinationShort,
     };
@@ -332,8 +438,15 @@ export function planCharging(input: PlannerInput): PlannerResult {
     stops,
     arrivalSoc: chosen.arrival,
     minSoc: chosen.minSoc,
-    objective: { stops: chosen.stops, extraMinutes: chosen.minutes, detourKm: chosen.detourKm, detourKwh: chosen.detourKwh },
-    reachable: [...reachable].sort((a, b) => a - b),
+    objective: {
+      stops: chosen.stops,
+      extraMinutes: chosen.minutes,
+      penaltyMinutes: chosen.penalty,
+      detourKm: chosen.detourKm,
+      detourKwh: chosen.detourKwh,
+    },
+    stats,
+    reachable: reachableList(),
     furthestIdx,
     destinationShort,
   };
@@ -346,13 +459,15 @@ export function planCharging(input: PlannerInput): PlannerResult {
  */
 export function requiredInitialCharge(
   input: PlannerInput,
+  /** Quién resuelve cada SOC inicial; por defecto `planCharging`. Permite compartir una memoria. */
+  solve: (i: PlannerInput) => PlannerResult = planCharging,
 ): { additionalPct: number; startSoc: number; result: PlannerResult } | null {
   const current = input.initialSocPct;
   const cache = new Map<number, PlannerResult>();
   const at = (add: number) => {
     let r = cache.get(add);
     if (!r) {
-      r = planCharging({ ...input, initialSocPct: Math.min(100, current + add) });
+      r = solve({ ...input, initialSocPct: Math.min(100, current + add) });
       cache.set(add, r);
     }
     return r;
