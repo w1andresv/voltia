@@ -41,8 +41,9 @@ export interface PlannerNode {
    * Sesión mínima (ADR-0018): SOC al que se llega en esta estación cargando el
    * tiempo mínimo desde `arriveSoc`. Si se para aquí, se sale con al menos ese
    * SOC (o con el tope en ruta, si queda más arriba). Sin él, basta un punto.
+   * Recibe también `chargeAt(arriveSoc)`, que el planificador ya calculó.
    */
-  minSessionSoc?: (arriveSoc: number) => number;
+  minSessionSoc?: (arriveSoc: number, chargeAtArrive: number) => number;
 }
 
 /** Minutos para cargar de `fromSoc` a `toSoc` en la estación, con los minutos fijos (0 si no carga). */
@@ -199,11 +200,10 @@ export function planCharging(input: PlannerInput): PlannerResult {
   const grid = input.gridPct;
   const softLevels = Math.floor(input.maxChargePct / grid + EPS);
   const levels = Math.max(softLevels, Math.floor((input.stretchChargePct ?? 0) / grid + EPS));
-  const byIdx = new Map<number, number[]>();
+  // Estaciones por muestra (un arreglo, no un Map: se consulta en cada muestra recorrida).
+  const nodesAt: (number[] | undefined)[] = new Array<number[] | undefined>(samples.length);
   nodes.forEach((n, i) => {
-    const list = byIdx.get(n.sIdx) ?? [];
-    list.push(i);
-    byIdx.set(n.sIdx, list);
+    (nodesAt[n.sIdx] ??= []).push(i);
   });
   // labels[n][k]: mejor forma de salir de la estación n con SOC k × grid.
   const labels: (Label | undefined)[][] = nodes.map(() => new Array<Label | undefined>(levels + 1));
@@ -213,7 +213,7 @@ export function planCharging(input: PlannerInput): PlannerResult {
   const arrivals: (Arrival | undefined)[][] = nodes.map(() => new Array<Arrival | undefined>(levels + 1));
   const stats: PlannerStats = { expansions: 0, arrivals: 0, labelWrites: 0 };
   let seq = 0;
-  const reachable = new Set<number>();
+  const reachableFlag = new Uint8Array(nodes.length);
   let furthestIdx = 0;
   let destinationShort = false;
   let best: (Label & { arrival: number; lastNode: number; lastD: number }) | null = null;
@@ -244,11 +244,12 @@ export function planCharging(input: PlannerInput): PlannerResult {
     const arrive = soc - node.detourPct;
     const low = Math.min(lowest, arrive);
     if (low < lowestFor(margin)) return;
-    reachable.add(j);
+    reachableFlag[j] = 1;
+    const atArrive = node.chargeAt(arrive);
     let firstK = Math.floor(arrive / grid + EPS) + 1;
     // Sesión mínima: si se para, se carga al menos ese tiempo, o hasta el tope en ruta.
     if (node.minSessionSoc) {
-      firstK = Math.max(firstK, Math.min(softLevels, Math.ceil(node.minSessionSoc(arrive) / grid - EPS)));
+      firstK = Math.max(firstK, Math.min(softLevels, Math.ceil(node.minSessionSoc(arrive, atArrive) / grid - EPS)));
     }
     // Un solo candidato que cambia solo en los minutos: se copia únicamente si gana.
     cand.stops = base.stops + 1;
@@ -259,12 +260,24 @@ export function planCharging(input: PlannerInput): PlannerResult {
     const fixedMin = base.minutes + node.detourMin + node.waitMin;
     const bucket = Math.max(0, firstK);
     if (bucket > levels) return;
-    cand.minutes = fixedMin - node.chargeAt(arrive);
+    cand.minutes = fixedMin - atArrive;
     const row = arrivals[j]!;
     const cur = row[bucket];
     // Gana la de menor costo; a igual costo, la que llegó antes (la primera que se vio).
     if (!cur || compareLabels(cand, cur, objective) < 0) {
-      row[bucket] = { ...cand, fixed: fixedMin, arrive, prevNode: fromNode, prevD: fromD, seq: seq++ };
+      row[bucket] = {
+        stops: cand.stops,
+        minutes: cand.minutes,
+        penalty: cand.penalty,
+        detourKm: cand.detourKm,
+        detourKwh: cand.detourKwh,
+        minSoc: cand.minSoc,
+        fixed: fixedMin,
+        arrive,
+        prevNode: fromNode,
+        prevD: fromD,
+        seq: seq++,
+      };
       stats.arrivals++;
     }
   };
@@ -356,7 +369,8 @@ export function planCharging(input: PlannerInput): PlannerResult {
         return true;
       }
       if (lowest < lowestFor(margin)) continue;
-      for (const j of byIdx.get(pos) ?? []) reach(j, soc, lowest, margin, fromNode, fromD, base);
+      const here = nodesAt[pos];
+      if (here) for (const j of here) reach(j, soc, lowest, margin, fromNode, fromD, base);
     }
     return true;
   };
@@ -375,7 +389,8 @@ export function planCharging(input: PlannerInput): PlannerResult {
         return false;
       }
       if (!withMargin) return true;
-      for (const j of byIdx.get(idx) ?? []) reach(j, soc, lowest, margin, fromNode, fromD, base);
+      const here = nodesAt[idx];
+      if (here) for (const j of here) reach(j, soc, lowest, margin, fromNode, fromD, base);
       return true;
     });
   };
@@ -390,6 +405,11 @@ export function planCharging(input: PlannerInput): PlannerResult {
     }
   }
 
+  const reachableList = (): number[] => {
+    const out: number[] = [];
+    for (let j = 0; j < reachableFlag.length; j++) if (reachableFlag[j]) out.push(j);
+    return out;
+  };
   const chosen = best as (Label & { arrival: number; lastNode: number; lastD: number }) | null;
   if (!chosen) {
     return {
@@ -399,7 +419,7 @@ export function planCharging(input: PlannerInput): PlannerResult {
       minSoc: Number.NaN,
       objective: { stops: 0, extraMinutes: 0, penaltyMinutes: 0, detourKm: 0, detourKwh: 0 },
       stats,
-      reachable: [...reachable].sort((a, b) => a - b),
+      reachable: reachableList(),
       furthestIdx,
       destinationShort,
     };
@@ -426,7 +446,7 @@ export function planCharging(input: PlannerInput): PlannerResult {
       detourKwh: chosen.detourKwh,
     },
     stats,
-    reachable: [...reachable].sort((a, b) => a - b),
+    reachable: reachableList(),
     furthestIdx,
     destinationShort,
   };

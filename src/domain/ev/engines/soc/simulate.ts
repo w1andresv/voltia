@@ -33,6 +33,17 @@ function stepSoc(
   return { soc: socPct - kwhToSocPct(netKwh, capacityKwh), netKwh, acceptedKwh };
 }
 
+/** SOC después de recorrer el tramo que llega a `sample`: la misma aritmética que `stepSoc`, sin armar objetos. */
+function nextSoc(
+  sample: EnergySample,
+  socPct: number,
+  capacityKwh: number,
+  params: RegenAcceptance,
+): number {
+  const acceptedKwh = sample.energyRegenKwh * regenAcceptance(socPct, params);
+  return socPct - kwhToSocPct(sample.energyGrossKwh - acceptedKwh, capacityKwh);
+}
+
 /**
  * Recorre el perfil desde `fromIdx` saliendo con `startSoc` y avisa en cada
  * muestra el SOC y el mínimo hasta ahí. Si `visit` devuelve false, se detiene.
@@ -49,7 +60,7 @@ export function walkSoc(
   let soc = startSoc;
   let lowest = startSoc;
   for (let i = Math.max(0, fromIdx) + 1; i < samples.length; i++) {
-    soc = stepSoc(samples[i]!, soc, capacityKwh, params).soc;
+    soc = nextSoc(samples[i]!, soc, capacityKwh, params);
     if (soc < lowest) lowest = soc;
     if (!visit(i, soc, lowest)) return;
   }
@@ -89,7 +100,7 @@ export function legSoc(
   let lowest = startSoc;
   const end = Math.min(samples.length - 1, toIdx);
   for (let i = Math.max(0, fromIdx) + 1; i <= end; i++) {
-    soc = stepSoc(samples[i]!, soc, capacityKwh, params).soc;
+    soc = nextSoc(samples[i]!, soc, capacityKwh, params);
     if (soc < lowest) lowest = soc;
   }
   return { endSoc: soc, lowestSoc: lowest };

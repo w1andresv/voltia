@@ -119,6 +119,19 @@ export interface StopsChoice {
   belowMarginReason?: BelowMarginReason;
 }
 
+/**
+ * Acumulador opcional de lo que hizo el planificador v2 (banco, registros y prueba de
+ * presupuesto, ADR-0020): estaciones compatibles, corridas de la programación dinámica
+ * y sus contadores. Lo pasa quien quiere medir; el planificador solo suma.
+ */
+export interface PlannerRunStats {
+  stations: number;
+  runs: number;
+  expansions: number;
+  arrivals: number;
+  labelWrites: number;
+}
+
 export type StopsArgs = {
   samples: EnergySample[];
   chargers: Charger[];
@@ -127,4 +140,6 @@ export type StopsArgs = {
   weather: WeatherSnapshot | null;
   detourKwh?: DetourEnergy;
   params: ModelParameters;
+  /** Si viene, el planificador v2 suma aquí lo que hizo. */
+  stats?: PlannerRunStats;
 };

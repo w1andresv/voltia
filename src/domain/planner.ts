@@ -7,7 +7,7 @@ import { batteryDepletion } from "./ev/engines/soc/depletion";
 import { simulateSoc } from "./ev/engines/soc/simulate";
 import { adapterSummary } from "./plan/presentation";
 import { planAssumptions, planDataQuality } from "./plan/quality";
-import { placeChargers, stopEvents } from "./plan/shared";
+import { placeChargers, stopEvents, type PlannerRunStats } from "./plan/shared";
 import { planStopsLegacy } from "./plan/stops-v1";
 import { planStopsV2 } from "./plan/stops-v2";
 import type {
@@ -67,6 +67,8 @@ export function buildPlan(args: {
   params?: ModelParameters;
   /** Ninguna fuente de elevación respondió (va a `dataQuality`). */
   elevationUnavailable?: boolean;
+  /** Acumulador opcional de lo que hizo el planificador v2 (banco y registros, ADR-0020). */
+  stats?: PlannerRunStats;
 }): RoutePlan {
   const { raw, vehicle, conditions, weather, origin, destination } = args;
   const params = args.params ?? MODEL_PARAMETERS;
@@ -102,6 +104,7 @@ export function buildPlan(args: {
           weather,
           detourKwh: detourEnergy,
           params,
+          stats: args.stats,
         })
       : planStopsLegacy({
           samples: energySamples,

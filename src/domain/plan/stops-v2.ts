@@ -8,6 +8,7 @@ import {
   type PlannedStop,
   type PlannerInput,
   type PlannerNode,
+  type PlannerResult,
 } from "../ev/engines/charging/planner";
 import { routePlugs, routeSocket, type RoutePlug } from "../ev/engines/compatibility/engine";
 import { classifyFeasibility } from "../ev/engines/feasibility/engine";
@@ -19,6 +20,7 @@ import {
   type BelowMarginReason,
   type ChargeChoice,
   type ChargeStop,
+  type Charger,
   type TripConditions,
   type Vehicle,
 } from "../types";
@@ -42,8 +44,8 @@ interface ChargeTable {
   overhead: number;
   /** Minutos solo cargando, sin los de conexión. */
   chargingMinutes: (from: number, to: number) => number;
-  /** SOC al que se llega cargando `min` minutos desde `from` (100 si no alcanza). */
-  socAfter: (from: number, min: number) => number;
+  /** SOC al que se llega cargando `min` minutos desde `from`, cuyo `at` ya se calculó (100 si no alcanza). */
+  socAfter: (from: number, atFrom: number, min: number) => number;
 }
 
 /**
@@ -72,18 +74,24 @@ function chargeTable(
     const k = Math.min(n - 1, Math.floor(x));
     return cum[k]! + (cum[k + 1]! - cum[k]!) * (x - k);
   };
-  const socAfter = (from: number, min: number): number => {
+  // Índice de salto sobre `cum` (que crece): para cada décima parte del tiempo total, el
+  // último tramo que empieza antes de ella. Encuentra el mismo tramo que una búsqueda
+  // binaria con 1–3 comparaciones: se llama una vez por llegada a una estación.
+  const total = cum[n]!;
+  const jump = new Int32Array(n + 1);
+  for (let g = 0, lo = 0; g <= n; g++) {
+    const boundary = (g * total) / n;
+    while (lo + 1 < n && cum[lo + 1]! < boundary) lo++;
+    jump[g] = lo;
+  }
+  const socAfter = (from: number, atFrom: number, min: number): number => {
     if (min <= 0) return from;
-    const target = at(from) + min;
-    if (target >= cum[n]!) return 100;
-    // cum crece: el primer tramo de la malla que llega al tiempo pedido.
-    let lo = 0;
-    let hi = n;
-    while (hi - lo > 1) {
-      const mid = (lo + hi) >> 1;
-      if (cum[mid]! >= target) hi = mid;
-      else lo = mid;
-    }
+    const target = atFrom + min;
+    if (target >= total) return 100;
+    // El último tramo cuyo inicio está antes del tiempo pedido (cum crece).
+    let lo = jump[Math.min(n, Math.floor((target / total) * n))]!;
+    while (lo + 1 < n && cum[lo + 1]! < target) lo++;
+    const hi = lo + 1;
     const x = lo + (target - cum[lo]!) / (cum[hi]! - cum[lo]!);
     return Math.max(from, x * step);
   };
@@ -150,7 +158,9 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
   const { vehicle, conditions, weather, params } = args;
   const cfg = toTripConfiguration(vehicle, conditions, weather, params);
   const margin = cfg.reserveSocPercent;
-  const strict = planStopsWith(args, {
+  // Estaciones, tablas de carga y SOC gastado no dependen de los pisos: una vez para las dos pasadas.
+  const prep = prepareNodes(args);
+  const strict = planStopsWith(args, prep, {
     floor: conditions.allowBelowSafety ? params.planner.belowSafetyFloorPct : margin,
     destReserve: margin,
   });
@@ -159,7 +169,7 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
   if (!canFlex || (settled && (strict.stops.length === 0 || conditions.planningMode === "safer"))) {
     return strict;
   }
-  const flex = planStopsWith(args, {
+  const flex = planStopsWith(args, prep, {
     floor: cfg.minimumSocPercent,
     destReserve: cfg.destinationReserveSocPercent,
     soft: { pct: margin, penaltyMinPerPct: cfg.belowMarginPenaltyMinPerPct },
@@ -169,19 +179,20 @@ export function planStopsV2(args: StopsArgs): StopsChoice {
   return gain ? { ...flex, belowMarginReason: gain } : strict;
 }
 
-function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
+/** Lo que no cambia entre la pasada estricta y la flexible. */
+interface Prepared {
+  usable: Charger[];
+  plugs: RoutePlug[];
+  tables: ChargeTable[];
+  nodes: PlannerNode[];
+  /** SOC gastado acumulado por muestra (atajo lineal del planificador). */
+  spentPct: Float64Array;
+}
+
+function prepareNodes(args: StopsArgs): Prepared {
   const { samples, vehicle, conditions, weather, params } = args;
-  const tolerance = params.planner.socTolerancePct;
-  const regen = params.soc.regenAcceptance;
-  const cfg = toTripConfiguration(vehicle, conditions, weather, params);
   const cap = Math.max(vehicle.batteryKwh, 1);
   const destIdx = samples.length - 1;
-  const { floor, destReserve } = reserves;
-  // Lo que cada parada busca respetar (lo necesario, el extra de carga rápida): el
-  // piso del plan o, si el plan es flexible, el margen completo (ADR-0019).
-  const aim = reserves.soft
-    ? { floor: reserves.soft.pct, dest: reserves.soft.pct }
-    : { floor, dest: destReserve };
   const ctx: EnergyCtx = {
     vehicle,
     conditions,
@@ -199,7 +210,6 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
   const tables = plugs.map((plug) => chargeTable(plug, vehicle, cap, params));
   // Sesión mínima (ADR-0018): si se para, se carga al menos estos minutos o hasta el tope.
   const minSession = params.planner.minChargeSessionMin.value;
-  const stretchCap = Math.min(100, params.planner.stretchChargeSocPct.value);
   const nodes: PlannerNode[] = usable.map((c, i) => {
     const sIdx = c.nearestSampleIndex ?? 0;
     const detourKm = c.detourKm ?? fromRouteKmOf(c) * 2;
@@ -216,10 +226,30 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
       connectionMin: table.overhead,
       fast: plugs[i]!.dc,
       ...(minSession > 0
-        ? { minSessionSoc: (arrive: number) => table.socAfter(arrive, minSession) }
+        ? { minSessionSoc: (arrive: number, atArrive: number) => table.socAfter(arrive, atArrive, minSession) }
         : {}),
     };
   });
+  if (args.stats) args.stats.stations = Math.max(args.stats.stations, nodes.length);
+  return { usable, plugs, tables, nodes, spentPct: spentSocPct(samples, cap) };
+}
+
+function planStopsWith(args: StopsArgs, prep: Prepared, reserves: Reserves): StopsChoice {
+  const { samples, vehicle, conditions, weather, params } = args;
+  const tolerance = params.planner.socTolerancePct;
+  const regen = params.soc.regenAcceptance;
+  const cfg = toTripConfiguration(vehicle, conditions, weather, params);
+  const cap = Math.max(vehicle.batteryKwh, 1);
+  const destIdx = samples.length - 1;
+  const { floor, destReserve } = reserves;
+  const { usable, plugs, tables, nodes } = prep;
+  // Lo que cada parada busca respetar (lo necesario, el extra de carga rápida): el
+  // piso del plan o, si el plan es flexible, el margen completo (ADR-0019).
+  const aim = reserves.soft
+    ? { floor: reserves.soft.pct, dest: reserves.soft.pct }
+    : { floor, dest: destReserve };
+  const minSession = params.planner.minChargeSessionMin.value;
+  const stretchCap = Math.min(100, params.planner.stretchChargeSocPct.value);
   const input: PlannerInput = {
     samples,
     initialSocPct: conditions.initialSoc,
@@ -231,7 +261,7 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
     objective: conditions.planningMode,
     walk: (from, start, visit) => walkSoc(samples, from, start, cap, visit, regen),
     linear: {
-      spentPct: spentSocPct(samples, cap),
+      spentPct: prep.spentPct,
       fullRegenBelowPct: regen.fullBelowPct,
     },
     gridPct: params.planner.socGridPct,
@@ -273,8 +303,27 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
     );
   };
 
-  let now = planCharging(input);
-  let pre = now.feasible ? null : requiredInitialCharge(input);
+  // La búsqueda de carga previa, el tope estirado y la sugerencia de carga previa repiten
+  // entradas (mismo SOC inicial y mismo tope): una corrida por combinación.
+  const memo = new Map<string, PlannerResult>();
+  const solve = (i: PlannerInput): PlannerResult => {
+    const key = `${i.initialSocPct}|${i.stretchChargePct ?? 0}`;
+    let r = memo.get(key);
+    if (!r) {
+      r = planCharging(i);
+      memo.set(key, r);
+      if (args.stats) {
+        args.stats.runs++;
+        args.stats.expansions += r.stats.expansions;
+        args.stats.arrivals += r.stats.arrivals;
+        args.stats.labelWrites += r.stats.labelWrites;
+      }
+    }
+    return r;
+  };
+
+  let now = solve(input);
+  let pre = now.feasible ? null : requiredInitialCharge(input, solve);
   let result = pre?.result ?? now;
   // Por qué alguna parada sale por encima del tope en ruta (ADR-0018), si pasa.
   let stretched: NonNullable<ChargeStop["aboveRouteCap"]> | null = null;
@@ -283,8 +332,8 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
   // verificar, solo con sus estaciones, un plan que ya salía por encima del tope.
   if (!result.feasible && stretchCap > input.maxChargePct) {
     const wide = { ...input, stretchChargePct: stretchCap };
-    const wideNow = planCharging(wide);
-    const widePre = wideNow.feasible ? null : requiredInitialCharge(wide);
+    const wideNow = solve(wide);
+    const widePre = wideNow.feasible ? null : requiredInitialCharge(wide, solve);
     const wideResult = widePre?.result ?? wideNow;
     if (wideResult.feasible) {
       now = wideNow;
@@ -294,7 +343,7 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
     }
   }
   const planningSoc = pre?.startSoc ?? conditions.initialSoc;
-  const full = !now.feasible && !pre ? planCharging({ ...input, initialSocPct: 100 }) : null;
+  const full = !now.feasible && !pre ? solve({ ...input, initialSocPct: 100 }) : null;
 
   // Tope estirado (ADR-0018): si alguna parada carga poco, se vuelve a planificar
   // dejando salir hasta `stretchCap`; ese plan solo se acepta si tiene menos paradas.
@@ -305,7 +354,7 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
     stretchCap > input.maxChargePct &&
     result.stops.some((_, i) => isMarginal(result.stops, i))
   ) {
-    const alt = planCharging({
+    const alt = solve({
       ...input,
       initialSocPct: planningSoc,
       stretchChargePct: stretchCap,
@@ -326,7 +375,7 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
     for (let add = fromAdd; add <= Math.ceil(needPts) + 3; add++) {
       const startSoc = conditions.initialSoc + add;
       if (startSoc > 100 + tolerance) break;
-      const alt = planCharging({
+      const alt = solve({
         ...input,
         initialSocPct: Math.min(100, startSoc),
         ...(stretched ? { stretchChargePct: stretchCap } : {}),
@@ -361,7 +410,7 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
     const belowMarginNext = needed > p.departSoc + tolerance;
     const extraPct = Math.max(0, p.departSoc - minDepartSoc);
     // Por qué se carga más que lo necesario: la sesión mínima o el extra de carga rápida.
-    const sessionSoc = Math.min(input.maxChargePct, node.minSessionSoc?.(p.arriveSoc) ?? 0);
+    const sessionSoc = Math.min(input.maxChargePct, node.minSessionSoc?.(p.arriveSoc, node.chargeAt(p.arriveSoc)) ?? 0);
     const bufferSoc =
       plug.dc && nextNode && bufferCfg.extraPct > 0 && p.departSoc < bufferCap - tolerance
         ? requiredStartSoc(

@@ -82,7 +82,7 @@ function node(rand: () => number, sIdx: number): PlannerNode {
     fast: rand() < 0.6,
     ...(minSession
       ? {
-          minSessionSoc: (arrive: number) => {
+          minSessionSoc: (arrive: number, _atArrive: number) => {
             // SOC al que se llega cargando `sessionMin` minutos desde `arrive`.
             const target = at(arrive) + sessionMin;
             let lo = arrive;
@@ -103,6 +103,9 @@ const toRef = (input: PlannerInput): PlannerInputRef => ({
   ...input,
   nodes: input.nodes.map((n) => ({
     ...n,
+    minSessionSoc: n.minSessionSoc
+      ? (arrive: number) => n.minSessionSoc!(arrive, n.chargeAt(arrive))
+      : undefined,
     chargeMinutes: (from: number, to: number) =>
       to > from ? n.chargeAt(to) - n.chargeAt(from) + n.connectionMin : 0,
   })),
