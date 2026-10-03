@@ -23,6 +23,13 @@ export class MapboxRoutingError extends Error {
 
 export type MapboxProfile = "driving-traffic" | "driving";
 
+/**
+ * Vigencia de una respuesta de Directions. El perfil `driving` no usa tráfico en vivo, así
+ * que una misma ruta no cambia por horas; antes eran 90 s y cada replanificación pagaba una
+ * consulta nueva. "Limpiar caché" (etiqueta `provider-data`) la invalida (ADR-0020).
+ */
+export const ROUTE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
 export interface MapboxCandidates {
   routes: OsrmRoute[];
   /** Km entre cada punto pedido y la vía donde Mapbox lo ubicó (origen, paradas, destino). */
@@ -90,7 +97,11 @@ export async function fetchMapboxCandidates(
   // "%20" en vez de "+" para el espacio de point(lon lat): no depender de cómo decodifique el servidor.
   const query = params.toString().replace(/\+/g, "%20");
   const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${path}?${query}`;
-  const raw = await fetchJson<unknown>(url, { timeoutMs: 15000, cacheTtlMs: 90_000, cacheKey });
+  const raw = await fetchJson<unknown>(url, {
+    timeoutMs: 15000,
+    cacheTtlMs: ROUTE_CACHE_TTL_MS,
+    cacheKey,
+  });
   const data = OsrmResponseSchema.parse(raw);
   if (data.code !== "Ok" || !data.routes?.length) {
     throw new MapboxRoutingError(`Mapbox sin ruta (${data.code})`, data.code === "NoRoute");

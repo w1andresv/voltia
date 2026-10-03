@@ -20,6 +20,7 @@ import type {
 import type { EnergyEngine } from "./energy-v2";
 import type { ModelParameters } from "./core/params";
 import type { PlanningSnapshot } from "./contracts/snapshot";
+import type { PlannerRunStats } from "../plan/shared";
 import { detoursForRoute, type MeasuredDetour } from "./contracts/detour";
 
 export type { EnergyEngine };
@@ -40,6 +41,8 @@ export interface PlanInputs {
   snapshotId?: string;
   /** Parámetros del modelo; sin ellos, los calibrados (`MODEL_PARAMETERS`). */
   params?: ModelParameters;
+  /** Acumulador opcional de lo que hizo el planificador v2 (registros, ADR-0020). */
+  stats?: PlannerRunStats;
 }
 
 export interface ComputedPlans {
@@ -70,6 +73,7 @@ export function buildPlans(
       detours: detoursForRoute(inputs.detours, raw.id),
       params: inputs.params,
       elevationUnavailable: inputs.dataQuality?.elevation === "unavailable",
+      stats: inputs.stats,
     }),
     ...(inputs.snapshotId ? { snapshotId: inputs.snapshotId } : {}),
   }));
@@ -143,9 +147,15 @@ export function computePlansFromSnapshot(
   };
   const engine = snapshot.plannerEngine ?? "legacy";
   const energy = snapshot.energyEngine ?? "legacy";
-  const plans = buildPlans(inputs, vehicle, conditions, engine, energy).map((plan) => {
-    const v = snapshot.verifiedRoutes?.[plan.id];
-    if (!v) return plan;
+  const withSnapshotId = (plan: RoutePlan): RoutePlan => ({
+    ...plan,
+    ...(inputs.snapshotId ? { snapshotId: inputs.snapshotId } : {}),
+  });
+  const plans = inputs.routes.map((raw) => {
+    const v = snapshot.verifiedRoutes?.[raw.id];
+    const pass1 = () => withSnapshotId(buildPlans({ ...inputs, routes: [raw] }, vehicle, conditions, engine, energy)[0]!);
+    if (!v) return pass1();
+    // El plan verificado primero: la pasada 1 solo se arma si el verificado ya no alcanza.
     const ids = v.chargerIds ? new Set(v.chargerIds) : null;
     const verified = buildPlan({
       raw: v.route,
@@ -160,12 +170,11 @@ export function computePlansFromSnapshot(
       params,
       elevationUnavailable: inputs.dataQuality?.elevation === "unavailable",
     });
-    if (!verified.feasible && plan.feasible) return plan;
-    return {
-      ...verified,
-      verification: v.verification,
-      ...(inputs.snapshotId ? { snapshotId: inputs.snapshotId } : {}),
-    };
+    if (!verified.feasible) {
+      const plan = pass1();
+      if (plan.feasible) return plan;
+    }
+    return withSnapshotId({ ...verified, verification: v.verification });
   });
   const ranked = rankVerifiedFirst(plans, conditions.planningMode);
   return { plans: ranked, selectedId: ranked[0]?.id ?? "" };

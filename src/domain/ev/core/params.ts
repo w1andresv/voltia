@@ -121,6 +121,11 @@ export interface ModelParameters {
     /** Pasada 2: rutas reales que se piden como máximo para verificar un plan (especificación §4). */
     maxVerifyIterations: number;
     /**
+     * Pasada 2: tiempo máximo al planificar (rutas más su elevación), ms. Al agotarse se
+     * responde con la pasada 1, marcada `failed`, igual que al compartir un viaje (ADR-0020).
+     */
+    verifyBudgetMs: number;
+    /**
      * Planificador v2: en una estación de carga rápida (DC) se carga `extraPct`
      * puntos más de lo que pide el tramo siguiente, sin pasar de `maxSocPct`
      * (del 90 al 100 % la carga se vuelve lenta) ni del tope de carga en ruta.
@@ -253,6 +258,7 @@ export const MODEL_PARAMETERS: ModelParameters = {
     socGridPct: 1,
     occupiedWaitMin: sourced(15, "estimated", { notes: "Sin datos de ocupación; calibrar." }),
     maxVerifyIterations: 3,
+    verifyBudgetMs: 8000,
     fastChargeBuffer: sourced({ extraPct: 10, maxSocPct: 90 }, "configurable", {
       notes:
         "Decisión del dueño del producto (2026-09-27): aprovechar la velocidad de la carga rápida para evitar paradas largas en carga lenta. Desde 2026-09-29 solo en tramos que terminan en otra estación, no al destino.",

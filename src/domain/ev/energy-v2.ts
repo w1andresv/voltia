@@ -89,6 +89,54 @@ export function energyProfileForRoute(
 }
 
 /**
+ * Perfiles de energía recientes por ruta (M1, ADR-0020). La energía depende de la ruta, el
+ * vehículo, el clima y de las condiciones que cambian la física (pasajeros, equipaje,
+ * velocidad fija, aire, temperatura, estilo, regeneración), no del SOC, del margen ni de
+ * la estrategia: mover esos controles no debe repetir la física. La memoria cuelga de la
+ * ruta, así que se libera con ella.
+ */
+const profileCache = new WeakMap<RawRoute, Map<string, EnergyV2Result>>();
+const PROFILES_PER_ROUTE = 8;
+const paramsIds = new WeakMap<object, number>();
+let nextParamsId = 1;
+
+function paramsId(params: ModelParameters): number {
+  let id = paramsIds.get(params);
+  if (id == null) paramsIds.set(params, (id = nextParamsId++));
+  return id;
+}
+
+/** Igual que `energyProfileForRoute`, con memoria. El resultado no se modifica: es de solo lectura. */
+export function energyProfileForRouteCached(
+  raw: RawRoute,
+  vehicle: Vehicle,
+  conditions: TripConditions,
+  weather: WeatherSnapshot | null,
+  params: ModelParameters = MODEL_PARAMETERS,
+): EnergyV2Result {
+  const key = JSON.stringify([
+    vehicle,
+    conditions.passengers,
+    conditions.luggageKg,
+    conditions.avgSpeedKmh,
+    conditions.ac,
+    conditions.temperatureC,
+    conditions.drivingStyle,
+    conditions.regenLevel,
+    weather,
+    paramsId(params),
+  ]);
+  let byKey = profileCache.get(raw);
+  if (!byKey) profileCache.set(raw, (byKey = new Map()));
+  const hit = byKey.get(key);
+  if (hit) return hit;
+  const value = energyProfileForRoute(raw, vehicle, conditions, weather, params);
+  if (byKey.size >= PROFILES_PER_ROUTE) byKey.delete(byKey.keys().next().value as string);
+  byKey.set(key, value);
+  return value;
+}
+
+/**
  * Energía de un desvío a un cargador con el perfil v2 (especificación §5.8.1):
  * km de ida y vuelta × consumo neto local (±2 km alrededor del punto) más
  * detenerse y volver a arrancar a la velocidad de la ruta en ese punto.

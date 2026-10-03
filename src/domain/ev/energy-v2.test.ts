@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RawRoute, TripConditions } from "@/domain/types";
 import { catalogVehicle } from "@/test-support/scenarios";
 import { buildPlan } from "../planner";
-import { detourEnergyV2, energyProfileForRoute } from "./energy-v2";
+import { detourEnergyV2, energyProfileForRoute, energyProfileForRouteCached } from "./energy-v2";
 
 const KM_PER_DEG = 111.195;
 function hillRoute(km: number): RawRoute {
@@ -154,5 +154,67 @@ describe("desvío con el perfil v2", () => {
     expect(fn(4, 20)).toBeGreaterThan(stopOnly);
     // En la bajada (después de la cima) el consumo local es menor que en la subida.
     expect(fn(4, 35) - fn(0, 35)).toBeLessThan(fn(4, 5) - fn(0, 5));
+  });
+});
+
+describe("energyProfileForRouteCached (M1, ADR-0020)", () => {
+  const route = () => {
+    const samples = Array.from({ length: 30 }, (_, i) => ({
+      km: i,
+      lat: 7 - i * 0.009,
+      lon: -73,
+      elevM: 1000 + i * 5,
+      slopePct: 0,
+      speedKmh: 60,
+    }));
+    return {
+      id: "r",
+      label: "r",
+      geometry: samples.map(({ lat, lon }) => ({ lat, lon })),
+      samples,
+      distanceKm: 29,
+      driveMinutes: 29,
+      elevation: { gainM: 0, lossM: 0, minM: 1000, maxM: 1150 },
+    };
+  };
+  const vehicle = catalogVehicle("mg-s5-ev-comfort");
+  const base = { ...conditions };
+
+  it("mismo perfil si solo cambian el SOC, el margen o la estrategia", () => {
+    const raw = route();
+    const a = energyProfileForRouteCached(raw, vehicle, base, null);
+    const b = energyProfileForRouteCached(
+      raw,
+      vehicle,
+      { ...base, initialSoc: 20, safetyMode: "conservative", planningMode: "safer" },
+      null,
+    );
+    expect(b).toBe(a);
+  });
+
+  it("otro perfil si cambia lo que cambia la física", () => {
+    const raw = route();
+    const a = energyProfileForRouteCached(raw, vehicle, base, null);
+    expect(energyProfileForRouteCached(raw, vehicle, { ...base, drivingStyle: "sport" }, null)).not.toBe(a);
+    expect(energyProfileForRouteCached(raw, vehicle, { ...base, luggageKg: 200 }, null)).not.toBe(a);
+    expect(energyProfileForRouteCached(raw, { ...vehicle, weightKg: 2400 }, base, null)).not.toBe(a);
+    expect(
+      energyProfileForRouteCached(raw, vehicle, base, { temperatureC: 5, windKmh: 10, windDirDeg: 0 }),
+    ).not.toBe(a);
+  });
+
+  it("da el mismo resultado que sin memoria", () => {
+    const raw = route();
+    const cached = energyProfileForRouteCached(raw, vehicle, base, null);
+    const fresh = energyProfileForRoute(raw, vehicle, base, null);
+    expect(cached.samples).toEqual(fresh.samples);
+    expect(cached.durationMinutes).toBe(fresh.durationMinutes);
+  });
+
+  it("otra ruta, otra memoria", () => {
+    const a = energyProfileForRouteCached(route(), vehicle, base, null);
+    const b = energyProfileForRouteCached(route(), vehicle, base, null);
+    expect(b).not.toBe(a);
+    expect(b.samples).toEqual(a.samples);
   });
 });

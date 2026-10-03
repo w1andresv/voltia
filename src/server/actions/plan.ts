@@ -41,7 +41,8 @@ export async function planTripFn(input: {
   try {
     const { createPlanningService } = await import("@/application/container");
     const overrides = await engineOverrides(input.engine);
-    const { response, engine, chargerCount } = await createPlanningService(overrides).plan(data);
+    const { response, engine, chargerCount, timings, plannerStats } =
+      await createPlanningService(overrides).plan(data);
 
     console.log(
       "[plan-trip]",
@@ -54,6 +55,9 @@ export async function planTripFn(input: {
         stationsVersion: response.geo.stationsVersion,
         warnings: response.geo.warnings.length,
         weather: response.geo.weather != null,
+        // Milisegundos por fase y trabajo del planificador v2 (ADR-0020).
+        phases: timings,
+        planner: plannerStats,
         ...(overrides.engineMode ? { engineChoice: input.engine } : {}),
       }),
     );

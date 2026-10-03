@@ -69,3 +69,29 @@ describe('caché que se puede limpiar (botón "Limpiar caché")', () => {
     expect(hits).toBe(2);
   });
 });
+
+describe("memoria del proceso con tope (LRU)", () => {
+  it("no pasa del tope y descarta la menos usada", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ok: 1 }), { status: 200 }));
+    const http = await import("./http");
+    http.clearProviderMemory();
+    const opts = (k: string) => ({ cacheTtlMs: 60_000, cacheKey: k });
+    const max = http.MEMORY_CACHE_MAX_ENTRIES;
+    for (let i = 0; i < max; i++) await http.fetchJson(`https://example.test/${i}`, opts(`lru-${i}`));
+    expect(http.providerMemorySize()).toBe(max);
+    // Se vuelve a usar la más vieja: ya no es la candidata a salir.
+    let fetched = 0;
+    vi.stubGlobal("fetch", async () => {
+      fetched++;
+      return new Response(JSON.stringify({ ok: 1 }), { status: 200 });
+    });
+    await http.fetchJson("https://example.test/0", opts("lru-0"));
+    expect(fetched).toBe(0);
+    await http.fetchJson("https://example.test/nueva", opts("lru-nueva"));
+    expect(http.providerMemorySize()).toBe(max);
+    // La segunda (lru-1) salió; la usada hace un momento (lru-0) sigue en memoria.
+    await http.fetchJson("https://example.test/0", opts("lru-0"));
+    expect(fetched).toBe(1); // solo la nueva
+    http.clearProviderMemory();
+  });
+});

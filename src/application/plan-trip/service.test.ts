@@ -324,3 +324,85 @@ describe("detalle de las paradas (Blaze, ADR-0008)", () => {
     expect(response.geo.warnings).toEqual(before.geo.warnings);
   });
 });
+
+describe("rendimiento y observabilidad (M1, ADR-0020)", () => {
+  // SOC bajo: el plan necesita paradas, así que hay pasada 2.
+  const lowSoc: PlanRequest = { ...request, conditions: { ...request.conditions, initialSoc: 35 } };
+
+  it("devuelve los milisegundos por fase y lo que hizo el planificador v2", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const out = await new EVRoutePlanningService(deps({ engineMode: "v2", energyMode: "v2" })).plan(
+      lowSoc,
+    );
+    expect(Object.keys(out.timings)).toEqual(
+      expect.arrayContaining(["routes", "data", "corridor", "detours", "compute"]),
+    );
+    expect(Object.values(out.timings).every((ms) => ms >= 0)).toBe(true);
+    expect(out.plannerStats.stations).toBeGreaterThan(0);
+    expect(out.plannerStats.runs).toBeGreaterThan(0);
+    expect(out.plannerStats.expansions).toBeGreaterThan(0);
+    vi.restoreAllMocks();
+  });
+
+  it("el modo sombra corre después de responder cuando hay `defer`", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const later: (() => void)[] = [];
+    const { response } = await new EVRoutePlanningService(
+      deps({ engineMode: "shadow", defer: (work) => later.push(work) }),
+    ).plan(request);
+    const shadowLogged = () =>
+      log.mock.calls.some(([first]) => String(first).startsWith("[plan-trip:shadow]"));
+    // La respuesta está lista y la sombra todavía no corrió.
+    expect(response.plans.length).toBeGreaterThan(0);
+    expect(later).toHaveLength(1);
+    expect(shadowLogged()).toBe(false);
+    later[0]!();
+    expect(shadowLogged()).toBe(true);
+    log.mockRestore();
+  });
+
+  it("la sombra diferida usa lo calculado, no lo que cambió después", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const later: (() => void)[] = [];
+    const { response } = await new EVRoutePlanningService(
+      deps({ engineMode: "shadow", defer: (work) => later.push(work) }),
+    ).plan(request);
+    later.forEach((work) => work());
+    const call = log.mock.calls.find(([tag]) => tag === "[plan-trip:shadow]");
+    const payload = JSON.parse(String(call![1])) as { routes: unknown[] };
+    expect(payload.routes).toHaveLength(response.plans.length);
+    log.mockRestore();
+    vi.unstubAllEnvs();
+  });
+
+  it("pasada 2 con plazo: si se demora, responde con la pasada 1 marcada como fallida", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Las rutas por las paradas (pasada 2, con puntos intermedios) nunca responden.
+    const slow: RoutingProvider = {
+      ...routing([straight()]),
+      calculateRoutes: async (req) =>
+        req.waypoints.length > 2
+          ? new Promise(() => {})
+          : { routes: [straight()], waypointSnapKm: [] },
+    };
+    const out = await new EVRoutePlanningService(
+      deps({
+        routing: slow,
+        engineMode: "v2",
+        energyMode: "v2",
+        params: {
+          ...MODEL_PARAMETERS,
+          planner: { ...MODEL_PARAMETERS.planner, verifyBudgetMs: 40 },
+        },
+      }),
+    ).plan(lowSoc);
+    const plan = out.response.plans[0]!;
+    expect(plan.stops.length).toBeGreaterThan(0);
+    expect(plan.verification?.status).toBe("failed");
+    expect(out.response.geo.verifiedRoutes).toBeUndefined();
+    expect(out.timings.verify).toBeDefined();
+    vi.restoreAllMocks();
+  });
+});

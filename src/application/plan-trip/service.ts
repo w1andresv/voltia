@@ -44,6 +44,8 @@ import { selectRoutes } from "./route-selection";
 import { buildEnergyShadowReport, formatEnergyShadowReport } from "./energy-shadow-report";
 import { buildShadowReport, formatShadowReport } from "./shadow-report";
 import { verifyPlanDetailed } from "./verify-plan";
+import { withDeadline } from "./deadline";
+import type { PlannerRunStats } from "@/domain/plan/shared";
 import { checkStopDetails, offlineStopText } from "./stop-details";
 import { formatStationFunnel, stationFunnel } from "./station-funnel";
 import type { StationDetails } from "@/domain/ports/station-details";
@@ -78,6 +80,11 @@ export interface PlanningDeps {
   detourMatrix?: DistanceMatrixProvider;
   /** Reloj inyectable (tests deterministas). */
   clock?: () => Date;
+  /**
+   * Corre trabajo que no cambia la respuesta (el modo sombra) después de responder.
+   * Por defecto, enseguida; `container.ts` lo arma con `after()` de Next (ADR-0020).
+   */
+  defer?: (work: () => void) => void;
 }
 
 /** Vueltas de detalle de paradas: la del plan y, si cambió, la de las paradas nuevas. */
@@ -87,6 +94,10 @@ export interface PlanResult {
   response: PlanResponse & { geo: PlanningSnapshot };
   engine: RoutingEngine;
   chargerCount: number;
+  /** Milisegundos por fase: rutas, datos, desvíos, cálculo, detalle de paradas y pasada 2. */
+  timings: Record<string, number>;
+  /** Lo que hizo el planificador v2 en la respuesta (estaciones, corridas del DP y contadores). */
+  plannerStats: PlannerRunStats;
 }
 
 /**
@@ -162,7 +173,16 @@ export class EVRoutePlanningService {
     const waypoints = [data.origin, ...data.waypoints, data.destination];
     const warnings: string[] = [];
     const elevationReports: ElevationReport[] = [];
+    const timings: Record<string, number> = {};
+    let lapAt = Date.now();
+    const lap = (phase: string) => {
+      const now = Date.now();
+      timings[phase] = (timings[phase] ?? 0) + (now - lapAt);
+      lapAt = now;
+    };
+    const plannerStats: PlannerRunStats = { stations: 0, runs: 0, expansions: 0, arrivals: 0, labelWrites: 0 };
     const routed = await selectRoutes(routing, waypoints);
+    lap("routes");
     const rawRoutes = routed.routes;
     warnings.push(...routed.warnings);
     const mid = rawRoutes[0]?.samples[Math.floor((rawRoutes[0].samples.length || 1) / 2)];
@@ -171,6 +191,7 @@ export class EVRoutePlanningService {
       mid && weather ? weather.current(mid) : Promise.resolve(null),
       stations.getDataset(),
     ]);
+    lap("data");
     logElevation(elevationReports, routes);
     // Error de datos (F2b): ninguna fuente de elevación respondió para una ruta de más de 5 km.
     const elevationUnavailable = elevationReports.some(
@@ -203,9 +224,11 @@ export class EVRoutePlanningService {
     );
 
     const mode = this.deps.engineMode;
+    lap("corridor");
     const detours = this.deps.detourMatrix
       ? await this.measure(this.deps.detourMatrix, routes, chargers, data.vehicle as Vehicle)
       : undefined;
+    lap("detours");
     let inputs: PlanInputs = {
       routes,
       chargers,
@@ -215,6 +238,7 @@ export class EVRoutePlanningService {
       ...(detours ? { detours } : {}),
       ...(elevationUnavailable ? { dataQuality: { elevation: "unavailable" as const } } : {}),
       params,
+      stats: plannerStats,
     };
     const vehicle = data.vehicle as Vehicle;
     const conditions = data.conditions as TripConditions;
@@ -229,14 +253,23 @@ export class EVRoutePlanningService {
       responding,
       energy,
     );
+    lap("compute");
+    // La sombra no cambia la respuesta: corre después de responder, sobre lo ya calculado.
+    const defer = this.deps.defer ?? ((work: () => void) => work());
+    const shadowInputs: PlanInputs = { ...inputs, stats: undefined };
+    const shadowRanked = ranked;
     if (mode === "shadow") {
-      logShadow(trip, ranked, conditions.planningMode, () =>
-        buildPlans(inputs, vehicle, conditions, "v2", energy),
+      defer(() =>
+        logShadow(trip, shadowRanked, conditions.planningMode, () =>
+          buildPlans(shadowInputs, vehicle, conditions, "v2", energy),
+        ),
       );
     }
     if (energyMode === "shadow") {
-      logEnergyShadow(trip, ranked, () =>
-        buildPlans(inputs, vehicle, conditions, responding, "v2"),
+      defer(() =>
+        logEnergyShadow(trip, shadowRanked, () =>
+          buildPlans(shadowInputs, vehicle, conditions, responding, "v2"),
+        ),
       );
     }
     // Detalle de las paradas (Blaze): si cambia algo (p. ej. una fuera de servicio), se
@@ -279,27 +312,43 @@ export class EVRoutePlanningService {
         offline.push(...check.offline.map((c) => c.name));
       }
       if (offline.length) warnings.push(offlineStopText(offline));
+      lap("stopDetails");
     }
     // Pasada 2 solo con el v2: una a tres rutas más por plan, y solo para el recomendado.
     // La ruta verificada queda en el snapshot: el navegador recalcula sobre ella al cambiar condiciones.
     let verifiedRoutes: PlanningSnapshot["verifiedRoutes"];
     if (mode === "v2" && ranked[0]?.stops.length) {
-      const out = await verifyPlanDetailed(
-        {
-          routing,
-          withElevation: (r) => this.withElevation(r),
-          maxIterations: params.planner.maxVerifyIterations,
-        },
-        {
-          plan: ranked[0],
-          inputs,
-          userWaypoints: data.waypoints,
-          vehicle,
-          conditions,
-          engine: "v2",
-          energyEngine: energy,
+      const first = ranked[0];
+      // Con plazo: si la pasada 2 se demora, se responde con la pasada 1 marcada `failed`.
+      const out = await withDeadline(
+        verifyPlanDetailed(
+          {
+            routing,
+            withElevation: (r) => this.withElevation(r),
+            maxIterations: params.planner.maxVerifyIterations,
+          },
+          {
+            plan: first,
+            inputs,
+            userWaypoints: data.waypoints,
+            vehicle,
+            conditions,
+            engine: "v2",
+            energyEngine: energy,
+          },
+        ),
+        params.planner.verifyBudgetMs,
+        () => {
+          console.warn(`[plan-trip:verify] sin respuesta en ${params.planner.verifyBudgetMs} ms: se usa la pasada 1`);
+          return {
+            plan: {
+              ...first,
+              verification: { status: "failed" as const, iterations: 0, baseDistanceKm: first.distanceKm },
+            },
+          };
         },
       );
+      lap("verify");
       const verified = out.plan;
       if (out.route && verified.verification && verified.verification.status !== "failed") {
         verifiedRoutes = {
@@ -358,6 +407,8 @@ export class EVRoutePlanningService {
       },
       engine: routed.engine,
       chargerCount: chargers.length,
+      timings,
+      plannerStats,
     };
   }
 
