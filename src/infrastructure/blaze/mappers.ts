@@ -114,12 +114,17 @@ export function connectorsFromChargers(chargers: BlazeCharger[]): StationConnect
     groups.set(key, group);
   }
   return [...groups.values()].map(({ standard, list }) => {
-    const powers = list.map((c) => c.powerKw).filter((p): p is number => p != null && p > 0);
+    // Solo cuentan los cargadores que no están fuera de servicio (M4.1): un cargador apagado
+    // de 150 kW no da potencia ni cuenta como disponible. Si todos están apagados, el conector
+    // queda fuera de servicio y conserva potencia y cantidad para mostrarlo.
+    const working = list.filter((c) => availabilityOf(c.status) !== "offline");
+    const counted = working.length ? working : list;
+    const powers = counted.map((c) => c.powerKw).filter((p): p is number => p != null && p > 0);
     const powerKw = powers.length ? Math.max(...powers) : defaultKwForStandard(standard);
     return connector(standard, list[0]?.connectorType ?? "", {
       powerKw,
       powerOrigin: powers.length ? "reported" : powerKw != null ? "assumed" : null,
-      quantity: list.length,
+      quantity: counted.length,
       status: groupStatus(list.map((c) => availabilityOf(c.status))),
     });
   });

@@ -11,6 +11,8 @@ function toSockets(station: StationForCharger, onlyEligible: boolean): ChargerSo
   for (const c of station.connectors) {
     if (!PLANNING_STANDARDS.includes(c.standard)) continue;
     if (onlyEligible && (c.powerKw == null || !c.confirmed)) continue;
+    // Un conector fuera de servicio no sirve para planificar (M4.1); en el mapa sí se muestra.
+    if (onlyEligible && c.status === "offline") continue;
     sockets.push({
       connector: c.standard as ConnectorType,
       powerKw: c.powerKw ?? 0,

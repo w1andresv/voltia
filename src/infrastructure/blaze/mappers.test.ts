@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toDisplayCharger } from "@/domain/stations/to-charger";
+import { toDisplayCharger, toPlanningCharger } from "@/domain/stations/to-charger";
 import { BlazeStationSchema } from "./schemas";
 import {
   availabilityOf,
@@ -211,13 +211,36 @@ describe("conectores del detalle", () => {
   it("un conector por estándar, con cantidad, potencia máxima y estado de sus cargadores", () => {
     const connectors = connectorsFromChargers([
       { connectorType: "CCS2", powerKw: 150, status: "en_servicio" },
-      { connectorType: "CCS2", powerKw: 60, status: "fuera_servicio" },
+      { connectorType: "CCS2", powerKw: 60, status: "en_servicio" },
       { connectorType: "Tipo 2", powerKw: 22, status: "fuera_servicio" },
     ]);
     expect(connectors).toEqual([
       expect.objectContaining({ standard: "ccs2", quantity: 2, powerKw: 150, status: "available" }),
       expect.objectContaining({ standard: "type2", quantity: 1, powerKw: 22, status: "offline" }),
     ]);
+  });
+
+  it("M4.1: un cargador apagado no da potencia ni cuenta (caso del informe: 150 kW apagado y otro de 50 kW)", () => {
+    const [ccs2] = connectorsFromChargers([
+      { connectorType: "CCS2", powerKw: 150, status: "fuera_servicio" },
+      { connectorType: "CCS2", powerKw: 50, status: "en_servicio" },
+    ]);
+    expect(ccs2).toMatchObject({ standard: "ccs2", quantity: 1, powerKw: 50, status: "available" });
+  });
+
+  it("M4.1: mantenimiento cuenta como apagado; un estado desconocido no se descarta", () => {
+    const [ccs2] = connectorsFromChargers([
+      { connectorType: "CCS2", powerKw: 150, status: "mantenimiento" },
+      { connectorType: "CCS2", powerKw: 60, status: "desconocido" },
+    ]);
+    expect(ccs2).toMatchObject({ quantity: 1, powerKw: 60, status: "unknown" });
+  });
+
+  it("M4.1: si todos los cargadores de un conector están apagados, queda fuera de servicio y se muestra", () => {
+    const [ccs2] = connectorsFromChargers([
+      { connectorType: "CCS2", powerKw: 120, status: "fuera_servicio" },
+    ]);
+    expect(ccs2).toMatchObject({ standard: "ccs2", quantity: 1, powerKw: 120, status: "offline" });
   });
 });
 
@@ -274,6 +297,57 @@ describe("estación consolidada", () => {
       powerOrigin: "reported",
     });
     expect(st.planning.eligible).toBe(true);
+  });
+
+  it("M4.1: CCS2 apagado y Tipo 2 en servicio: elegible, y para planificar solo queda la alterna", () => {
+    const st = toConsolidatedStation(
+      BlazeStationSchema.parse({
+        ...EXAMPLE,
+        chargers: [
+          { connectorType: "CCS2", powerKw: 120, status: "fuera_servicio" },
+          { connectorType: "Tipo 2", powerKw: 22, status: "en_servicio" },
+        ],
+      }),
+      AT,
+    )!;
+    expect(st.availability.value).toBe("available");
+    expect(st.planning.eligible).toBe(true);
+    // Para planificar: solo la toma que funciona.
+    expect(toPlanningCharger(st).sockets.map((s) => s.connector)).toEqual(["type2"]);
+    // En el mapa se muestran las dos, cada una con su estado.
+    expect(toDisplayCharger(st).sockets.map((s) => s.connector)).toEqual(["ccs2", "type2"]);
+  });
+
+  it("M4.1: CCS2 de 150 kW apagado y otro de 50 kW en servicio: se planifica con 50 kW", () => {
+    const st = toConsolidatedStation(
+      BlazeStationSchema.parse({
+        ...EXAMPLE,
+        chargers: [
+          { connectorType: "CCS2", powerKw: 150, status: "fuera_servicio" },
+          { connectorType: "CCS2", powerKw: 50, status: "en_servicio" },
+        ],
+      }),
+      AT,
+    )!;
+    expect(toPlanningCharger(st).sockets).toEqual([
+      expect.objectContaining({ connector: "ccs2", powerKw: 50, count: 1 }),
+    ]);
+  });
+
+  it("M4.1: solo conectores apagados aunque la estación figure en servicio: no es elegible y dice por qué", () => {
+    const st = toConsolidatedStation(
+      BlazeStationSchema.parse({
+        ...EXAMPLE,
+        status: "en_servicio",
+        chargers: [
+          { connectorType: "CCS2", powerKw: 120, status: "fuera_servicio" },
+          { connectorType: "Tipo 2", powerKw: 22, status: "mantenimiento" },
+        ],
+      }),
+      AT,
+    )!;
+    expect(st.planning.eligible).toBe(false);
+    expect(st.planning.reasons.join(" ")).toMatch(/fuera de servicio/i);
   });
 
   it("la estación en mantenimiento en el listado no es elegible", () => {
