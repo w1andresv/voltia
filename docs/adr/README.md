@@ -30,6 +30,7 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0024](./0024-clima-por-tramo.md) | Clima por tramo y por hora de paso | Aceptada |
 | [0025](./0025-eficiencia-segun-la-potencia.md) | Eficiencia del tren motriz según la potencia | Aceptada |
 | [0026](./0026-perdidas-de-carga.md) | Pérdidas de carga y una sola función de tiempo de carga | Aceptada (valores por confirmar) |
+| [0027](./0027-corredor-contra-la-geometria-fina.md) | Corredor contra la geometría fina de la ruta | Aceptada |
 
 ## Plantilla
 

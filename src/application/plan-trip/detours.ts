@@ -7,6 +7,7 @@
 import { detourKey, type MeasuredDetour } from "@/domain/ev/contracts/detour";
 import type { ModelParameters } from "@/domain/ev/core/params";
 import { routeSocket } from "@/domain/ev/engines/compatibility/engine";
+import { fineRouteLine, pointAtKm } from "@/domain/ev/core/axis";
 import { placeOnRoute } from "@/domain/ev/engines/corridor/engine";
 import type { DistanceMatrixProvider } from "@/domain/ports/distance-matrix";
 import type { Charger, LatLon, RawRoute, Vehicle } from "@/domain/types";
@@ -32,12 +33,16 @@ export async function measureDetours(
   chargers: Charger[],
   vehicle: Vehicle,
   params: ModelParameters,
+  /** Ubicar las estaciones contra la línea fina de la ruta (M5, planificador v2). */
+  fine = false,
 ): Promise<{ detours: Record<string, MeasuredDetour>; report: DetourReport }> {
   const pairs: Pair[] = [];
   for (const route of routes) {
+    const line = fine ? fineRouteLine(route) : undefined;
     const placed = placeOnRoute(chargers, route.samples, {
       maxKm: params.corridor.maxFromRouteKm,
       detourRoadFactor: params.corridor.detourRoadFactor.value,
+      ...(line ? { line } : {}),
     })
       .filter(
         (c) =>
@@ -46,7 +51,11 @@ export async function measureDetours(
       .sort((a, b) => a.fromRouteKm - b.fromRouteKm)
       .slice(0, params.corridor.maxMatrixStationsPerRoute);
     for (const c of placed) {
-      const s = route.samples[c.nearestSampleIndex]!;
+      // Con la línea fina, el desvío sale de la vía en el punto proyectado; si no, de la muestra.
+      const s =
+        line && c.alongKm != null
+          ? pointAtKm(line, c.alongKm).point
+          : route.samples[c.nearestSampleIndex]!;
       pairs.push({
         key: detourKey(route.id, c.id),
         from: { lat: s.lat, lon: s.lon },

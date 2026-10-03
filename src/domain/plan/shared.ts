@@ -58,6 +58,8 @@ export function placeChargers(
   samples: { lat: number; lon: number; km: number }[],
   measured: Record<string, MeasuredDetour> | undefined,
   params: ModelParameters,
+  /** Línea fina de la ruta (M5, solo el planificador v2); sin ella, se proyecta contra las muestras. */
+  line?: { lat: number; lon: number; km: number }[],
 ): Charger[] {
   return placeOnRoute(
     chargers.filter((c) => isVerifiedForPlanning(c)),
@@ -66,6 +68,7 @@ export function placeChargers(
       maxKm: params.corridor.maxFromRouteKm,
       detourRoadFactor: params.corridor.detourRoadFactor.value,
       measured,
+      ...(line ? { line } : {}),
     },
   );
 }

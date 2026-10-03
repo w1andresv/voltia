@@ -46,6 +46,7 @@ import { buildShadowReport, formatShadowReport } from "./shadow-report";
 import { verifyPlanDetailed } from "./verify-plan";
 import { withDeadline } from "./deadline";
 import { weatherPointsAlong } from "@/domain/ev/engines/energy/weather-field";
+import { fineRouteLine } from "@/domain/ev/core/axis";
 import type { WeatherAlongRoute } from "@/domain/ev/contracts/weather";
 import type { PlannerRunStats } from "@/domain/plan/shared";
 import { checkStopDetails, offlineStopText } from "./stop-details";
@@ -217,9 +218,11 @@ export class EVRoutePlanningService {
     }
     // Cargadores a lo largo de TODAS las rutas (no solo la primera): así cada
     // alternativa puede planear sus paradas. Cada ruta se evalúa por separado.
+    // Con el planificador v2, contra la línea fina de cada ruta (M5); con el v1, contra sus muestras.
+    const fine = this.deps.engineMode === "v2";
     const corridor = stationsNearRoutes(
       dataset.stations,
-      rawRoutes.map((r) => r.samples),
+      rawRoutes.map((r) => (fine ? fineRouteLine(r) : r.samples)),
       params.corridor.maxFromRouteKm,
     );
     let chargers = corridor.filter((s) => s.planning.eligible).map(toPlanningCharger);
@@ -236,7 +239,7 @@ export class EVRoutePlanningService {
     const mode = this.deps.engineMode;
     lap("corridor");
     const detours = this.deps.detourMatrix
-      ? await this.measure(this.deps.detourMatrix, routes, chargers, data.vehicle as Vehicle)
+      ? await this.measure(this.deps.detourMatrix, routes, chargers, data.vehicle as Vehicle, fine)
       : undefined;
     lap("detours");
     let inputs: PlanInputs = {
@@ -431,6 +434,7 @@ export class EVRoutePlanningService {
     routes: RawRoute[],
     chargers: Charger[],
     vehicle: Vehicle,
+    fine = false,
   ): Promise<Record<string, MeasuredDetour> | undefined> {
     const t0 = Date.now();
     try {
@@ -440,6 +444,7 @@ export class EVRoutePlanningService {
         chargers,
         vehicle,
         this.deps.params,
+        fine,
       );
       console.log(
         `[detours] ${report.measured} desvíos medidos en ${report.requests} consulta(s) de matriz, ${Date.now() - t0} ms` +

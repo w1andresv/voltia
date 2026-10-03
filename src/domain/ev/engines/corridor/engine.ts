@@ -49,6 +49,19 @@ export function projectOnRoute(point: LatLon, samples: RoutePoint[]): RouteProje
   return best;
 }
 
+/** Índice de la muestra más cercana por km (muestras ordenadas por km); a igual distancia, la anterior. */
+export function nearestSampleByKm(samples: { km: number }[], km: number): number {
+  let lo = 0;
+  let hi = samples.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (samples[mid]!.km < km) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && km - samples[lo - 1]!.km <= samples[lo]!.km - km) return lo - 1;
+  return lo;
+}
+
 /** Caja que contiene la ruta, ampliada `padKm` en cada lado. */
 function paddedBounds(samples: LatLon[], padKm: number) {
   let minLat = 90;
@@ -87,6 +100,8 @@ export function stationsNearRoutes<T extends LatLon>(items: T[], routes: RoutePo
 
 /** Ubicación de una estación en una ruta, con el desvío estimado de ida y vuelta. */
 export interface CorridorPlacement {
+  /** Km de la ruta en el punto de la vía más cercano (solo si se proyectó contra la línea fina, M5). */
+  alongKm?: number;
   fromRouteKm: number;
   detourKm: number;
   /** Solo con desvío medido: minutos de ida y vuelta. */
@@ -109,21 +124,31 @@ export function placeOnRoute<T extends LatLon & { id?: string }>(
     maxKm: number;
     detourRoadFactor: number;
     measured?: Record<string, { distanceKm: number; durationMin: number }>;
+    /**
+     * Línea fina de la ruta (M5, ADR-0027): con ella la estación se proyecta contra la vía
+     * (cientos de puntos) y no contra las muestras, que están a ~2 km y cortan las curvas.
+     * La parada sigue ubicándose en la muestra más cercana por km, que es donde el plan
+     * calcula la energía.
+     */
+    line?: RoutePoint[];
   },
 ): (T & CorridorPlacement)[] {
   const out: (T & CorridorPlacement)[] = [];
   for (const it of items) {
-    const proj = projectOnRoute(it, samples);
+    const proj = projectOnRoute(it, opts.line ?? samples);
     if (!proj || proj.lateralKm > opts.maxKm) continue;
     const m = it.id != null ? opts.measured?.[it.id] : undefined;
+    // Con la línea fina, la muestra es la más cercana por km al punto de la vía.
+    const sampleIndex = opts.line ? nearestSampleByKm(samples, proj.alongKm) : proj.sampleIndex;
     out.push({
       ...it,
+      ...(opts.line ? { alongKm: proj.alongKm } : {}),
       fromRouteKm: proj.lateralKm,
       ...(m
         ? { detourKm: m.distanceKm, detourMinutes: m.durationMin, detourSource: "calculated" as const }
         : { detourKm: 2 * proj.lateralKm * opts.detourRoadFactor, detourSource: "estimated" as const }),
-      nearestKm: samples[proj.sampleIndex]!.km,
-      nearestSampleIndex: proj.sampleIndex,
+      nearestKm: samples[sampleIndex]!.km,
+      nearestSampleIndex: sampleIndex,
     });
   }
   return out.sort((a, b) => a.nearestKm - b.nearestKm);

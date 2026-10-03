@@ -751,7 +751,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
   ],
   "plans": [
     {
-      "arrivalSoc": 13.2,
+      "arrivalSoc": 12.4,
       "departureCharge": undefined,
       "distanceKm": 130.6,
       "energyKwh": 20.2,
@@ -759,10 +759,10 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
       "id": "route-0",
       "initialSoc": 35,
       "label": "Ruta A",
-      "minSoc": 13.2,
+      "minSoc": 12.4,
       "noTolls": undefined,
       "stops": [
-        "s20 33.9→55 15 min",
+        "s20 33.8→54 15 min",
       ],
       "totalMinutes": 158,
       "verification": "verified en 1",
@@ -845,7 +845,7 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
   ],
   "plans": [
     {
-      "arrivalSoc": 21.2,
+      "arrivalSoc": 21.4,
       "departureCharge": 7,
       "distanceKm": 130.6,
       "energyKwh": 20.2,
@@ -853,10 +853,10 @@ exports[`caracterización del pipeline con proveedores sintéticos > planificado
       "id": "route-0",
       "initialSoc": 22,
       "label": "Ruta A",
-      "minSoc": 20.9,
+      "minSoc": 20.8,
       "noTolls": undefined,
       "stops": [
-        "s20 20.9→63 26 min",
+        "s20 20.8→63 26 min",
       ],
       "totalMinutes": 169,
       "verification": "verified en 1",

@@ -3,6 +3,7 @@ import { MODEL_PARAMETERS } from "@/domain/ev/core/params";
 import type { DistanceMatrixProvider } from "@/domain/ports/distance-matrix";
 import type { Charger, LatLon, RawRoute } from "@/domain/types";
 import { catalogVehicle } from "@/test-support/scenarios";
+import { atTip, zigzagRoute } from "@/test-support/zigzag-route";
 import { measureDetours } from "./detours";
 
 const KM_PER_DEG = 111.195;
@@ -125,5 +126,34 @@ describe("measureDetours", () => {
     );
     expect(Object.keys(detours)).toHaveLength(2);
     expect(report.failedBatches).toBe(1);
+  });
+});
+
+describe("desvíos medidos contra la línea fina (M5, ADR-0027)", () => {
+  // La vía sale 16 km al este entre el km 30 y el 70; las muestras solo ven la cuerda recta.
+  const sparse = zigzagRoute();
+  const tip = (id: string): Charger => ({ ...station(id, 0, 0), ...atTip(0) });
+
+  it("sin línea fina, una estación en la punta de la herradura queda fuera del radio", async () => {
+    const matrix = fakeMatrix();
+    const { detours } = await measureDetours(matrix, [sparse], [tip("t")], catalogVehicle("mg-s5-ev-comfort"), MODEL_PARAMETERS);
+    expect(detours).toEqual({});
+  });
+
+  it("con línea fina, el desvío sale del punto de la vía donde está la estación", async () => {
+    const matrix = fakeMatrix();
+    const { report } = await measureDetours(
+      matrix,
+      [{ ...sparse, id: "zig" }],
+      [{ ...tip("t"), ...atTip(3) }],
+      catalogVehicle("mg-s5-ev-comfort"),
+      MODEL_PARAMETERS,
+      true,
+    );
+    expect(report.measured).toBe(1);
+    const from = (matrix.matrix as ReturnType<typeof vi.fn>).mock.calls[0]![0][0] as LatLon;
+    // El origen del desvío es el punto de la vía en el km ~50 (la punta), no una muestra de la cuerda.
+    expect(from.lon).toBeCloseTo(atTip(0).lon, 3);
+    expect(from.lat).toBeCloseTo(atTip(0).lat, 2);
   });
 });

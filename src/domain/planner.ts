@@ -4,6 +4,7 @@ import { reserveSocPct, toTripConfiguration } from "./ev/core/trip-config";
 import type { MeasuredDetour } from "./ev/contracts/detour";
 import type { WeatherAlongRoute } from "./ev/contracts/weather";
 import { detourEnergyV2, energyProfileForRouteCached, type EnergyEngine } from "./ev/energy-v2";
+import { fineRouteLine } from "./ev/core/axis";
 import { batteryDepletion } from "./ev/engines/soc/depletion";
 import { simulateSoc } from "./ev/engines/soc/simulate";
 import { adapterSummary } from "./plan/presentation";
@@ -87,7 +88,14 @@ export function buildPlan(args: {
       : s.speedKmh * styleSpeed,
   }));
 
-  const attached = placeChargers(args.chargers, samplesPre, args.detours, params);
+  // El v2 ubica las estaciones contra la línea fina de la ruta (M5, ADR-0027); el v1, contra las muestras.
+  const attached = placeChargers(
+    args.chargers,
+    samplesPre,
+    args.detours,
+    params,
+    args.engine === "v2" ? fineRouteLine(raw) : undefined,
+  );
   // Perfil de energía una sola vez, sin SOC (F3): sirve para cualquier SOC de salida.
   const energyV2 =
     args.energyEngine === "v2"
