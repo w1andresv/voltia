@@ -36,8 +36,10 @@ import {
 
 /** Tiempos de carga de una estación sobre la malla de integración. */
 interface ChargeTable {
-  /** Minutos para cargar de `from` a `to`, con los minutos fijos de conexión (0 si no carga). */
-  minutes: PlannerNode["chargeMinutes"];
+  /** Minutos acumulados de carga desde 0 hasta `soc`, sin los de conexión (creciente). */
+  at: PlannerNode["chargeAt"];
+  /** Minutos fijos de conexión por parada. */
+  overhead: number;
   /** Minutos solo cargando, sin los de conexión. */
   chargingMinutes: (from: number, to: number) => number;
   /** SOC al que se llega cargando `min` minutos desde `from` (100 si no alcanza). */
@@ -86,7 +88,8 @@ function chargeTable(
     return Math.max(from, x * step);
   };
   return {
-    minutes: (from, to) => (to > from ? at(to) - at(from) + overhead : 0),
+    at,
+    overhead,
     chargingMinutes: (from, to) => (to > from ? at(to) - at(from) : 0),
     socAfter,
   };
@@ -209,7 +212,8 @@ function planStopsWith(args: StopsArgs, reserves: Reserves): StopsChoice {
       detourKwh,
       detourMin: c.detourMinutes ?? detourMinutesOf(detourKm, params),
       waitMin: c.availability === "occupied" ? params.planner.occupiedWaitMin.value : 0,
-      chargeMinutes: table.minutes,
+      chargeAt: table.at,
+      connectionMin: table.overhead,
       fast: plugs[i]!.dc,
       ...(minSession > 0
         ? { minSessionSoc: (arrive: number) => table.socAfter(arrive, minSession) }
