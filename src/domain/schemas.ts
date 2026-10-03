@@ -78,6 +78,10 @@ export const PlaceSchema = z.object({
   context: z.string().optional(),
 });
 
+/** Superficie de la vía: "auto" decide con el pronóstico de lluvia (ADR-0022). Ausente = "auto". */
+export const RoadSurfaceSchema = z.enum(["auto", "dry", "wet"]);
+export type RoadSurfaceShape = z.infer<typeof RoadSurfaceSchema>;
+
 export const TripConditionsSchema = z.object({
   passengers: z.number().min(0).max(8),
   luggageKg: z.number().min(0).max(400),
@@ -91,6 +95,8 @@ export const TripConditionsSchema = z.object({
   planningMode: PlanningModeSchema,
   allowBelowSafety: z.boolean(),
   regenLevel: RegenLevelSchema.default("medium"),
+  /** Opcional: los viajes guardados antes de M2.2 no lo tienen y se leen como "auto". */
+  roadSurface: RoadSurfaceSchema.optional(),
 });
 
 /**

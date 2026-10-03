@@ -2,7 +2,7 @@ import { downsample, interpolatePoint, polylineLengthKm } from "@/domain/geo";
 import type { LatLon, RawRoute } from "@/domain/types";
 import type { ProviderRoute } from "@/domain/ev/contracts/route";
 import type { RoadTier } from "@/domain/road-hierarchy";
-import { classifyRoute, legBoundariesKm, tunnelStretchesKm } from "./classify";
+import { classifyRoute, legBoundariesKm, tollBoothsKm, tunnelStretchesKm } from "./classify";
 
 /**
  * Ruta del proveedor → RawRoute: muestras a lo largo de la ruta con la
@@ -276,7 +276,22 @@ export function toRawRoute(
     elevation: { gainM: 0, lossM: 0, minM: 0, maxM: 0 },
     ...legStops(route, distanceKm),
     ...tunnels(route, distanceKm),
+    ...tolls(route, distanceKm),
   };
+}
+
+/**
+ * Casetas de peaje escaladas a `distanceKm` (el eje de las muestras). Sin casetas, no agrega
+ * el campo. Se dejan fuera las que caen a menos de 250 m del origen o del destino: ahí el
+ * perfil ya se detiene.
+ */
+function tolls(route: ProviderRoute, distanceKm: number): Pick<RawRoute, "tollBoothsKm"> {
+  const raw = tollBoothsKm(route);
+  const totalKm = route.distanceM / 1000;
+  if (!raw.length || !(totalKm > 0)) return {};
+  const k = distanceKm / totalKm;
+  const km = raw.map((x) => x * k).filter((x) => x > 0.25 && x < distanceKm - 0.25);
+  return km.length ? { tollBoothsKm: km } : {};
 }
 
 /** Túneles escalados a `distanceKm`. Sin túneles, no agrega el campo. */

@@ -7,6 +7,7 @@ import { hasManualConsumption } from "../energy";
 import type { RawRoute, TripConditions, Vehicle, WeatherSnapshot } from "../types";
 import type { SpeedProfile } from "./contracts/speed";
 import { MODEL_PARAMETERS, type ModelParameters } from "./core/params";
+import { wetRoadFor } from "./engines/energy/environment";
 import {
   calibrateToManual,
   energyProfileV2,
@@ -32,6 +33,10 @@ export interface EnergyV2Result extends EnergyProfileV2 {
   assumptions: (keyof VehicleEnergyParams)[];
   /** Duración del perfil de velocidad frente a la del proveedor, % (especificación §5.3, punto 7). */
   durationDeviationPct: number;
+  /** La vía se calculó mojada: por el pronóstico o porque el usuario la eligió (M2.2). Ausente si seca. */
+  wetRoad?: "forecast" | "chosen";
+  /** Casetas de peaje donde el perfil se detiene (M2.1). Ausente si la ruta no tiene. */
+  tollStops?: number;
 }
 
 export function energyProfileForRoute(
@@ -66,6 +71,8 @@ export function energyProfileForRoute(
   }
   const regen =
     params.energy.regenModes.value[conditions.regenLevel] ?? params.energy.regenModes.value.medium;
+  const wet = wetRoadFor(conditions, weather?.precipitationMm, params.energy.wetRoad.value);
+  const tollStops = speed.points.filter((pt) => pt.limitingFactor === "toll").length;
   const profile = energyProfileV2(
     raw.samples,
     mesh,
@@ -74,12 +81,18 @@ export function energyProfileForRoute(
     ctx,
     regen,
     raw.elevationProfile,
+    {
+      ...(tollStops ? { tollStopSeconds: params.speed.tollStopSeconds.value } : {}),
+      ...(wet ? { wetAt: () => wet } : {}),
+    },
   );
   return {
     ...profile,
     speed,
     params: vp,
     regen,
+    ...(wet ? { wetRoad: conditions.roadSurface === "wet" ? ("chosen" as const) : ("forecast" as const) } : {}),
+    ...(tollStops ? { tollStops } : {}),
     assumptions: estimatedParams(vp),
     durationDeviationPct:
       raw.driveMinutes > 0
@@ -91,7 +104,7 @@ export function energyProfileForRoute(
 /**
  * Perfiles de energía recientes por ruta (M1, ADR-0020). La energía depende de la ruta, el
  * vehículo, el clima y de las condiciones que cambian la física (pasajeros, equipaje,
- * velocidad fija, aire, temperatura, estilo, regeneración), no del SOC, del margen ni de
+ * velocidad fija, aire, temperatura, estilo, regeneración, superficie de la vía), no del SOC, del margen ni de
  * la estrategia: mover esos controles no debe repetir la física. La memoria cuelga de la
  * ruta, así que se libera con ella.
  */
@@ -123,6 +136,7 @@ export function energyProfileForRouteCached(
     conditions.temperatureC,
     conditions.drivingStyle,
     conditions.regenLevel,
+    conditions.roadSurface ?? "auto",
     weather,
     paramsId(params),
   ]);

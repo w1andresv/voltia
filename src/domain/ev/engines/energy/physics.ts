@@ -7,7 +7,14 @@ import { intervalIndex } from "@/domain/ev/core/axis";
 import { MODEL_PARAMETERS, type ModelParameters } from "@/domain/ev/core/params";
 import { sourced } from "@/domain/ev/core/provenance";
 import { G_STANDARD_MS2, J_PER_KWH, kmhToMs, msToKmh } from "@/domain/ev/core/units";
-import { acPowerKw, airDensity, airSpeedSq, segmentTempC, type EnergyContext } from "./environment";
+import {
+  acPowerKw,
+  airDensity,
+  airSpeedSq,
+  segmentTempC,
+  type EnergyContext,
+  type WetRoad,
+} from "./environment";
 import type { VehicleEnergyParams } from "./vehicle-params";
 
 /**
@@ -81,6 +88,8 @@ export function segmentEnergyV2(
   ctx: EnergyContext,
   regen: RegenModeParams,
   thermal: [number, number][] = MODEL_PARAMETERS.energy.temperatureFactor.value,
+  /** Vía mojada en este tramo (M2.2); null o sin él, seca. */
+  wet: WetRoad | null = null,
 ): EnergySegment {
   const dh = seg.horizontalM;
   const theta = dh > 0 ? Math.atan(seg.deltaHM / dh) : 0;
@@ -107,7 +116,7 @@ export function segmentEnergyV2(
     rho *
     vp.dragAreaM2.value *
     airSpeedSq(msToKmh(Math.sqrt(vBarSq)), ctx.weather, seg.headingDeg);
-  const fRoll = vp.rollingResistance.value * m * g * Math.cos(theta);
+  const fRoll = vp.rollingResistance.value * (wet ? wet.crrFactor : 1) * m * g * Math.cos(theta);
   const fGrade = m * g * Math.sin(theta);
   const fAcc = mEff * a;
   const wheelJ = (fAero + fRoll + fGrade + fAcc) * d;
@@ -126,7 +135,8 @@ export function segmentEnergyV2(
     regenKwh = Math.min(capturable, cap);
     friction = Math.max(0, braking - regenKwh / vp.regenEfficiency.value);
   }
-  const aux = (vp.baseAuxPowerKw.value + acPowerKw(ctx.conditions.ac, temp)) * hours;
+  const aux =
+    (vp.baseAuxPowerKw.value + acPowerKw(ctx.conditions.ac, temp) + (wet ? wet.auxKw : 0)) * hours;
   const consumed = traction + aux;
   return {
     distanceM: d,
@@ -208,6 +218,14 @@ export function calibrateToManual(
   };
 }
 
+/** Lo que cambia la energía de un tramo además de la física base (M2). */
+export interface EnergyProfileOptions {
+  /** Segundos detenido en cada caseta de peaje del perfil de velocidad (`limitingFactor` "toll"). */
+  tollStopSeconds?: number;
+  /** Vía mojada en el km dado (null = seca). Sin él, toda la ruta seca. */
+  wetAt?: (km: number) => WetRoad | null;
+}
+
 export interface EnergyProfileV2 {
   /** Una por muestra de la ruta, como el perfil del modelo anterior (lo consume el SOCEngine). */
   samples: EnergySample[];
@@ -243,6 +261,7 @@ export function energyProfileV2(
   regen: RegenModeParams,
   /** Perfil de altura denso; sin él, la altura se interpola entre muestras. */
   profile?: ElevationProfile,
+  opts: EnergyProfileOptions = {},
 ): EnergyProfileV2 {
   const n = samples.length;
   const acc = samples.map(() => ({ gross: 0, regen: 0, net: 0, seconds: 0, meters: 0 }));
@@ -282,6 +301,8 @@ export function energyProfileV2(
       vp,
       ctx,
       regen,
+      undefined,
+      opts.wetAt?.((p.km + q.km) / 2) ?? null,
     );
     hPrev = hNext;
     si = intervalIndex(samples, q.km, si);
@@ -297,6 +318,22 @@ export function energyProfileV2(
     totals.netEnergyKwh += seg.netEnergyKwh;
     totals.auxiliaryEnergyKwh += seg.auxiliaryEnergyKwh;
     totals.frictionBrakeEnergyKwh += seg.frictionBrakeEnergyKwh;
+    // Caseta de peaje: el carro espera detenido y sigue pagando los auxiliares (M2.1).
+    if (opts.tollStopSeconds && speed[i + 1]!.limitingFactor === "toll") {
+      const wet = opts.wetAt?.(q.km) ?? null;
+      const temp = segmentTempC(ctx, hNext);
+      const idleKwh =
+        ((vp.baseAuxPowerKw.value + acPowerKw(ctx.conditions.ac, temp) + (wet ? wet.auxKw : 0)) *
+          opts.tollStopSeconds) /
+        3600;
+      slot.gross += idleKwh;
+      slot.net += idleKwh;
+      slot.seconds += opts.tollStopSeconds;
+      seconds += opts.tollStopSeconds;
+      totals.energyConsumedKwh += idleKwh;
+      totals.netEnergyKwh += idleKwh;
+      totals.auxiliaryEnergyKwh += idleKwh;
+    }
   }
 
   let cum = 0;

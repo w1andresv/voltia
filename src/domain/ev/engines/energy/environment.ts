@@ -38,6 +38,29 @@ export interface SegmentGeo {
   headingDeg?: number;
 }
 
+/** Efecto de la vía mojada sobre la energía (M2.2): ver `ModelParameters.energy.wetRoad`. */
+export interface WetRoad {
+  /** Factor sobre la resistencia a la rodadura. */
+  crrFactor: number;
+  /** Auxiliares extra (limpiaparabrisas, desempañador), kW. */
+  auxKw: number;
+}
+
+/**
+ * ¿La vía está mojada? "wet" la elige el usuario; "dry" también; con "auto" (o sin
+ * elegir) decide el pronóstico: lluvia de `minPrecipMm` o más. null si está seca.
+ */
+export function wetRoadFor(
+  conditions: Pick<TripConditions, "roadSurface">,
+  precipitationMm: number | undefined,
+  params: { minPrecipMm: number; crrFactor: number; auxKw: number },
+): WetRoad | null {
+  const surface = conditions.roadSurface ?? "auto";
+  if (surface === "dry") return null;
+  const wet = surface === "wet" || (precipitationMm ?? 0) >= params.minPrecipMm;
+  return wet ? { crrFactor: params.crrFactor, auxKw: params.auxKw } : null;
+}
+
 export function acPowerKw(ac: TripConditions["ac"], tempC: number): number {
   const base = AC_KW[ac];
   if (base === 0) return 0;

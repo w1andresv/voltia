@@ -230,6 +230,8 @@ export interface WeatherSnapshot {
   windDirDeg: number;
   /** Altura (m) de la celda del pronóstico: la temperatura se corrige desde ahí. */
   elevationM?: number;
+  /** Lluvia de la hora actual, mm. Con ella la energía v2 decide si la vía está mojada (M2.2). */
+  precipitationMm?: number;
   source?: string;
 }
 
@@ -261,6 +263,11 @@ export interface RawRoute {
    * puntos intermedios.
    */
   legBoundariesKm?: number[];
+  /**
+   * Km de las casetas de peaje (en el eje de las muestras). Ahí el perfil de velocidad v2
+   * se detiene y paga el tiempo detenido (M2.1, ADR-0021). Solo si la ruta pasa por casetas.
+   */
+  tollBoothsKm?: number[];
   /** Túneles (km en el eje de las muestras): ahí la elevación se limpia (F2b). */
   structures?: { kind: "tunnel" | "bridge"; fromKm: number; toKm: number }[];
   /**

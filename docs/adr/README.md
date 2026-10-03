@@ -23,6 +23,10 @@ Una decisión por archivo, numerada y corta. La especificación del motor v2 pid
 | [0017](./0017-sin-llegada-minima.md) | Sin "Llegada mínima": el margen de seguridad también es la reserva al destino | Aceptada (v2: ver 0019) |
 | [0018](./0018-paradas-que-valen-la-pena.md) | Planificador v2: paradas que valen la pena (sesión mínima y tope estirado) | Aceptada |
 | [0019](./0019-margen-flexible.md) | Planificador v2: el margen de seguridad es flexible (unos puntos, con piso) | Aceptada |
+| [0020](./0020-planificador-llegadas-separadas.md) | Planificador de cargas: llegadas separadas de los niveles de salida, y plazos | Aceptada |
+| [0021](./0021-peajes-como-paradas.md) | Peajes como paradas en el perfil de velocidad | Aceptada (30 s por confirmar) |
+| [0022](./0022-via-mojada.md) | Vía mojada: más rodadura y más auxiliares | Aceptada (automática por defecto, por confirmar) |
+| [0023](./0023-margen-de-energia.md) | Margen de energía: conectar `planning.energyMarginPercent` | Aceptada |
 
 ## Plantilla
 

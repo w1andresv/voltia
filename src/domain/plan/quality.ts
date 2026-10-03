@@ -24,6 +24,24 @@ export function planAssumptions(args: {
         ...(v.reference ? { reference: v.reference } : {}),
       });
     }
+    if (energyV2.wetRoad) {
+      const wet = params.energy.wetRoad;
+      out.push({
+        parameter: "energy.wetRoad",
+        value: { ...wet.value, origin: energyV2.wetRoad },
+        source: wet.source,
+        ...(wet.reference ? { reference: wet.reference } : {}),
+      });
+    }
+    if (energyV2.tollStops) {
+      const toll = params.speed.tollStopSeconds;
+      out.push({
+        parameter: "speed.tollStopSeconds",
+        value: { seconds: toll.value, booths: energyV2.tollStops },
+        source: toll.source,
+        ...(toll.reference ? { reference: toll.reference } : {}),
+      });
+    }
     const regen = params.energy.regenModes;
     if (regen.source === "estimated") {
       out.push({ parameter: "energy.regenModes", value: energyV2.regen, source: regen.source });

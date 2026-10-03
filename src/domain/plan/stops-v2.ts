@@ -12,6 +12,7 @@ import {
 } from "../ev/engines/charging/planner";
 import { routePlugs, routeSocket, type RoutePlug } from "../ev/engines/compatibility/engine";
 import { classifyFeasibility } from "../ev/engines/feasibility/engine";
+import { withEnergyMargin } from "../ev/engines/soc/margin";
 import { requiredStartSoc, simulateSoc, spentSocPct, walkSoc } from "../ev/engines/soc/simulate";
 import {
   FIRST_CHARGER_UNREACHABLE_REASON,
@@ -154,8 +155,13 @@ function flexibleGain(
  * planifica también dejando bajar unos puntos del margen y se queda con ese
  * solo si es claramente mejor (`flexibleGain`).
  */
-export function planStopsV2(args: StopsArgs): StopsChoice {
-  const { vehicle, conditions, weather, params } = args;
+export function planStopsV2(input: StopsArgs): StopsChoice {
+  const { vehicle, conditions, weather, params } = input;
+  // Margen de energía (ADR-0023): se planifica con un gasto algo mayor; con 0, las mismas muestras.
+  const args: StopsArgs = {
+    ...input,
+    samples: withEnergyMargin(input.samples, params.planning.energyMarginPercent),
+  };
   const cfg = toTripConfiguration(vehicle, conditions, weather, params);
   const margin = cfg.reserveSocPercent;
   // Estaciones, tablas de carga y SOC gastado no dependen de los pisos: una vez para las dos pasadas.

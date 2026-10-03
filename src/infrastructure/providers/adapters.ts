@@ -84,6 +84,14 @@ export function toProviderRoute(
           location: toLatLon(it.location),
           roadClass: it.mapbox_streets_v8?.class,
           ...(it.classes?.length ? { classes: it.classes } : {}),
+          ...(it.toll_collection?.type
+            ? {
+                tollCollection: {
+                  type: it.toll_collection.type,
+                  ...(it.toll_collection.name ? { name: it.toll_collection.name } : {}),
+                },
+              }
+            : {}),
         })),
       })),
     })),

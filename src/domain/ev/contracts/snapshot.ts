@@ -83,6 +83,7 @@ const RawRouteSchema = z
     minorRoadScore: z.number().optional(),
     engine: z.enum(["mapbox-traffic", "mapbox", "osrm"]).optional(),
     legBoundariesKm: z.array(z.number()).optional(),
+    tollBoothsKm: z.array(z.number()).optional(),
     structures: z
       .array(z.object({ kind: z.enum(["tunnel", "bridge"]), fromKm: z.number(), toKm: z.number() }))
       .optional(),

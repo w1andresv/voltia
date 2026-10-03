@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RawRoute, TripConditions } from "@/domain/types";
 import { catalogVehicle } from "@/test-support/scenarios";
 import { buildPlan } from "../planner";
+import { MODEL_PARAMETERS } from "./core/params";
 import { detourEnergyV2, energyProfileForRoute, energyProfileForRouteCached } from "./energy-v2";
 
 const KM_PER_DEG = 111.195;
@@ -203,6 +204,17 @@ describe("energyProfileForRouteCached (M1, ADR-0020)", () => {
     ).not.toBe(a);
   });
 
+  it("la superficie de la vía también cambia el perfil (la clave la incluye)", () => {
+    const raw = route();
+    const rain = { temperatureC: 20, windKmh: 0, windDirDeg: 0, precipitationMm: 2 };
+    const auto = energyProfileForRouteCached(raw, vehicle, base, rain);
+    const dry = energyProfileForRouteCached(raw, vehicle, { ...base, roadSurface: "dry" }, rain);
+    expect(dry).not.toBe(auto);
+    expect(dry.totals.netEnergyKwh).toBeLessThan(auto.totals.netEnergyKwh);
+    // "auto" y sin elegir son lo mismo.
+    expect(energyProfileForRouteCached(raw, vehicle, { ...base, roadSurface: "auto" }, rain)).toBe(auto);
+  });
+
   it("da el mismo resultado que sin memoria", () => {
     const raw = route();
     const cached = energyProfileForRouteCached(raw, vehicle, base, null);
@@ -216,5 +228,117 @@ describe("energyProfileForRouteCached (M1, ADR-0020)", () => {
     const b = energyProfileForRouteCached(route(), vehicle, base, null);
     expect(b).not.toBe(a);
     expect(b.samples).toEqual(a.samples);
+  });
+});
+
+describe("M2.1 · peajes en la energía v2 (ADR-0021)", () => {
+  const flat = hillRoute(30);
+  const base: RawRoute = {
+    ...flat,
+    samples: flat.samples.map((s) => ({ ...s, elevM: 1000 })),
+    elevation: { gainM: 0, lossM: 0, minM: 1000, maxM: 1000 },
+  };
+
+  it("cada caseta suma energía (frenar, arrancar y los auxiliares del tiempo detenido) y tiempo", () => {
+    const plain = energyProfileForRoute(base, vehicle, conditions, null);
+    const tolled = energyProfileForRoute({ ...base, tollBoothsKm: [10, 20] }, vehicle, conditions, null);
+    expect(tolled.tollStops).toBe(2);
+    expect(plain.tollStops).toBeUndefined();
+    expect(tolled.totals.netEnergyKwh).toBeGreaterThan(plain.totals.netEnergyKwh);
+    const seconds = MODEL_PARAMETERS.speed.tollStopSeconds.value;
+    // Dos esperas más frenar y volver a acelerar: más de 2 × el tiempo detenido.
+    expect((tolled.durationMinutes - plain.durationMinutes) * 60).toBeGreaterThan(2 * seconds);
+    // El tiempo detenido paga los auxiliares: al menos base + aire por esos segundos.
+    const idleMin = ((0.45 + 1.2) * seconds * 2) / 3600;
+    expect(tolled.totals.auxiliaryEnergyKwh - plain.totals.auxiliaryEnergyKwh).toBeGreaterThan(idleMin);
+  });
+
+  it("sin casetas, la energía es exactamente la de antes", () => {
+    const a = energyProfileForRoute(base, vehicle, conditions, null);
+    const b = energyProfileForRoute({ ...base, tollBoothsKm: [] }, vehicle, conditions, null);
+    expect(b.samples).toEqual(a.samples);
+    expect(b.durationMinutes).toBe(a.durationMinutes);
+  });
+
+  it("el plan lo dice en sus supuestos", () => {
+    const plan = buildPlan({
+      raw: { ...base, tollBoothsKm: [15] },
+      vehicle,
+      conditions,
+      chargers: [],
+      weather: null,
+      origin: { label: "A", lat: 7, lon: -73 },
+      destination: { label: "B", lat: 7.27, lon: -73 },
+      engine: "v2",
+      energyEngine: "v2",
+    });
+    const a = plan.assumptions?.find((x) => x.parameter === "speed.tollStopSeconds");
+    expect(a).toMatchObject({ source: "estimated", value: { booths: 1 } });
+  });
+});
+
+describe("M2.2 · vía mojada (ADR-0022)", () => {
+  const flat = hillRoute(30);
+  const route: RawRoute = {
+    ...flat,
+    samples: flat.samples.map((s) => ({ ...s, elevM: 1000 })),
+    elevation: { gainM: 0, lossM: 0, minM: 1000, maxM: 1000 },
+  };
+  const weather = (precipitationMm?: number) => ({
+    temperatureC: 20,
+    windKmh: 0,
+    windDirDeg: 0,
+    ...(precipitationMm != null ? { precipitationMm } : {}),
+  });
+  const kwh = (w: ReturnType<typeof weather> | null, roadSurface?: "auto" | "dry" | "wet") =>
+    energyProfileForRoute(route, vehicle, { ...conditions, ...(roadSurface ? { roadSurface } : {}) }, w);
+
+  it("con lluvia en el pronóstico gasta más: la rodadura sube y se encienden los limpiaparabrisas", () => {
+    const dry = kwh(weather(0));
+    const wet = kwh(weather(1.2));
+    expect(wet.wetRoad).toBe("forecast");
+    expect(dry.wetRoad).toBeUndefined();
+    expect(wet.totals.netEnergyKwh).toBeGreaterThan(dry.totals.netEnergyKwh);
+    // Crr × 1,2 en llano a velocidad de crucero: entre el 2 % y el 15 % más de energía.
+    const extra = wet.totals.netEnergyKwh / dry.totals.netEnergyKwh - 1;
+    expect(extra).toBeGreaterThan(0.02);
+    expect(extra).toBeLessThan(0.15);
+  });
+
+  it("llovizna por debajo del umbral no cuenta como mojado", () => {
+    expect(kwh(weather(0.1)).wetRoad).toBeUndefined();
+  });
+
+  it("sin dato de lluvia (clima sin precipitación o sin clima), la vía es seca como hoy", () => {
+    const a = kwh(null);
+    expect(kwh(weather()).samples).toEqual(a.samples);
+    expect(a.wetRoad).toBeUndefined();
+  });
+
+  it("lo que elige el usuario manda sobre el pronóstico", () => {
+    const rainy = weather(3);
+    expect(kwh(rainy, "dry").wetRoad).toBeUndefined();
+    expect(kwh(rainy, "dry").samples).toEqual(kwh(weather(0)).samples);
+    const forced = kwh(weather(0), "wet");
+    expect(forced.wetRoad).toBe("chosen");
+    expect(forced.totals.netEnergyKwh).toBeCloseTo(kwh(rainy, "auto").totals.netEnergyKwh, 9);
+  });
+
+  it("el plan lo dice en sus supuestos", () => {
+    const plan = buildPlan({
+      raw: route,
+      vehicle,
+      conditions,
+      chargers: [],
+      weather: weather(2),
+      origin: { label: "A", lat: 7, lon: -73 },
+      destination: { label: "B", lat: 7.27, lon: -73 },
+      engine: "v2",
+      energyEngine: "v2",
+    });
+    expect(plan.assumptions?.find((x) => x.parameter === "energy.wetRoad")).toMatchObject({
+      source: "estimated",
+      value: { origin: "forecast", crrFactor: 1.2 },
+    });
   });
 });

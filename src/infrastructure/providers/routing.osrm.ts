@@ -62,6 +62,11 @@ export const OsrmRouteSchema = z.object({
                           location: z.tuple([z.number(), z.number()]),
                           // Mapbox: "tunnel", "toll", "motorway"… de la vía que sale de la intersección.
                           classes: z.array(z.string()).optional(),
+                          // Mapbox: punto de cobro de peaje ("toll_booth" caseta, "toll_gantry" pórtico).
+                          toll_collection: z
+                            .object({ type: z.string().optional(), name: z.string().optional() })
+                            .passthrough()
+                            .optional(),
                           mapbox_streets_v8: z
                             .object({ class: z.string().optional() })
                             .passthrough()

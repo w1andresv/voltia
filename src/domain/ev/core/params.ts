@@ -139,6 +139,12 @@ export interface ModelParameters {
     curvatureSpanM: number;
     /** Tope por clase vial cuando el proveedor no da el límite legal, km/h (D8). `unknown` sin tope. */
     defaultByRoadTier: SourcedValue<Partial<Record<RoadTier, number>>>;
+    /**
+     * Tiempo detenido en una caseta de peaje, s (M2.1, ADR-0021). Estimado: con carril de
+     * efectivo es más; con TAG, menos. Se suma al tiempo y a los auxiliares, y el perfil
+     * frena hasta 0 antes de la caseta y vuelve a arrancar después.
+     */
+    tollStopSeconds: SourcedValue<number>;
     /** Por modo de conducción (especificación §5.3). `targetSpeedFactor` escala la velocidad típica; nunca supera el límite legal. */
     modes: SourcedValue<
       Record<
@@ -170,6 +176,12 @@ export interface ModelParameters {
     >;
     /** Velocidad a la que se supone medido el consumo manual del usuario, km/h. */
     manualReferenceSpeedKmh: number;
+    /**
+     * Vía mojada (M2.2, ADR-0022): con lluvia de al menos `minPrecipMm` (mm en la hora del
+     * pronóstico) o si el usuario la elige, la resistencia a la rodadura sube por `crrFactor`
+     * y los limpiaparabrisas y el desempañador suman `auxKw` a los auxiliares.
+     */
+    wetRoad: SourcedValue<{ minPrecipMm: number; crrFactor: number; auxKw: number }>;
     /**
      * Pérdida de eficiencia de la tracción por temperatura (D4): [°C, factor]; la
      * energía de tracción se divide por la eficiencia y se multiplica por el
@@ -275,6 +287,11 @@ export const MODEL_PARAMETERS: ModelParameters = {
         notes: "Decisión del producto; confirmar contra la normativa colombiana vigente.",
       },
     ),
+    tollStopSeconds: sourced(30, "estimated", {
+      reference: "docs/adr/0021-peajes-como-paradas.md",
+      notes:
+        "Valor de partida a confirmar por el dueño del producto: carril de efectivo y TAG se promedian. Calibrar con viajes con peaje.",
+    }),
     modes: sourced(
       {
         efficient: {
@@ -319,6 +336,11 @@ export const MODEL_PARAMETERS: ModelParameters = {
       { notes: "Calibrar con viajes reales (TripObservation)." },
     ),
     manualReferenceSpeedKmh: 70,
+    wetRoad: sourced({ minPrecipMm: 0.3, crrFactor: 1.2, auxKw: 0.1 }, "estimated", {
+      reference: "docs/adr/0022-via-mojada.md",
+      notes:
+        "Valores de partida: la rodadura sube 15–25 % en mojado (se toma 20 %) y los limpiaparabrisas y el desempañador suman ~0,1 kW. Calibrar con viajes bajo lluvia.",
+    }),
     temperatureFactor: sourced(
       [
         [0, 1.28],

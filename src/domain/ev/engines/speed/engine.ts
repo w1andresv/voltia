@@ -34,6 +34,8 @@ export interface SpeedInputPoint extends AxisPoint {
   headingDeg: number;
   /** Punto intermedio de la ruta: el vehículo se detiene (0 km/h). */
   stop?: boolean;
+  /** La parada es una caseta de peaje (M2.1): se detiene y espera `tollStopSeconds`. */
+  toll?: boolean;
 }
 
 type ModeParams = ModelParameters["speed"]["modes"]["value"]["normal"];
@@ -43,7 +45,7 @@ type ModeParams = ModelParameters["speed"]["modes"]["value"]["normal"];
  * (así los tramos de energía se agregan exactamente en las muestras).
  */
 export function speedMesh(
-  route: Pick<RawRoute, "geometry" | "samples" | "distanceKm" | "legBoundariesKm">,
+  route: Pick<RawRoute, "geometry" | "samples" | "distanceKm" | "legBoundariesKm" | "tollBoothsKm">,
   spacingM: number,
   fixedKmh?: number | null,
 ): SpeedInputPoint[] {
@@ -54,15 +56,26 @@ export function speedMesh(
   const EPS = 1e-6;
   // Puntos exactos (muestras, paradas, fin) primero: al fusionar puntos a menos
   // de EPS se conserva el km exacto, sin redondear (especificación §8.4).
-  const exact: { km: number; stop: boolean }[] = samples.map((s) => ({ km: s.km, stop: false }));
+  const exact: { km: number; stop: boolean; toll?: boolean }[] = samples.map((s) => ({ km: s.km, stop: false }));
+  const stops: number[] = [0, route.distanceKm];
   for (const km of route.legBoundariesKm ?? []) {
     // Paradas estrictamente dentro de la ruta (origen y destino ya son 0 km/h).
-    if (km > 1e-3 && km < route.distanceKm - 1e-3) exact.push({ km, stop: true });
+    if (km > 1e-3 && km < route.distanceKm - 1e-3) {
+      exact.push({ km, stop: true });
+      stops.push(km);
+    }
+  }
+  // Casetas de peaje: se detienen, salvo las pegadas a otra parada. Dos paradas a menos de
+  // 150 m dejarían un tramo con 0 km/h en los dos extremos, que la física no puede recorrer.
+  for (const km of route.tollBoothsKm ?? []) {
+    if (stops.some((s) => Math.abs(s - km) < 0.15)) continue;
+    exact.push({ km, stop: true, toll: true });
+    stops.push(km);
   }
   exact.push({ km: route.distanceKm, stop: false });
-  const grid: { km: number; stop: boolean }[] = [];
+  const grid: { km: number; stop: boolean; toll?: boolean }[] = [];
   for (let i = 0; i * step < route.distanceKm - 1e-9; i++) grid.push({ km: i * step, stop: false });
-  const merged: { km: number; stop: boolean; exact: boolean }[] = [];
+  const merged: { km: number; stop: boolean; toll?: boolean; exact: boolean }[] = [];
   for (const p of [
     ...exact.map((e) => ({ ...e, exact: true })),
     ...grid.map((g) => ({ ...g, exact: false })),
@@ -70,6 +83,7 @@ export function speedMesh(
     const last = merged[merged.length - 1];
     if (last && p.km - last.km <= EPS) {
       last.stop ||= p.stop;
+      if (p.toll) last.toll = true;
       if (!last.exact && p.exact) {
         last.km = p.km;
         last.exact = true;
@@ -81,7 +95,7 @@ export function speedMesh(
 
   let lineIndex = 1;
   let sampleIndex = 1;
-  const pts = merged.map(({ km, stop }) => {
+  const pts = merged.map(({ km, stop, toll }) => {
     const hit = pointAtKm(line, km, lineIndex);
     lineIndex = hit.index;
     sampleIndex = intervalIndex(samples, km, sampleIndex);
@@ -93,6 +107,7 @@ export function speedMesh(
       ...(s.roadTier ? { roadTier: s.roadTier } : {}),
       headingDeg: 0,
       ...(stop ? { stop: true } : {}),
+      ...(toll ? { toll: true } : {}),
     };
   });
   for (let i = 0; i < pts.length; i++) {
@@ -169,7 +184,7 @@ export function buildSpeedProfile(
     }
     if (p.stop) {
       v = 0;
-      why = "stop";
+      why = p.toll ? "toll" : "stop";
     }
     target.push(v);
     factor.push(why);
@@ -196,7 +211,8 @@ export function buildSpeedProfile(
     }
   }
 
-  let seconds = 0;
+  // Cada caseta suma el tiempo detenido (M2.1).
+  let seconds = factor.filter((f) => f === "toll").length * params.tollStopSeconds.value;
   const out: SpeedProfilePoint[] = points.map((p, i) => {
     let a = 0;
     if (i < n - 1) {
