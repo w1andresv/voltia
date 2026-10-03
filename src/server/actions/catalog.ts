@@ -7,12 +7,13 @@ import type { Vehicle } from "@/domain/types";
 
 // Solo se cachea una lectura exitosa: si la base falla, unstable_cache no guarda
 // nada (la función lanza) y el siguiente request vuelve a intentarlo.
-const cachedCatalog = unstable_cache(loadCatalogFromDb, ["vehicle-catalog-v2"], {
+// La clave cambia con la consulta (v3: todas las filas, sin filtrar por dueño) para no servir la lista anterior.
+const cachedCatalog = unstable_cache(loadCatalogFromDb, ["vehicle-catalog-v3"], {
   revalidate: 600,
   tags: ["vehicle-catalog"],
 });
 
-/** Catálogo público de vehículos, común a todos; cacheado 10 minutos. */
+/** Vehículos de la base (todos, sin distinguir dueño en este MVP), comunes a todos; cacheado 10 minutos. */
 export async function listCatalogVehiclesFn(): Promise<Vehicle[]> {
   try {
     return await cachedCatalog();
